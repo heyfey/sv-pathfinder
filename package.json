@@ -1,0 +1,196 @@
+{
+  "name": "sv-pathfinder",
+  "displayName": "sv-pathfinder",
+  "description": "There are venoms and virtues aplenty in the wilds, if you know where to look.",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.97.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "*"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "svPathfinderActivityBar",
+          "title": "SV-Pathfinder",
+          "icon": "media/activityBar.svg"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "openedDesignsView",
+        "contents": "Open a design database which can be debugged (uhdm, elab.kz or simv.daidar) \n[Open Design](command:sv-pathfinder.openDesign) \n [learn more](https://code.visualstudio.com/api/extension-guides/tree-view/)."
+      }
+    ],
+    "views": {
+      "svPathfinderActivityBar": [
+        {
+          "id": "openedDesignsView",
+          "name": "Opened Designs"
+        },
+        {
+          "id": "hierarchyView",
+          "name": "Hierarchy"
+        },
+        {
+          "id": "driversView",
+          "name": "Drivers"
+        },
+        {
+          "id": "loadsView",
+          "name": "Loads"
+        },
+        {
+          "id": "moduleInstancesView",
+          "name": "Module Instances"
+        }
+      ]
+    },
+    "menus": {
+      "editor/title/context": [
+        {
+          "command": "sv-pathfinder.helloWorld",
+          "when": "view == 'openedDesignsView'",
+          "group": "1_open"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "sv-pathfinder.helloWorld",
+          "when": "view == 'openedDesignsView'",
+          "group": "0_default@1"
+        },
+        {
+          "command": "sv-pathfinder.gotoDefinition",
+          "when": "view == 'hierarchyView'",
+          "group": "0_default@2"
+        },
+        {
+          "command": "sv-pathfinder.gotoInstantiation",
+          "when": "viewItem == 'scopeItem' && view == 'hierarchyView'",
+          "group": "0_default@3"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "sv-pathfinder.selectInstance",
+          "when": "resourceLangId == verilog",
+          "group": "1_designNavigation@0"
+        },
+        {
+          "command": "sv-pathfinder.traceDriver",
+          "when": "resourceLangId == verilog",
+          "group": "1_designNavigation@1"
+        },
+        {
+          "command": "sv-pathfinder.traceLoad",
+          "when": "resourceLangId == verilog",
+          "group": "1_designNavigation@2"
+        },
+        {
+          "command": "sv-pathfinder.showInHierarchyView",
+          "when": "resourceLangId == verilog",
+          "group": "1_designNavigation@3"
+        },
+        {
+          "command": "sv-pathfinder.showInWaveform",
+          "when": "resourceLangId == verilog",
+          "group": "1_designNavigation@4"
+        },
+        {
+          "command": "sv-pathfinder.copyHierarchyName",
+          "when": "resourceLangId == verilog",
+          "group": "1_designNavigation@5"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "sv-pathfinder.helloWorld",
+        "title": "Hello World"
+      },
+      {
+        "command": "sv-pathfinder.openDesign",
+        "title": "Open Design"
+      },
+      {
+        "command": "sv-pathfinder.selectDesign",
+        "title": "Select Design"
+      },
+      {
+        "command": "sv-pathfinder.gotoDefinition",
+        "title": "Go to Definition"
+      },
+      {
+        "command": "sv-pathfinder.gotoInstantiation",
+        "title": "Go to Instantiation"
+      },
+      {
+        "command": "sv-pathfinder.selectInstance",
+        "title": "Select Instance"
+      },
+      {
+        "command": "sv-pathfinder.traceDriver",
+        "title": "Trace Driver",
+        "enablement": "sv-pathfinder.isCommandEnabled"
+      },
+      {
+        "command": "sv-pathfinder.traceLoad",
+        "title": "Trace Load",
+        "enablement": "sv-pathfinder.isCommandEnabled"
+      },
+      {
+        "command": "sv-pathfinder.showInHierarchyView",
+        "title": "Show in Hierarchy View",
+        "enablement": "sv-pathfinder.isCommandEnabled"
+      },
+      {
+        "command": "sv-pathfinder.showInWaveform",
+        "title": "Show in Waveform",
+        "enablement": "sv-pathfinder.isCommandEnabled"
+      },
+      {
+        "command": "sv-pathfinder.copyHierarchyName",
+        "title": "Copy Hierarchy Name",
+        "enablement": "sv-pathfinder.isCommandEnabled"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "20.x",
+    "@types/vscode": "^1.99.0",
+    "@typescript-eslint/eslint-plugin": "^8.22.0",
+    "@typescript-eslint/parser": "^8.22.0",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1",
+    "esbuild": "^0.24.2",
+    "eslint": "^9.19.0",
+    "npm-run-all": "^4.1.5",
+    "typescript": "^5.7.3"
+  },
+  "dependencies": {
+    "kuzu": "^0.9.0"
+  }
+}
