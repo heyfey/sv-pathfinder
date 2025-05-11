@@ -63,10 +63,25 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.selectDesign', (e) => {
 		designProvider.selectDesign(e);
+		hierarchyView.reveal(e.lastActiveElement, { select: true, focus: false, expand: 1 });
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.gotoDefinition', (e) => {
 		hierarchyProvider.gotoDefinition(e);
+	}));
+
+	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.goBackward', async (e) => {
+		const element = await hierarchyProvider.goBackward();
+		if (element) {
+			hierarchyView.reveal(element, { select: true, focus: false, expand: 1 });
+		}
+	}));
+
+	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.goForward', async (e) => {
+		const element = await hierarchyProvider.goForward();
+		if (element) {
+			hierarchyView.reveal(element, { select: true, focus: false, expand: 1 });
+		}
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.selectInstance', (e) => {

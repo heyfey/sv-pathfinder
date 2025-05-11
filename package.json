@@ -61,6 +61,18 @@
           "group": "1_open"
         }
       ],
+      "view/title": [
+        {
+          "command": "sv-pathfinder.goBackward",
+          "when": "view == hierarchyView",
+          "group": "navigation"
+        },
+        {
+          "command": "sv-pathfinder.goForward",
+          "when": "view == hierarchyView",
+          "group": "navigation"
+        }
+      ],
       "view/item/context": [
         {
           "command": "sv-pathfinder.helloWorld",
@@ -160,6 +172,18 @@
         "command": "sv-pathfinder.copyHierarchyName",
         "title": "Copy Hierarchy Name",
         "enablement": "sv-pathfinder.isCommandEnabled"
+      },
+      {
+        "command": "sv-pathfinder.goBackward",
+        "title": "Go Backward",
+        "icon": "$(arrow-left)",
+        "enablement": "sv-pathfinder.isGoBackwardEnabled"
+      },
+      {
+        "command": "sv-pathfinder.goForward",
+        "title": "Go Forward",
+        "icon": "$(arrow-right)",
+        "enablement": "sv-pathfinder.isGoForwardEnabled"
       }
     ]
   },

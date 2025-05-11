@@ -168,6 +168,9 @@ export class DesignItem extends vscode.TreeItem {
     readonly command: vscode.Command;
     // Hierarchy
     public treeData: NetlistItem[] = [];
+    public lastActiveElement: NetlistItem | undefined = undefined;
+    public backwardStack: NetlistItem[] = [];
+    public forwardStack: NetlistItem[] = [];
     // Module Instances
     public moduleInstances: NetlistItem[] = [];
 
@@ -474,7 +477,7 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         throw new Error('Method not implemented.');
     }
 
-    async gotoDefinition(element: NetlistItem) {
+    async gotoDefinition(element: NetlistItem, isGoBackwardOrForward: boolean = false) {
         if (!this.activeDesign) { return; }
         
         let filePath = element.sourceFile;
@@ -510,6 +513,53 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
             this.driversTreeProvider.setTreeData(element.drivers);
             this.loadsTreeProvider.setTreeData(element.loads);
         }
+
+        if (!isGoBackwardOrForward) {
+            if (this.activeDesign.lastActiveElement) {
+                this.activeDesign.backwardStack.push(this.activeDesign.lastActiveElement);
+                vscode.commands.executeCommand('setContext', 'sv-pathfinder.isGoBackwardEnabled', true);
+            }
+
+            this.activeDesign.forwardStack = []; // Clear forward stack
+            vscode.commands.executeCommand('setContext', 'sv-pathfinder.isGoForwardEnabled', false);
+        }
+        this.activeDesign.lastActiveElement = element;
+    }
+
+    async goBackward() {
+        if (!this.activeDesign) { return; }
+        if (this.activeDesign.backwardStack.length === 0) { return; }
+
+        if (this.activeDesign.lastActiveElement) { // should always true
+            this.activeDesign.forwardStack.push(this.activeDesign.lastActiveElement);
+            vscode.commands.executeCommand('setContext', 'sv-pathfinder.isGoForwardEnabled', true);
+        }
+
+        const element = this.activeDesign.backwardStack.pop()!;
+        if (this.activeDesign.backwardStack.length === 0) {
+            vscode.commands.executeCommand('setContext', 'sv-pathfinder.isGoBackwardEnabled', false);
+        }
+        this.gotoDefinition(element, true);
+
+        return element;
+    }
+
+    async goForward() {
+        if (!this.activeDesign) { return; }
+        if (this.activeDesign.forwardStack.length === 0) { return; }
+
+        if (this.activeDesign.lastActiveElement) { // should always true
+            this.activeDesign.backwardStack.push(this.activeDesign.lastActiveElement);
+            vscode.commands.executeCommand('setContext', 'sv-pathfinder.isGoBackwardEnabled', true);
+        }
+
+        const element = this.activeDesign.forwardStack.pop()!;
+        if (this.activeDesign.forwardStack.length === 0) {
+            vscode.commands.executeCommand('setContext', 'sv-pathfinder.isGoForwardEnabled', false);
+        }
+        this.gotoDefinition(element, true);
+
+        return element;
     }
 }
 
