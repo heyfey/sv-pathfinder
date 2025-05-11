@@ -25,12 +25,18 @@ export function activate(context: vscode.ExtensionContext) {
 		canSelectMany: true,
 	});
 	
+	const moduleInstancesView = vscode.window.createTreeView('moduleInstancesView', {
+		treeDataProvider: moduleInstancesProvider,
+		manageCheckboxStateManually: false,
+		canSelectMany: true,
+	});
+
 	// vscode.window.registerTreeDataProvider('hierarchyView', hierarchyProvider);
 	vscode.window.registerTreeDataProvider('driversView', hierarchyProvider.driversTreeProvider);
 	vscode.window.registerTreeDataProvider('loadsView', hierarchyProvider.loadsTreeProvider);
 	vscode.window.registerTreeDataProvider('moduleInstancesView', moduleInstancesProvider);
 
-	const editorMenuProvider = new EditorMenuProvider(hierarchyView, hierarchyProvider, moduleInstancesProvider);
+	const editorMenuProvider = new EditorMenuProvider(hierarchyView, hierarchyProvider, moduleInstancesView, moduleInstancesProvider);
 	const annotationProvider = new WaveformValueAnnotationProvider(hierarchyView, hierarchyProvider, moduleInstancesProvider);
 
 	// The command has been defined in the package.json file
@@ -88,7 +94,7 @@ export function activate(context: vscode.ExtensionContext) {
 	}));
 
 	// Only enable tracing commands in the active module.
-	// Update context key when the cursor moves.
+	// Update context key when the cursor moves. TODO: also need to update context when the active module changes
 	// let timeout: NodeJS.Timeout;
 	vscode.window.onDidChangeTextEditorSelection(async () => {
 		// Delay the check until the user pauses (e.g., 100ms). This reduces calls during rapid movements.

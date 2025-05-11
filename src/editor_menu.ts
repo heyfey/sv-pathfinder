@@ -7,12 +7,56 @@ export class EditorMenuProvider {
     constructor(
         private readonly hierarchyView: vscode.TreeView<NetlistItem>,
         private readonly hierarchyTreeProvider: HierarchyTreeProvider,
+        private readonly moduleInstancesView: vscode.TreeView<NetlistItem>,
         private readonly moduleInstancesTreeProvider: ModuleInstancesTreeProvider,
     ) {
     }
 
     public async selectInstance() {
-        vscode.window.showWarningMessage('NYI');
+        const editor = vscode.window.activeTextEditor;
+        if (!editor || editor.document.languageId !== 'verilog') {
+            return;
+        }
+        const document = editor.document;
+        // Get document symbols
+        const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
+            'vscode.executeDocumentSymbolProvider',
+            document.uri
+        );
+        if (!symbols) {
+            return;
+        }
+        // Find all modules symbols
+        const moduleSymbols = symbols.filter(
+            symbol => symbol.kind === 9 /*=== vscode.SymbolKind.Module*/
+        );
+        if (!moduleSymbols) {
+            return;
+        }
+
+        const position = editor.selection.active;
+        // Find which module the cursor is in
+        const moduleSymbol = moduleSymbols.find(
+            symbol => symbol.range.contains(position)
+        );
+        if (!moduleSymbol) {
+            vscode.window.showWarningMessage('Cursor not in a module.');
+            return;
+        }
+
+        // Reveal the target module
+        const modules = await this.moduleInstancesTreeProvider.getChildren();
+        if (!modules) {
+            vscode.window.showWarningMessage('Module not found: ' + moduleSymbol.name);
+            return;
+        }
+        for (const module of modules) {
+            if (module.label === moduleSymbol.name) {
+                this.moduleInstancesView.reveal(module, { select: true, focus: false, expand: 3 });
+                return;
+            }
+        }
+        vscode.window.showWarningMessage('Module not found: ' + moduleSymbol.name);
     }
 
     public async traceDriver() {
@@ -24,6 +68,7 @@ export class EditorMenuProvider {
     }
 
     public async showInHierarchyView() { // TODO: handle module/check is variable
+        // TODO: not working if select instance from moduleInstancesView
         const editor = vscode.window.activeTextEditor;
         if (!editor || editor.document.languageId !== 'verilog') { return; }
 

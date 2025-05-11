@@ -51,7 +51,8 @@ export class WaveformValueAnnotationProvider {
                 variables.push(child);
             }
         }
-        
+        // console.log('Variables:', variables);
+
         const allRanges = [];
 
         // For each variable, find all occurrences
