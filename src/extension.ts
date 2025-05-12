@@ -32,8 +32,7 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	// vscode.window.registerTreeDataProvider('hierarchyView', hierarchyProvider);
-	vscode.window.registerTreeDataProvider('driversView', hierarchyProvider.driversTreeProvider);
-	vscode.window.registerTreeDataProvider('loadsView', hierarchyProvider.loadsTreeProvider);
+	vscode.window.registerTreeDataProvider('driversLoadsView', hierarchyProvider.driversLoadsTreeProvider);
 	vscode.window.registerTreeDataProvider('moduleInstancesView', moduleInstancesProvider);
 
 	const editorMenuProvider = new EditorMenuProvider(hierarchyView, hierarchyProvider, moduleInstancesView, moduleInstancesProvider);

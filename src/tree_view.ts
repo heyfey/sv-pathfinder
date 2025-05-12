@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import path from 'path';
 
 // Must use require instead of import somehow
 const kuzu = require("kuzu");
@@ -220,7 +221,7 @@ export class DesignItem extends vscode.TreeItem {
         }
     }
 
-    private async loadModuleDefs(conn: kuzu.Connection) {
+    private async loadModuleDefs(conn: any/*kuzu.Connection*/) {
         const query = `MATCH (m:ModuleDef) RETURN m;`;
         const queryResult = await conn.query(query);
         const moduleDefs = await queryResult.getAll();
@@ -231,7 +232,7 @@ export class DesignItem extends vscode.TreeItem {
         }
     }
 
-    private async loadTopModules(conn: kuzu.Connection) {
+    private async loadTopModules(conn: any/*kuzu.Connection*/) {
         const query = `MATCH (i:Instance) WHERE i.isTopModule = true RETURN i;`;
         const queryResult = await conn.query(query);
         const topModules = await queryResult.getAll();
@@ -243,7 +244,7 @@ export class DesignItem extends vscode.TreeItem {
         }
     }
 
-    private async getModuleName(conn: kuzu.Connection, instanceName: string): Promise<string | undefined> {
+    private async getModuleName(conn: any/*kuzu.Connection*/, instanceName: string): Promise<string | undefined> {
         const query = `MATCH (m:ModuleDef)-[:instantiate]->(i:Instance {fullName: "${instanceName}"}) RETURN m LIMIT 1;`;
         const queryResult = await conn.query(query);
         const moduleDefs = await queryResult.getAll();
@@ -430,14 +431,12 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
 
     private activeScopeStatusBarItem: vscode.StatusBarItem
 
-    public readonly driversTreeProvider: DriversLoadsTreeProvider;
-    public readonly loadsTreeProvider: DriversLoadsTreeProvider;
+    public readonly driversLoadsTreeProvider: DriversLoadsTreeProvider;
 
     constructor(
 
     ) {
-        this.driversTreeProvider = new DriversLoadsTreeProvider();
-        this.loadsTreeProvider = new DriversLoadsTreeProvider();
+        this.driversLoadsTreeProvider = new DriversLoadsTreeProvider();
         this.activeScopeStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 97);
     }
 
@@ -479,7 +478,7 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
 
     async gotoDefinition(element: NetlistItem, isGoBackwardOrForward: boolean = false) {
         if (!this.activeDesign) { return; }
-        
+
         let filePath = element.sourceFile;
         let lineNumber = element.lineNumber;
         if (element.contextValue === 'scopeItem' || element.contextValue === 'instanceItem') {
@@ -510,8 +509,7 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         // Also find drivers and loads for varItem
         if (element.contextValue === 'varItem') {
             await this.activeDesign.getDriversAndLoads(element);
-            this.driversTreeProvider.setTreeData(element.drivers);
-            this.loadsTreeProvider.setTreeData(element.loads);
+            this.driversLoadsTreeProvider.setDriversLoadsData(element);
         }
 
         if (!isGoBackwardOrForward) {
@@ -568,33 +566,143 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
 
 // }
 
+class DriverLoadItem extends vscode.TreeItem {
+    readonly contextValue = 'driverLoadItem';
+    constructor(
+        public readonly label: string,
+        public readonly iconPath: vscode.IconPath,
+        public children: FileItem[] = [],
+        collapsibleState?: vscode.TreeItemCollapsibleState,
+    ) {
+        super(label, collapsibleState);
+    }
+}
+
+class FileItem extends vscode.TreeItem {
+    constructor(
+        public readonly filePath: string,
+        public children: NetlistItem[] = [],
+        collapsibleState?: vscode.TreeItemCollapsibleState,
+    ) {
+        const filename = path.basename(filePath); // "test.sv"
+        const extension = path.extname(filePath); // ".sv"
+        const directory = path.dirname(filePath); // "/home/me"
+
+        const label = filename;
+        super(label, collapsibleState);
+        this.description = directory;
+        // get icon path from extension
+        if (extension === '.v') {
+            this.iconPath = path.join(__dirname, '..', 'media', 'file_type_verilog.svg');
+        } else if (extension === '.sv') {
+            this.iconPath = {
+                light: vscode.Uri.file(path.join(__dirname, '..', 'media', 'file_type_light_systemverilog.svg')),
+                dark: vscode.Uri.file(path.join(__dirname, '..', 'media', 'file_type_systemverilog.svg')),
+            };
+        }
+        else if (extension === '.vh' || extension === '.vhd' || extension === '.vhdl') {
+            this.iconPath = path.join(__dirname, '..', 'media', 'file_type_vhdl.svg');
+        }
+    }
+}
+
+async function getLineContent(filePath: string, lineNumber: number): Promise<string> {
+    filePath = filePath.replace("ABC", "/home/heyfey"); // TODO
+    try {
+        const document = await vscode.workspace.openTextDocument(filePath);
+        const lineContent = document.lineAt(lineNumber - 1).text;
+        return lineContent;
+    } catch (err) {
+        console.error(err);
+        return '';
+    }
+}
+
 // #region DriversLoadsTreeProvider
-export class DriversLoadsTreeProvider implements vscode.TreeDataProvider<NetlistItem> {
-    private treeData: NetlistItem[] = [];
+export class DriversLoadsTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
+    private treeData: DriverLoadItem[] = [];
 
-    private _onDidChangeTreeData: vscode.EventEmitter<NetlistItem | undefined | null | void> = new vscode.EventEmitter<NetlistItem | undefined | null | void>();
-    public readonly onDidChangeTreeData: vscode.Event<NetlistItem | undefined | null | void> = this._onDidChangeTreeData.event;
+    constructor(
+    ) {
+        this.treeData.push(new DriverLoadItem('Drivers', new vscode.ThemeIcon('type-hierarchy-super', new vscode.ThemeColor('charts.purple')), [], vscode.TreeItemCollapsibleState.Expanded));
+        this.treeData.push(new DriverLoadItem('Loads', new vscode.ThemeIcon('type-hierarchy-sub', new vscode.ThemeColor('charts.purple')), [], vscode.TreeItemCollapsibleState.Expanded));
+    }
 
-    public getTreeData(): NetlistItem[] { return this.treeData; }
+    private _onDidChangeTreeData: vscode.EventEmitter<vscode.TreeItem | undefined | null | void> = new vscode.EventEmitter<vscode.TreeItem | undefined | null | void>();
+    public readonly onDidChangeTreeData: vscode.Event<vscode.TreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
 
-    public setTreeData(data: NetlistItem[]) {
-        this.treeData = data;
+    public getTreeData(): vscode.TreeItem[] { return this.treeData; }
+
+    public async setDriversLoadsData(element: NetlistItem) { // TODO: refactor this
+        const drivers = element.drivers;
+        const loads = element.loads;
+        // group drivers and loads by file
+        const driverFiles = new Map<string, FileItem>();
+        const loadFiles = new Map<string, FileItem>();
+        for (const driver of drivers) {
+            const file = driver.sourceFile;
+            if (!driverFiles.has(file)) {
+                driverFiles.set(file, new FileItem(file, [], vscode.TreeItemCollapsibleState.Expanded));
+            }
+            driverFiles.get(file)?.children.push(driver);
+            await this.setDriverLoadInformation(driver);
+        }
+        for (const load of loads) {
+            const file = load.sourceFile;
+            if (!loadFiles.has(file)) {
+                loadFiles.set(file, new FileItem(file, [], vscode.TreeItemCollapsibleState.Expanded));
+            }
+            loadFiles.get(file)?.children.push(load);
+            await this.setDriverLoadInformation(load);
+        }
+
+        // set drivers and loads to the tree data
+        const driversItem = this.treeData[0];
+        const loadsItem = this.treeData[1];
+        driversItem.children = [];
+        loadsItem.children = [];
+        for (const [file, item] of driverFiles) {
+            driversItem.children.push(item);
+        }
+        driversItem.description = `${drivers.length} results in ${driverFiles.size} files`;
+        for (const [file, item] of loadFiles) {
+            loadsItem.children.push(item);
+        }
+        loadsItem.description = `${loads.length} results in ${loadFiles.size} files`;
         this.refresh();
     }
 
-    getTreeItem(element: NetlistItem): vscode.TreeItem | Thenable<vscode.TreeItem> {
+    private async setDriverLoadInformation(element: NetlistItem) {
+        const lineContent = await getLineContent(element.sourceFile, element.lineNumber);
+        // Display only first 100 characters
+        element.label = lineContent.length > 100 ? lineContent.substring(0, 100) + "..." : lineContent;
+        // element.label = lineContent;
+        element.description = element.modulePath;
+        element.tooltip = "Scope: " + element.modulePath + "\n" + lineContent;
+    }
+
+    getTreeItem(element: vscode.TreeItem): vscode.TreeItem | Thenable<vscode.TreeItem> {
         return element;
     }
 
-    getChildren(element?: NetlistItem | undefined): vscode.ProviderResult<NetlistItem[]> {
-        return Promise.resolve(this.treeData);
+    getChildren(element?: vscode.TreeItem | undefined): vscode.ProviderResult<vscode.TreeItem[]> {
+        if (!element) {
+            return Promise.resolve(this.treeData); // Returns top-level netlist items
+        }
+        if (element instanceof DriverLoadItem) {
+            return Promise.resolve(element.children);
+        }
+        if (element instanceof FileItem) {
+            return Promise.resolve(element.children);
+        }
+        return Promise.resolve([]); // Should not reeach here
     }
 
-    getParent?(element: NetlistItem): vscode.ProviderResult<NetlistItem> {
+    getParent?(element: vscode.TreeItem): vscode.ProviderResult<vscode.TreeItem> {
         return null;
     }
 
-    resolveTreeItem?(item: vscode.TreeItem, element: NetlistItem, token: vscode.CancellationToken): vscode.ProviderResult<vscode.TreeItem> {
+    resolveTreeItem?(item: vscode.TreeItem, element: vscode.TreeItem, token: vscode.CancellationToken): vscode.ProviderResult<vscode.TreeItem> {
         throw new Error('Method not implemented.');
     }
 
