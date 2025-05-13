@@ -35,7 +35,7 @@ export function activate(context: vscode.ExtensionContext) {
 	vscode.window.registerTreeDataProvider('driversLoadsView', hierarchyProvider.driversLoadsTreeProvider);
 	vscode.window.registerTreeDataProvider('moduleInstancesView', moduleInstancesProvider);
 
-	const editorMenuProvider = new EditorMenuProvider(hierarchyView, hierarchyProvider, moduleInstancesView, moduleInstancesProvider);
+	const editorMenuProvider = new EditorMenuProvider(designProvider, hierarchyView, hierarchyProvider, moduleInstancesView, moduleInstancesProvider);
 	const annotationProvider = new WaveformValueAnnotationProvider(hierarchyView, hierarchyProvider, moduleInstancesProvider);
 
 	// The command has been defined in the package.json file
@@ -107,8 +107,8 @@ export function activate(context: vscode.ExtensionContext) {
 		editorMenuProvider.showInHierarchyView();
 	}));
 
-	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.showInWaveform', (e) => {
-		editorMenuProvider.showInWaveform();
+	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.showInWaveformViewer', (e) => {
+		editorMenuProvider.showInWaveformViewer();
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.copyHierarchyName', (e) => {

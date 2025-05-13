@@ -1,10 +1,11 @@
 import * as vscode from 'vscode';
 
-import { HierarchyTreeProvider, ModuleInstancesTreeProvider, NetlistItem } from './tree_view';
+import { OpenedDesignsTreeProvider, HierarchyTreeProvider, ModuleInstancesTreeProvider, NetlistItem } from './tree_view';
 
 export class EditorMenuProvider {
 
     constructor(
+        private readonly designProvider: OpenedDesignsTreeProvider,
         private readonly hierarchyView: vscode.TreeView<NetlistItem>,
         private readonly hierarchyTreeProvider: HierarchyTreeProvider,
         private readonly moduleInstancesView: vscode.TreeView<NetlistItem>,
@@ -93,11 +94,7 @@ export class EditorMenuProvider {
         vscode.window.showWarningMessage('Symbol not found: ' + symbol);
     }
 
-    public async showInWaveform() {
-        vscode.window.showWarningMessage('NYI');
-    }
-
-    public async copyHierarchyName() {
+    private async getHierarchyName(): Promise<string | undefined> {
         const editor = vscode.window.activeTextEditor;
         if (!editor || editor.document.languageId !== 'verilog') { return; }
 
@@ -108,7 +105,42 @@ export class EditorMenuProvider {
         const symbol = document.getText(wordRange);
         const scopeName = this.hierarchyTreeProvider.getActiveDesign()?.getActiveScope();
         const hierarchyName = scopeName ? `${scopeName}.${symbol}` : symbol;
+        return hierarchyName;
+    }
 
+    public async showInWaveformViewer() {
+        const activeDesign = this.hierarchyTreeProvider.getActiveDesign()!;
+        let activeWaveform = activeDesign.getActiveWaveform();
+        if (!activeWaveform) {
+            // Ask user to open a waveform
+            const opened = await this.designProvider.openWaveform(activeDesign);
+            if (!opened) { return; }
+        }
+        activeWaveform = activeDesign.getActiveWaveform();
+        // Somthing went wrong if still have no active waveform
+        if (!activeWaveform) {
+            console.log("No opened waveform.");
+            return;
+        }
+
+        const hierarchyName = await this.getHierarchyName();
+        if (!hierarchyName) {
+            return;
+        }
+
+        // Show in waveform viewer
+        try {
+            vscode.commands.executeCommand("waveformViewer.addVariable", { uri: activeWaveform.resourceUri.toString(), instancePath: hierarchyName });
+        } catch (error) {
+            console.error('Error showing in waveform viewer: ', error);
+        }
+    }
+
+    public async copyHierarchyName() {
+        const hierarchyName = await this.getHierarchyName();
+        if (!hierarchyName) {
+            return;
+        }
         // Copy to clipboard
         await vscode.env.clipboard.writeText(hierarchyName);
     }

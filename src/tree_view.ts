@@ -411,6 +411,10 @@ export class DesignItem extends vscode.TreeItem {
     public getWaveforms(): WaveformItem[] {
         return this.waveforms;
     }
+
+    public getActiveWaveform(): WaveformItem | undefined {
+        return this.activeWaveform;
+    }
 }
 
 // #region OpenedDesignsTreeProvider
@@ -476,7 +480,7 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
         this._onDidChangeTreeData.fire(undefined);
     }
 
-    public async openWaveform(element: DesignItem) {
+    public async openWaveform(element: DesignItem): Promise<boolean> {
         const options: vscode.OpenDialogOptions = {
             canSelectFiles: true,
             canSelectFolders: false,
@@ -487,17 +491,18 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
         };
 
         const uris = await vscode.window.showOpenDialog(options);
-        if (!uris || uris.length === 0) { return; }
+        if (!uris || uris.length === 0) { return false; }
         const selectedFile = uris[0]; // Get the first (and only) selected file
         try {
             await vscode.commands.executeCommand("vaporview.openFile", { uri: selectedFile });
         } catch (error) {
             vscode.window.showErrorMessage('Failed to open waveform: ' + error);
-            return;
+            return false;
         }
         element.addWaveform(selectedFile);
         element.collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
         this.refresh();
+        return true;
     }
 
     public async revealWaveform(element: WaveformItem) {

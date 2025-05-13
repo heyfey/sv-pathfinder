@@ -118,7 +118,7 @@
           "group": "1_designNavigation@3"
         },
         {
-          "command": "sv-pathfinder.showInWaveform",
+          "command": "sv-pathfinder.showInWaveformViewer",
           "when": "resourceLangId == verilog",
           "group": "1_designNavigation@4"
         },
@@ -178,8 +178,8 @@
         "enablement": "sv-pathfinder.isCommandEnabled"
       },
       {
-        "command": "sv-pathfinder.showInWaveform",
-        "title": "Show in Waveform",
+        "command": "sv-pathfinder.showInWaveformViewer",
+        "title": "Show in Waveform Viewer",
         "enablement": "sv-pathfinder.isCommandEnabled"
       },
       {
