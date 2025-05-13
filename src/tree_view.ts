@@ -161,8 +161,37 @@ export class NetlistItem extends vscode.TreeItem {
     }
 }
 
+class WaveformItem extends vscode.TreeItem {
+    public readonly contextValue = 'waveformItem';
+    constructor(
+        public readonly resourceUri: vscode.Uri,
+        public readonly design: DesignItem,
+        collapsibleState?: vscode.TreeItemCollapsibleState,
+    ) {
+        const filePath = resourceUri.fsPath;
+        const filename = path.basename(filePath); // "test.vcd"
+        const extension = path.extname(filePath); // ".vcd"
+        const directory = path.dirname(filePath); // "/home/me"
+        const label = filename;
+        super(label, collapsibleState);
+        this.description = directory;
+        // get icon path from extension
+        if (extension === '.vcd' || extension === '.fst' || extension === '.ghw') {
+            this.iconPath = path.join(__dirname, '..', 'media', 'wavedump_file_icon.svg');
+        } else if (extension === '.fsdb') {
+            this.iconPath = path.join(__dirname, '..', 'media', 'wavedump_file_icon_fsdb.svg');
+        }
+
+        this.command = {
+            command: 'vaporview.openFile',
+            title: 'Open Waveform',
+            arguments: [{ uri: this.resourceUri }],
+        };
+    }
+}
+
 export class DesignItem extends vscode.TreeItem {
-    // contextValue = 'designItem';
+    contextValue = 'designItem';
     readonly iconPath = new vscode.ThemeIcon('file-code');
     readonly resourceUri: vscode.Uri;
     private activeInstance?: NetlistItem | undefined; // can be scope or var now
@@ -180,15 +209,20 @@ export class DesignItem extends vscode.TreeItem {
     private db?: any | undefined;
 
     // Waveform integration
-    private waveformDatabaseUri?: vscode.Uri | undefined;
-    private currentTime?: number | undefined;
+    private waveforms: WaveformItem[] = [];
+    private activeWaveform?: WaveformItem | undefined;
 
     constructor(
-        label: string,
+        filePath: string,
         collapsibleState?: vscode.TreeItemCollapsibleState,
     ) {
+        const filename = path.basename(filePath); // "test.vcd"
+        const extension = path.extname(filePath); // ".vcd"
+        const directory = path.dirname(filePath); // "/home/me"
+        const label = filename;
         super(label, collapsibleState);
-        this.resourceUri = vscode.Uri.file(label);
+        this.description = directory;
+        this.resourceUri = vscode.Uri.file(filePath);
 
         this.command = {
             command: 'sv-pathfinder.selectDesign',
@@ -197,7 +231,7 @@ export class DesignItem extends vscode.TreeItem {
         };
 
         // for testing
-        if (label === '/home/heyfey/waveform/Design_kz') {
+        if (filePath === '/home/heyfey/waveform/Design_kz') {
             this.load();
         }
     }
@@ -367,10 +401,20 @@ export class DesignItem extends vscode.TreeItem {
     public getActiveModule(): string | undefined {
         return this.activeInstance?.moduleName;
     }
+
+    public addWaveform(uri: vscode.Uri) {
+        this.waveforms = []; // Only allow one waveform per design now, thus clear the old one
+        this.waveforms.push(new WaveformItem(uri, this, vscode.TreeItemCollapsibleState.None));
+        this.activeWaveform = this.waveforms[0];
+    }
+
+    public getWaveforms(): WaveformItem[] {
+        return this.waveforms;
+    }
 }
 
 // #region OpenedDesignsTreeProvider
-export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<DesignItem> {
+export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
     private designList: DesignItem[] = [];
     // private activeDesign: DesignItem | undefined = undefined;
 
@@ -380,8 +424,8 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<Design
     ) {
     }
 
-    onDidChangeTreeData?: vscode.Event<void | DesignItem | DesignItem[] | null | undefined> | undefined;
-    private _onDidChangeTreeData: vscode.EventEmitter<void | DesignItem | DesignItem[] | null | undefined> = new vscode.EventEmitter<void | DesignItem | DesignItem[] | null | undefined>();
+    private _onDidChangeTreeData: vscode.EventEmitter<vscode.TreeItem | undefined | null | void> = new vscode.EventEmitter<vscode.TreeItem | undefined | null | void>();
+    public readonly onDidChangeTreeData: vscode.Event<vscode.TreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
 
     addDesign(designPath: string) {
         let index = this.designList.findIndex(design => design.label === designPath);
@@ -396,19 +440,28 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<Design
         // return this.designList.length;
     }
 
-    getTreeItem(element: DesignItem): vscode.TreeItem | Thenable<vscode.TreeItem> {
+    getTreeItem(element: vscode.TreeItem): vscode.TreeItem | Thenable<vscode.TreeItem> {
         return element;
     }
 
-    getChildren(element?: DesignItem | undefined): vscode.ProviderResult<DesignItem[]> {
-        return Promise.resolve(this.designList);
+    getChildren(element?: vscode.TreeItem | undefined): vscode.ProviderResult<vscode.TreeItem[]> {
+        if (!element) {
+            return Promise.resolve(this.designList);
+        }
+        if (element instanceof DesignItem) {
+            return Promise.resolve(element.getWaveforms());
+        }
+        return Promise.resolve([]);
     }
 
-    getParent?(element: DesignItem): vscode.ProviderResult<DesignItem> {
+    getParent?(element: vscode.TreeItem): vscode.ProviderResult<vscode.TreeItem> {
+        if (element instanceof WaveformItem) {
+            return element.design;
+        }
         return null;
     }
 
-    resolveTreeItem?(item: vscode.TreeItem, element: DesignItem, token: vscode.CancellationToken): vscode.ProviderResult<vscode.TreeItem> {
+    resolveTreeItem?(item: vscode.TreeItem, element: vscode.TreeItem, token: vscode.CancellationToken): vscode.ProviderResult<vscode.TreeItem> {
         throw new Error('Method not implemented.');
     }
 
@@ -420,7 +473,40 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<Design
     }
 
     refresh(): void {
-        this._onDidChangeTreeData.fire();
+        this._onDidChangeTreeData.fire(undefined);
+    }
+
+    public async openWaveform(element: DesignItem) {
+        const options: vscode.OpenDialogOptions = {
+            canSelectFiles: true,
+            canSelectFolders: false,
+            canSelectMany: false,
+            filters: {
+                'Waveform files': ['vcd', 'fst', 'ghw', 'fsdb'],
+            }
+        };
+
+        const uris = await vscode.window.showOpenDialog(options);
+        if (!uris || uris.length === 0) { return; }
+        const selectedFile = uris[0]; // Get the first (and only) selected file
+        try {
+            await vscode.commands.executeCommand("vaporview.openFile", { uri: selectedFile });
+        } catch (error) {
+            vscode.window.showErrorMessage('Failed to open waveform: ' + error);
+            return;
+        }
+        element.addWaveform(selectedFile);
+        element.collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
+        this.refresh();
+    }
+
+    public async revealWaveform(element: WaveformItem) {
+        try {
+            await vscode.commands.executeCommand("vaporview.openFile", { uri: element.resourceUri });
+        } catch (error) {
+            vscode.window.showErrorMessage('Failed to open waveform: ' + error);
+            return;
+        }
     }
 }
 

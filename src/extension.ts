@@ -24,7 +24,7 @@ export function activate(context: vscode.ExtensionContext) {
 		manageCheckboxStateManually: false,
 		canSelectMany: true,
 	});
-	
+
 	const moduleInstancesView = vscode.window.createTreeView('moduleInstancesView', {
 		treeDataProvider: moduleInstancesProvider,
 		manageCheckboxStateManually: false,
@@ -58,6 +58,14 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.window.registerTreeDataProvider('openedDesignsView', designProvider);
 		designProvider.addDesign('/home/heyfey/waveform/Design_kz');
 		designProvider.addDesign('/home/heyfey/waveform/Another_Design_kz');
+	}));
+
+	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.openWaveform', (e) => {
+		designProvider.openWaveform(e);
+	}));
+
+	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.revealWaveform', (e) => {
+		designProvider.revealWaveform(e);
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.selectDesign', (e) => {
@@ -134,35 +142,35 @@ export function activate(context: vscode.ExtensionContext) {
 
 
 	// context.subscriptions.push(
-    //     vscode.languages.registerCodeLensProvider(
-    //         { language: 'verilog' },
-    //         new WaveformValueCodeLensProvider()
-    //     )
-    // );
+	//     vscode.languages.registerCodeLensProvider(
+	//         { language: 'verilog' },
+	//         new WaveformValueCodeLensProvider()
+	//     )
+	// );
 
 	// Update decorations when the active editor changes
-    context.subscriptions.push(
-        vscode.window.onDidChangeActiveTextEditor(editor => {
-            if (editor) {
-                annotationProvider.updateDecorations(editor);
-            }
-        })
-    );
+	context.subscriptions.push(
+		vscode.window.onDidChangeActiveTextEditor(editor => {
+			if (editor) {
+				annotationProvider.updateDecorations(editor);
+			}
+		})
+	);
 
 	// Update decorations when the document changes
-    context.subscriptions.push(
-        vscode.workspace.onDidChangeTextDocument(event => {
-            const editor = vscode.window.activeTextEditor;
-            if (editor && event.document === editor.document) {
-                annotationProvider.updateDecorations(editor);
-            }
-        })
-    );
+	context.subscriptions.push(
+		vscode.workspace.onDidChangeTextDocument(event => {
+			const editor = vscode.window.activeTextEditor;
+			if (editor && event.document === editor.document) {
+				annotationProvider.updateDecorations(editor);
+			}
+		})
+	);
 
 	// Initial update for the active editor
-    if (vscode.window.activeTextEditor) {
-        annotationProvider.updateDecorations(vscode.window.activeTextEditor);
-    }
+	if (vscode.window.activeTextEditor) {
+		annotationProvider.updateDecorations(vscode.window.activeTextEditor);
+	}
 }
 
 // This method is called when your extension is deactivated

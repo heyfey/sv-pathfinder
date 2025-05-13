@@ -73,17 +73,27 @@
         {
           "command": "sv-pathfinder.helloWorld",
           "when": "view == 'openedDesignsView'",
+          "group": "0_default@0"
+        },
+        {
+          "command": "sv-pathfinder.openWaveform",
+          "when": "view == 'openedDesignsView' && viewItem == 'designItem'",
           "group": "0_default@1"
+        },
+        {
+          "command": "sv-pathfinder.revealWaveform",
+          "when": "view == 'openedDesignsView' && viewItem == 'waveformItem'",
+          "group": "0_default@2"
         },
         {
           "command": "sv-pathfinder.gotoDefinition",
           "when": "view == 'hierarchyView'",
-          "group": "0_default@2"
+          "group": "0_default@3"
         },
         {
           "command": "sv-pathfinder.gotoInstantiation",
           "when": "viewItem == 'scopeItem' && view == 'hierarchyView'",
-          "group": "0_default@3"
+          "group": "0_default@4"
         }
       ],
       "editor/context": [
@@ -127,6 +137,14 @@
       {
         "command": "sv-pathfinder.openDesign",
         "title": "Open Design"
+      },
+      {
+        "command": "sv-pathfinder.openWaveform",
+        "title": "Open Waveform"
+      },
+      {
+        "command": "sv-pathfinder.revealWaveform",
+        "title": "Open Waveform"
       },
       {
         "command": "sv-pathfinder.selectDesign",
