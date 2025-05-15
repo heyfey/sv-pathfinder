@@ -194,7 +194,7 @@ export class DesignItem extends vscode.TreeItem {
     contextValue = 'designItem';
     readonly iconPath = new vscode.ThemeIcon('file-code');
     readonly resourceUri: vscode.Uri;
-    private activeInstance?: NetlistItem | undefined; // can be scope or var now
+    private activeInstance?: NetlistItem | undefined;
     readonly command: vscode.Command;
     // Hierarchy
     public treeData: NetlistItem[] = [];
@@ -521,6 +521,7 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
     private treeData: NetlistItem[] = [];
 
     private activeScopeStatusBarItem: vscode.StatusBarItem
+    private activeInstance?: NetlistItem | undefined;
 
     public readonly driversLoadsTreeProvider: DriversLoadsTreeProvider;
 
@@ -533,6 +534,9 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
 
     private _onDidChangeTreeData: vscode.EventEmitter<NetlistItem | undefined | null | void> = new vscode.EventEmitter<NetlistItem | undefined | null | void>();
     public readonly onDidChangeTreeData: vscode.Event<NetlistItem | undefined | null | void> = this._onDidChangeTreeData.event;
+
+    private _onDidChangeActiveInstance: vscode.EventEmitter<NetlistItem | undefined | null | void> = new vscode.EventEmitter<NetlistItem | undefined | null | void>();
+    public readonly onDidChangeActiveInstance: vscode.Event<NetlistItem | undefined | null | void> = this._onDidChangeActiveInstance.event;
 
     public setActiveDesign(design: DesignItem) {
         this.activeDesign = design;
@@ -588,14 +592,15 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         filePath = filePath.replace("ABC", "/home/heyfey"); // TODO
 
         const uri = vscode.Uri.file(filePath);
-        vscode.window.showTextDocument(uri, { preview: true }).then(() => {
+        await vscode.window.showTextDocument(uri, { preview: true }).then(() => {
             const range = new vscode.Range(lineNumber - 1, 0, lineNumber - 1, 0);
             vscode.window.activeTextEditor?.revealRange(range);
             vscode.window.activeTextEditor!.selection = new vscode.Selection(range.start, range.start);
         });
 
-        this.activeDesign.setActiveInstance(element);
-        this.activeScopeStatusBarItem.text = 'Active scope: ' + this.activeDesign.getActiveScope();
+        // this.activeDesign.setActiveInstance(element);
+        // this.activeScopeStatusBarItem.text = 'Active scope: ' + this.activeDesign.getActiveScope();
+        this.setActiveInstance(element);
 
         // Also find drivers and loads for varItem
         if (element.contextValue === 'varItem') {
@@ -613,6 +618,18 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
             vscode.commands.executeCommand('setContext', 'sv-pathfinder.isGoForwardEnabled', false);
         }
         this.activeDesign.lastActiveElement = element;
+    }
+
+    private setActiveInstance(element: NetlistItem) {
+        if (!this.activeDesign) { return; }
+        // TODO: How about drivers and loads?
+        const instance = element.contextValue === 'varItem' ? element.parent : element;
+        if (this.activeInstance === instance) { return; }
+
+        this.activeInstance = instance;
+        this.activeDesign.setActiveInstance(element);
+        this.activeScopeStatusBarItem.text = 'Active scope: ' + this.activeDesign.getActiveScope();
+        this._onDidChangeActiveInstance.fire(element);
     }
 
     async goBackward() {

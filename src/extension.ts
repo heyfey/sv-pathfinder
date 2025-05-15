@@ -36,7 +36,14 @@ export function activate(context: vscode.ExtensionContext) {
 	vscode.window.registerTreeDataProvider('moduleInstancesView', moduleInstancesProvider);
 
 	const editorMenuProvider = new EditorMenuProvider(designProvider, hierarchyView, hierarchyProvider, moduleInstancesView, moduleInstancesProvider);
+
 	const annotationProvider = new WaveformValueAnnotationProvider(hierarchyView, hierarchyProvider, moduleInstancesProvider);
+	annotationProvider.listenToMarkerSetEventEvent().then(disposable => {
+		if (disposable) {
+			// Register the disposable for cleanup on deactivation
+			context.subscriptions.push(disposable);
+		}
+	});
 
 	// The command has been defined in the package.json file
 	// Now provide the implementation of the command with registerCommand
@@ -148,29 +155,16 @@ export function activate(context: vscode.ExtensionContext) {
 	//     )
 	// );
 
-	// Update decorations when the active editor changes
 	context.subscriptions.push(
-		vscode.window.onDidChangeActiveTextEditor(editor => {
-			if (editor) {
-				annotationProvider.updateDecorations(editor);
-			}
-		})
-	);
-
-	// Update decorations when the document changes
-	context.subscriptions.push(
-		vscode.workspace.onDidChangeTextDocument(event => {
-			const editor = vscode.window.activeTextEditor;
-			if (editor && event.document === editor.document) {
-				annotationProvider.updateDecorations(editor);
-			}
-		})
+		// vscode.window.onDidChangeTextEditorVisibleRanges(() => annotationProvider.debounceUpdateDecorations()),
+		// vscode.window.onDidChangeActiveTextEditor(() => annotationProvider.debounceUpdateDecorations()),
+		vscode.window.onDidChangeVisibleTextEditors(() => annotationProvider.handleChangeVisibleTextEditors()),
+		vscode.workspace.onDidChangeTextDocument((e) => annotationProvider.handleChangeTextDocument(e)),
+		hierarchyProvider.onDidChangeActiveInstance((e) => annotationProvider.handleActiveInstanceChanges(e)),
 	);
 
 	// Initial update for the active editor
-	if (vscode.window.activeTextEditor) {
-		annotationProvider.updateDecorations(vscode.window.activeTextEditor);
-	}
+	annotationProvider.debounceUpdateDecorations();
 }
 
 // This method is called when your extension is deactivated
