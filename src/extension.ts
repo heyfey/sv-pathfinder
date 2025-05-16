@@ -1,19 +1,12 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 
 import { OpenedDesignsTreeProvider, HierarchyTreeProvider, ModuleInstancesTreeProvider } from './tree_view';
 import { EditorMenuProvider, isCursorInModule } from './editor_menu';
-// import { WaveformValueCodeLensProvider } from './codelens';
 import { WaveformValueAnnotationProvider } from './value_annotation';
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
+// #region activate()
 export function activate(context: vscode.ExtensionContext) {
-
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "sv-pathfinder" is now active!');
+	console.log('SV Pathfinder: There are venoms and virtues aplenty in the wilds, if you know where to look.');
 
 	const hierarchyProvider = new HierarchyTreeProvider();
 	const moduleInstancesProvider = new ModuleInstancesTreeProvider();
@@ -37,26 +30,8 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const editorMenuProvider = new EditorMenuProvider(designProvider, hierarchyView, hierarchyProvider, moduleInstancesView, moduleInstancesProvider);
 
-	const annotationProvider = new WaveformValueAnnotationProvider(hierarchyView, hierarchyProvider, moduleInstancesProvider);
-	annotationProvider.listenToMarkerSetEventEvent().then(disposable => {
-		if (disposable) {
-			// Register the disposable for cleanup on deactivation
-			context.subscriptions.push(disposable);
-		}
-	});
 
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with registerCommand
-	// The commandId parameter must match the command field in package.json
-	// const disposable = vscode.commands.registerCommand('sv-pathfinder.helloWorld', () => {
-	// 	// The code you place here will be executed every time your command is executed
-	// 	// Display a message box to the user
-	// 	vscode.window.showInformationMessage('Hello World from sv-pathfinder!');
-	// });
-
-	// context.subscriptions.push(disposable);
-
-	// Commands
+	// #region External Commands
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.helloWorld', () => {
 		vscode.window.showInformationMessage('Hello World from sv-pathfinder!');
 	}));
@@ -122,6 +97,7 @@ export function activate(context: vscode.ExtensionContext) {
 		editorMenuProvider.copyHierarchyName();
 	}));
 
+	// #region Editor Menu Commands
 	// Only enable tracing commands in the active module.
 	// Update context key when the cursor moves. TODO: also need to update context when the active module changes
 	// let timeout: NodeJS.Timeout;
@@ -133,7 +109,8 @@ export function activate(context: vscode.ExtensionContext) {
 		const editor = vscode.window.activeTextEditor;
 		const activeDesign = hierarchyProvider.getActiveDesign();
 		const activeModule = activeDesign ? activeDesign.getActiveModule() : null;
-		if (editor && activeModule && editor.document.languageId === 'verilog') {
+		if (editor && activeModule &&
+			(editor.document.languageId === 'verilog' || editor.document.languageId === 'systemverilog')) {
 			// const position = editor.selection.active;
 			// const wordRange = editor.document.getWordRangeAtPosition(position);
 			// const isWord = !!wordRange; // True if cursor is on a word
@@ -148,12 +125,14 @@ export function activate(context: vscode.ExtensionContext) {
 	vscode.commands.executeCommand('setContext', 'sv-pathfinder.isCommandEnabled', true);
 
 
-	// context.subscriptions.push(
-	//     vscode.languages.registerCodeLensProvider(
-	//         { language: 'verilog' },
-	//         new WaveformValueCodeLensProvider()
-	//     )
-	// );
+	// #region Value Annotation
+	const annotationProvider = new WaveformValueAnnotationProvider(hierarchyProvider);
+	annotationProvider.listenToMarkerSetEventEvent().then(disposable => {
+		if (disposable) {
+			// Register the disposable for cleanup on deactivation
+			context.subscriptions.push(disposable);
+		}
+	});
 
 	context.subscriptions.push(
 		// vscode.window.onDidChangeTextEditorVisibleRanges(() => annotationProvider.debounceUpdateDecorations()),

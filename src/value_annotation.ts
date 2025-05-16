@@ -1,105 +1,116 @@
 import * as vscode from 'vscode';
 
-import { HierarchyTreeProvider, ModuleInstancesTreeProvider, NetlistItem } from './tree_view';
+import { HierarchyTreeProvider, NetlistItem } from './tree_view';
 
-function extractValueChangeString(values: string): string | undefined {
+// In vscode definition, vscode.SymbolKind.Module === 1
+// However, the SymbolKind for verilog module turns out depends on the
+// language server used. For example:
+//  4 in svlangserver
+//  5 in Verible
+//  9 in SystemVerilog - Language Support
+// Using SystemVerilog - Language Support here
+const SymbolKindModule = 9;
+
+function parseWaveformValue(values: string): string | undefined {
     const v = JSON.parse(values);
-    const value1 = v[0];
-    const value2 = v[1];
-    if (value1 === undefined) {
+    const v1 = v[0];
+    const v2 = v[1];
+    if (v1 === undefined) {
         return undefined;
     }
-    if (value2) {
-        return `${value1}->${value2}`;
+    if (v2) {
+        return `${v1}->${v2}`;
     }
-    return `${value1}`;
+    return `${v1}`;
 }
 
+// #region WaveformValueAnnotationProvider
 export class WaveformValueAnnotationProvider {
-    // Cache decoration types and ranges
-    // Note that we only need to update decorations when the timestamp or the activeInstance changes
-    private decorationTypes = new Map<string, vscode.TextEditorDecorationType>();
-    private variableRanges = new Map<string, vscode.Range[]>();
+    // Cache decoration types and ranges for variables
+    // Note that we only need to re-caculate decorations when the timestamp or the active instance changes
+    private decorationTypesMap = new Map<string, vscode.TextEditorDecorationType>();
+    private rangesMap = new Map<string, vscode.Range[]>();
 
     private timestamp: number = -1;
     private activeInstance: NetlistItem | undefined;
-    private activeFile: string | undefined; // TODO: use source file in NetlistItem
+    private targetFile: string | undefined; // TODO: use source file in NetlistItem
 
     private debounceTimer: NodeJS.Timeout;
     private debounceTimerDelay: number = 100; // 100ms delay
 
     constructor(
-        private readonly hierarchyView: vscode.TreeView<NetlistItem>,
         private readonly hierarchyTreeProvider: HierarchyTreeProvider,
-        private readonly moduleInstancesTreeProvider: ModuleInstancesTreeProvider,
     ) {
         // Initialize the debounce timer
         this.debounceTimer = setTimeout(() => { }, 0);
     }
 
+    // #region handle events
     async listenToMarkerSetEventEvent(): Promise<vscode.Disposable | undefined> {
         // Get the extension by its ID
         const waveformViewer = vscode.extensions.getExtension('lramseyer.vaporview');
-        if (waveformViewer) {
-            // Ensure the extension is active
-            if (!waveformViewer.isActive) {
-                await waveformViewer.activate();
-            }
-            // Access the exported API
-            const api = waveformViewer.exports;
-            // Verify the API and event exist
-            if (api && api.markerSetEvent) {
-                // Subscribe to the event and return the Disposable
-                const disposable = api.markerSetEvent.event((data: any) => {
-                    // Check is interested waveform file
-                    // TODO: change to data.uri
-                    // if (data.uri !== this.hierarchyTreeProvider.getActiveDesign()?.getActiveWaveform()?.resourceUri.toString()) {
-                    if (data.filePath !== this.hierarchyTreeProvider.getActiveDesign()?.getActiveWaveform()?.resourceUri.fsPath) {
-                        return;
-                    }
-                    // Check if the timestamp has changed
-                    if (data.time === this.timestamp) {
-                        return;
-                    }
-                    this.timestamp = data.time;
-                    this.debounceUpdateDecorations();
-                });
-                return disposable;
-            }
+        if (!waveformViewer) { return undefined; }
+        // Ensure the extension is active
+        if (!waveformViewer.isActive) {
+            await waveformViewer.activate();
         }
+        // Access the exported API
+        const api = waveformViewer.exports;
+        // Verify the API and event exist
+        if (api && api.markerSetEvent) {
+            // Subscribe to the event and return the Disposable
+            const disposable = api.markerSetEvent.event((data: any) => {
+                // Check is interested waveform file
+                // TODO: change to data.uri
+                // if (data.uri !== this.hierarchyTreeProvider.getActiveDesign()?.getActiveWaveform()?.resourceUri.toString()) {
+                if (data.filePath !== this.hierarchyTreeProvider.getActiveDesign()?.getActiveWaveform()?.resourceUri.fsPath) {
+                    return;
+                }
+                // Check if the timestamp has changed
+                if (data.time === this.timestamp) {
+                    return;
+                }
+                this.timestamp = data.time;
+                this.debounceUpdateDecorations();
+            });
+            return disposable;
+        }
+
         // Return undefined if the extension or event is unavailable
         return undefined;
     }
 
     public async handleChangeVisibleTextEditors() {
-        // Cache is not empty
-        if (this.activeFile && this.decorationTypes.size !== 0 && this.variableRanges.size !== 0) {
-            // Get editor from activeFile
+        // No need to re-caculate decorations if simply visible text editors changed
+        // Apply cached decorations to the target file if present
+        if (this.targetFile && this.decorationTypesMap.size !== 0 && this.rangesMap.size !== 0) {
             const editor = vscode.window.visibleTextEditors.find(
-                (editor) => editor.document.uri.fsPath === this.activeFile
+                (editor) => editor.document.uri.fsPath === this.targetFile
             );
             if (!editor) { return; }
 
-            // Apply cached decorations
-            for (const [variableName, ranges] of this.variableRanges) {
-                const decorationType = this.decorationTypes.get(variableName);
+            for (const [variableName, ranges] of this.rangesMap) {
+                const decorationType = this.decorationTypesMap.get(variableName);
                 if (decorationType) {
                     editor.setDecorations(decorationType, ranges);
                 }
             }
             return;
+        } else {
+            this.debounceUpdateDecorations();
         }
-        this.debounceUpdateDecorations();
     }
 
     public async handleChangeTextDocument(e: vscode.TextDocumentChangeEvent) {
-        if (this.activeFile !== e.document.uri.fsPath) { return; }
+        // No need to update decorations if the document is not the target file
+        if (this.targetFile !== e.document.uri.fsPath) { return; }
         this.debounceUpdateDecorations();
     }
 
     public async handleActiveInstanceChanges(e: void | NetlistItem | null | undefined) {
         if (!e) { return; }
-        // Check if the active instance has really changed
+        // Only need to update decorations if the active instance has changed
+        // Check if the active instance is the same as the previous one
         if (this.activeInstance && this.activeInstance === e) { return; }
         this.activeInstance = e;
         this.debounceUpdateDecorations();
@@ -114,31 +125,19 @@ export class WaveformValueAnnotationProvider {
         }, this.debounceTimerDelay);
     }
 
+    // #region updateDecorations()
     public async updateDecorations() {
-        // Get all visible editors
         const visibleEditors = vscode.window.visibleTextEditors;
-
-        // Iterate through each editor
         for (const editor of visibleEditors) {
-            // Check if the editor is a Verilog file
-            if (editor.document.languageId === 'verilog') { // TODO: Only update the target file, which should be known in advance
-                // Call updateDecorations for each editor
+            // TODO: Only update the target file, which should be known in advance
+            if (editor.document.languageId === 'verilog' || editor.document.languageId === 'systemverilog') {
                 this.updateDecorationsForEditor(editor);
             }
         }
     }
 
     public async updateDecorationsForEditor(editor: vscode.TextEditor) {
-        // Clear all decorations
-        for (const decorationType of this.decorationTypes.values()) {
-            decorationType.dispose();
-        }
-        this.decorationTypes.clear();
-        this.variableRanges.clear();
-
-        // console.log(editor.document.uri.toString());
-        // console.log(this.hierarchyTreeProvider.getActiveDesign()?.getActiveInstance());
-
+        // Get metadata from the active design
         const activeDesign = this.hierarchyTreeProvider.getActiveDesign();
         if (!activeDesign) { return; }
 
@@ -148,38 +147,45 @@ export class WaveformValueAnnotationProvider {
         const activeWaveform = activeDesign.getActiveWaveform();
         if (!activeWaveform) { return; }
 
+        // Clear all existing decorations
+        for (const decorationType of this.decorationTypesMap.values()) {
+            decorationType.dispose();
+        }
+        // Clear all cached results
+        this.decorationTypesMap.clear();
+        this.rangesMap.clear();
+
         const document = editor.document;
-        // Get document symbols
+        // Get symbols from the document
         const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
             'vscode.executeDocumentSymbolProvider',
             document.uri
         );
         if (!symbols) { return; }
 
+        // Find the module symbol
         const moduleSymbol = symbols.find(
-            // 4 in svlangserver
-            // 5 in Verible
-            symbol => symbol.name === activeModule && symbol.kind === 9 /*symbol.kind === vscode.SymbolKind.Module*/
+            symbol => symbol.name === activeModule && symbol.kind === SymbolKindModule
         );
         if (!moduleSymbol) {
             return;
         }
         const moduleRange = moduleSymbol.range;
-        this.activeFile = document.uri.fsPath; // TODO: use source file in NetlistItem
+        this.targetFile = document.uri.fsPath; // TODO: use source file in NetlistItem
 
         // Get all unique variables within the module
         const variables = [];
         const nameSet = new Set();
         for (const child of moduleSymbol.children) {
-            if ((child.kind === 12 || child.kind === 7) && !nameSet.has(child.name)) {
+            if ((child.kind === vscode.SymbolKind.Variable || child.kind === vscode.SymbolKind.Field)
+                && !nameSet.has(child.name)) {
                 nameSet.add(child.name);
                 variables.push(child);
             }
         }
-        // console.log('Variables:', variables);
 
         // Get instance paths for variables
-        const scopeName = this.hierarchyTreeProvider.getActiveDesign()?.getActiveScope();
+        const scopeName = activeDesign.getActiveScope();
         const instancePaths = [];
         for (const variable of variables) {
             const instancePath = scopeName + '.' + variable.name;
@@ -187,26 +193,27 @@ export class WaveformValueAnnotationProvider {
         }
         // console.log('Instance paths:', instancePaths);
 
-        // Get value changes from waveform viewer
-        const valueChanges = await vscode.commands.executeCommand<{ instancePath: string; value: string }[]>(
+        // Get waveform values from waveform viewer
+        const waveformValues = await vscode.commands.executeCommand<{ instancePath: string; value: string }[]>(
             "waveformViewer.getValuesAtTime",
             { uri: activeWaveform.resourceUri.toString(), instancePaths: instancePaths }
         );
-        // Store [variableName, value change] in a map
-        const valueChangeMap = new Map<string, string>();
-        for (const valueChange of valueChanges) {
-            const variableName = valueChange.instancePath.split('.').pop()!;
-            const vcString = extractValueChangeString(valueChange.value);
-            if (vcString === undefined) { continue; }
-            valueChangeMap.set(variableName, vcString);
+
+        // Store [variableName, waveform value] in a map
+        // TODO: This map is not necessary. Could create decorationTypesMap directly
+        const waveformValueMap = new Map<string, string>();
+        for (const v of waveformValues) {
+            const variableName = v.instancePath.split('.').pop()!;
+            const value = parseWaveformValue(v.value);
+            if (value === undefined) { continue; }
+            waveformValueMap.set(variableName, value);
         }
 
-        // Create decorationType for each variable and store in a map
-        for (const variable of variables) {
-            const valueChange = valueChangeMap.get(variable.name);
+        // Store [variableName, decorationType] in a map
+        for (const [variableName, value] of waveformValueMap) {
             const decorationType = vscode.window.createTextEditorDecorationType({
                 after: {
-                    contentText: `${valueChange}`,
+                    contentText: `${value}`,
                     fontStyle: 'italic bold',
                     color: new vscode.ThemeColor('editorInlayHint.foreground'),
                     backgroundColor: new vscode.ThemeColor('editorInlayHint.background'),
@@ -214,14 +221,13 @@ export class WaveformValueAnnotationProvider {
                     textDecoration: `border: 1px solid ${new vscode.ThemeColor('editorWidget.border')}; border-radius: 8px;`,
                 }
             });
-            this.decorationTypes.set(variable.name, decorationType);
+            this.decorationTypesMap.set(variableName, decorationType);
         }
 
-        // For each variable, find all occurrences
+        // For each variable, find all occurrences and store them in a map: [variableName, vscode.Range[]]
         for (const variable of variables) {
-            // Skip the variable that is not in the valueChangeMap
-            const valueChange = valueChangeMap.get(variable.name);
-            if (!valueChange) { continue; }
+            // Skip the variable that didn't found in the waveform viewer
+            if (!waveformValueMap.get(variable.name)) { continue; }
 
             const position = variable.selectionRange.start;
             const references = await vscode.commands.executeCommand<vscode.Location[]>(
@@ -237,12 +243,13 @@ export class WaveformValueAnnotationProvider {
                 );
 
                 // Store ranges for each variable
-                this.variableRanges.set(variable.name, filteredReferences.map(ref => ref.range));
+                this.rangesMap.set(variable.name, filteredReferences.map(ref => ref.range));
             }
         }
-        // Apply decorations
-        for (const [variableName, ranges] of this.variableRanges) {
-            const decorationType = this.decorationTypes.get(variableName);
+
+        // Apply decorations for each variable
+        for (const [variableName, ranges] of this.rangesMap) {
+            const decorationType = this.decorationTypesMap.get(variableName);
             if (decorationType) {
                 editor.setDecorations(decorationType, ranges);
             }
