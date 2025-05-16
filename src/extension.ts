@@ -1,35 +1,44 @@
 import * as vscode from 'vscode';
 
-import { OpenedDesignsTreeProvider, HierarchyTreeProvider, ModuleInstancesTreeProvider } from './tree_view';
+import { OpenedDesignsTreeProvider, HierarchyTreeProvider, DriversLoadsTreeProvider, ModuleInstancesTreeProvider } from './tree_view';
 import { EditorMenuProvider, isCursorInModule } from './editor_menu';
 import { WaveformValueAnnotationProvider } from './value_annotation';
 
-// #region activate()
 export function activate(context: vscode.ExtensionContext) {
 	console.log('SV Pathfinder: There are venoms and virtues aplenty in the wilds, if you know where to look.');
 
-	const hierarchyProvider = new HierarchyTreeProvider();
-	const moduleInstancesProvider = new ModuleInstancesTreeProvider();
-	const designProvider = new OpenedDesignsTreeProvider(hierarchyProvider, moduleInstancesProvider);
+	// #region TreeView
+	const driversProvider = new DriversLoadsTreeProvider();
+	const driversView = vscode.window.createTreeView('driversView', {
+		treeDataProvider: driversProvider,
+		manageCheckboxStateManually: false,
+		canSelectMany: true,
+	});
 
+	const loadsProvider = new DriversLoadsTreeProvider();
+	const loadsView = vscode.window.createTreeView('loadsView', {
+		treeDataProvider: loadsProvider,
+		manageCheckboxStateManually: false,
+		canSelectMany: true,
+	});
+
+	const hierarchyProvider = new HierarchyTreeProvider(driversView, driversProvider, loadsView, loadsProvider);
 	const hierarchyView = vscode.window.createTreeView('hierarchyView', {
 		treeDataProvider: hierarchyProvider,
 		manageCheckboxStateManually: false,
 		canSelectMany: true,
 	});
 
+	const moduleInstancesProvider = new ModuleInstancesTreeProvider();
 	const moduleInstancesView = vscode.window.createTreeView('moduleInstancesView', {
 		treeDataProvider: moduleInstancesProvider,
 		manageCheckboxStateManually: false,
 		canSelectMany: true,
 	});
 
-	// vscode.window.registerTreeDataProvider('hierarchyView', hierarchyProvider);
-	vscode.window.registerTreeDataProvider('driversLoadsView', hierarchyProvider.driversLoadsTreeProvider);
-	vscode.window.registerTreeDataProvider('moduleInstancesView', moduleInstancesProvider);
+	const designProvider = new OpenedDesignsTreeProvider(hierarchyProvider, moduleInstancesProvider);
 
 	const editorMenuProvider = new EditorMenuProvider(designProvider, hierarchyView, hierarchyProvider, moduleInstancesView, moduleInstancesProvider);
-
 
 	// #region External Commands
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.helloWorld', () => {

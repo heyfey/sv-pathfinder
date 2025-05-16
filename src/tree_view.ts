@@ -123,6 +123,7 @@ export function createVar(fullName: string, type: string, file: string, lineNumb
     return variable;
 }
 
+// #region NetlistItem
 export class NetlistItem extends vscode.TreeItem {
     public readonly modulePath: string;
     public readonly command: vscode.Command;
@@ -161,6 +162,7 @@ export class NetlistItem extends vscode.TreeItem {
     }
 }
 
+// #region WaveformItem
 class WaveformItem extends vscode.TreeItem {
     public readonly contextValue = 'waveformItem';
     constructor(
@@ -190,6 +192,7 @@ class WaveformItem extends vscode.TreeItem {
     }
 }
 
+// #region DesignItem
 export class DesignItem extends vscode.TreeItem {
     contextValue = 'designItem';
     readonly iconPath = new vscode.ThemeIcon('file-code');
@@ -523,12 +526,12 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
     private activeScopeStatusBarItem: vscode.StatusBarItem
     private activeInstance?: NetlistItem | undefined;
 
-    public readonly driversLoadsTreeProvider: DriversLoadsTreeProvider;
-
     constructor(
-
+        private readonly driversView: vscode.TreeView<vscode.TreeItem>,
+        private readonly driversTreeProvider: DriversLoadsTreeProvider,
+        private readonly loadsView: vscode.TreeView<vscode.TreeItem>,
+        private readonly loadsTreeProvider: DriversLoadsTreeProvider,
     ) {
-        this.driversLoadsTreeProvider = new DriversLoadsTreeProvider();
         this.activeScopeStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 97);
     }
 
@@ -602,10 +605,11 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         // this.activeScopeStatusBarItem.text = 'Active scope: ' + this.activeDesign.getActiveScope();
         this.setActiveInstance(element);
 
-        // Also find drivers and loads for varItem
+        // For varItem, also find drivers and loads for it
         if (element.contextValue === 'varItem') {
             await this.activeDesign.getDriversAndLoads(element);
-            this.driversLoadsTreeProvider.setDriversLoadsData(element);
+            this.driversTreeProvider.setDriversLoadsData(element.drivers, this.driversView);
+            this.loadsTreeProvider.setDriversLoadsData(element.loads, this.loadsView);
         }
 
         if (!isGoBackwardOrForward) {
@@ -728,12 +732,10 @@ async function getLineContent(filePath: string, lineNumber: number): Promise<str
 
 // #region DriversLoadsTreeProvider
 export class DriversLoadsTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
-    private treeData: DriverLoadItem[] = [];
+    private treeData: vscode.TreeItem[] = [];
 
     constructor(
     ) {
-        this.treeData.push(new DriverLoadItem('Drivers', new vscode.ThemeIcon('type-hierarchy-super', new vscode.ThemeColor('charts.purple')), [], vscode.TreeItemCollapsibleState.Expanded));
-        this.treeData.push(new DriverLoadItem('Loads', new vscode.ThemeIcon('type-hierarchy-sub', new vscode.ThemeColor('charts.purple')), [], vscode.TreeItemCollapsibleState.Expanded));
     }
 
     private _onDidChangeTreeData: vscode.EventEmitter<vscode.TreeItem | undefined | null | void> = new vscode.EventEmitter<vscode.TreeItem | undefined | null | void>();
@@ -741,42 +743,21 @@ export class DriversLoadsTreeProvider implements vscode.TreeDataProvider<vscode.
 
     public getTreeData(): vscode.TreeItem[] { return this.treeData; }
 
-    public async setDriversLoadsData(element: NetlistItem) { // TODO: refactor this
-        const drivers = element.drivers;
-        const loads = element.loads;
-        // group drivers and loads by file
-        const driverFiles = new Map<string, FileItem>();
-        const loadFiles = new Map<string, FileItem>();
-        for (const driver of drivers) {
-            const file = driver.sourceFile;
-            if (!driverFiles.has(file)) {
-                driverFiles.set(file, new FileItem(file, [], vscode.TreeItemCollapsibleState.Expanded));
+    public async setDriversLoadsData(elements: NetlistItem[], view: vscode.TreeView<vscode.TreeItem>,) {
+        this.treeData = [];
+        const files = new Map<string, FileItem>();
+        for (const element of elements) {
+            const file = element.sourceFile;
+            if (!files.has(file)) {
+                files.set(file, new FileItem(file, [], vscode.TreeItemCollapsibleState.Expanded));
             }
-            driverFiles.get(file)?.children.push(driver);
-            await this.setDriverLoadInformation(driver);
+            files.get(file)?.children.push(element);
+            await this.setDriverLoadInformation(element);
         }
-        for (const load of loads) {
-            const file = load.sourceFile;
-            if (!loadFiles.has(file)) {
-                loadFiles.set(file, new FileItem(file, [], vscode.TreeItemCollapsibleState.Expanded));
-            }
-            loadFiles.get(file)?.children.push(load);
-            await this.setDriverLoadInformation(load);
+        for (const [_, fileItem] of files) {
+            this.treeData.push(fileItem);
         }
-
-        // set drivers and loads to the tree data
-        const driversItem = this.treeData[0];
-        const loadsItem = this.treeData[1];
-        driversItem.children = [];
-        loadsItem.children = [];
-        for (const [file, item] of driverFiles) {
-            driversItem.children.push(item);
-        }
-        driversItem.description = `${drivers.length} results in ${driverFiles.size} files`;
-        for (const [file, item] of loadFiles) {
-            loadsItem.children.push(item);
-        }
-        loadsItem.description = `${loads.length} results in ${loadFiles.size} files`;
+        view.description = `${elements.length} results in ${files.size} files`;
         this.refresh();
     }
 

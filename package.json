@@ -40,8 +40,12 @@
           "name": "Hierarchy"
         },
         {
-          "id": "driversLoadsView",
-          "name": "Drivers & Loads"
+          "id": "driversView",
+          "name": "Drivers"
+        },
+        {
+          "id": "loadsView",
+          "name": "Loads"
         },
         {
           "id": "moduleInstancesView",
