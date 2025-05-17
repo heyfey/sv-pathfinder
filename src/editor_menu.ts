@@ -108,31 +108,17 @@ export class EditorMenuProvider {
         return hierarchyName;
     }
 
-    public async showInWaveformViewer() {
-        const activeDesign = this.hierarchyTreeProvider.getActiveDesign()!;
-        let activeWaveform = activeDesign.getActiveWaveform();
-        if (!activeWaveform) {
-            // Ask user to open a waveform
-            const opened = await this.designProvider.openWaveform(activeDesign);
-            if (!opened) { return; }
-        }
-        activeWaveform = activeDesign.getActiveWaveform();
-        // Somthing went wrong if still have no active waveform
-        if (!activeWaveform) {
-            console.log("No opened waveform.");
-            return;
-        }
-
+    public async addToWaveformViewer() {
         const hierarchyName = await this.getHierarchyName();
         if (!hierarchyName) {
             return;
         }
-
-        // Show in waveform viewer
-        try {
+        const activeDesign = this.hierarchyTreeProvider.getActiveDesign()!;
+        this.designProvider.openWaveformIfNotPresent(activeDesign);
+        const activeWaveform = activeDesign.getActiveWaveform();
+        if (activeWaveform) {
+            // Add to waveform viewer
             vscode.commands.executeCommand("waveformViewer.addVariable", { uri: activeWaveform.resourceUri.toString(), instancePath: hierarchyName });
-        } catch (error) {
-            console.error('Error showing in waveform viewer: ', error);
         }
     }
 

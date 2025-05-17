@@ -96,8 +96,23 @@
         },
         {
           "command": "sv-pathfinder.gotoInstantiation",
-          "when": "viewItem == 'scopeItem' && view == 'hierarchyView'",
+          "when": "view == 'hierarchyView' && viewItem == 'scopeItem'",
           "group": "0_default@4"
+        },
+        {
+          "command": "sv-pathfinder.copyName",
+          "when": "view == 'hierarchyView'",
+          "group": "0_default@5"
+        },
+        {
+          "command": "sv-pathfinder.addToWaveform",
+          "when": "view == 'hierarchyView' && viewItem == 'varItem'",
+          "group": "0_default@6"
+        },
+        {
+          "command": "sv-pathfinder.addAllInScopeToWaveform",
+          "when": "view == 'hierarchyView' && viewItem == 'scopeItem'",
+          "group": "0_default@7"
         }
       ],
       "editor/context": [
@@ -122,12 +137,12 @@
           "group": "1_designNavigation@3"
         },
         {
-          "command": "sv-pathfinder.showInWaveformViewer",
+          "command": "sv-pathfinder.copyHierarchyName",
           "when": "resourceLangId == verilog",
           "group": "1_designNavigation@4"
         },
         {
-          "command": "sv-pathfinder.copyHierarchyName",
+          "command": "sv-pathfinder.addToWaveformViewer",
           "when": "resourceLangId == verilog",
           "group": "1_designNavigation@5"
         }
@@ -163,6 +178,18 @@
         "title": "Go to Instantiation"
       },
       {
+        "command": "sv-pathfinder.copyName",
+        "title": "Copy Name"
+      },
+      {
+        "command": "sv-pathfinder.addToWaveform",
+        "title": "Add to Waveform Viewer"
+      },
+      {
+        "command": "sv-pathfinder.addAllInScopeToWaveform",
+        "title": "Add All Variables in Scope to Waveform Viewer"
+      },
+      {
         "command": "sv-pathfinder.selectInstance",
         "title": "Select Instance"
       },
@@ -182,8 +209,8 @@
         "enablement": "sv-pathfinder.isCommandEnabled"
       },
       {
-        "command": "sv-pathfinder.showInWaveformViewer",
-        "title": "Show in Waveform Viewer",
+        "command": "sv-pathfinder.addToWaveformViewer",
+        "title": "Add to Waveform Viewer",
         "enablement": "sv-pathfinder.isCommandEnabled"
       },
       {

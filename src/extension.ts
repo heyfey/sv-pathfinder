@@ -68,6 +68,27 @@ export function activate(context: vscode.ExtensionContext) {
 		hierarchyProvider.gotoDefinition(e);
 	}));
 
+	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.copyName', (e) => {
+		vscode.env.clipboard.writeText(e.getHierarchyName());
+	}));
+
+	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.addToWaveform', async (e) => {
+		await addToWaveform(e);
+	}));
+
+	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.addAllInScopeToWaveform', async (e) => {
+		await addToWaveform(e);
+	}));
+
+	async function addToWaveform(e: any) {
+		const activeDesign = hierarchyProvider.getActiveDesign()!;
+		await designProvider.openWaveformIfNotPresent(activeDesign);
+		const activeWaveform = activeDesign.getActiveWaveform();
+		if (activeWaveform) {
+			hierarchyProvider.addToWaveform(e, activeWaveform.resourceUri);
+		}
+	}
+
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.goBackward', async (e) => {
 		const element = await hierarchyProvider.goBackward();
 		if (element) {
@@ -98,8 +119,8 @@ export function activate(context: vscode.ExtensionContext) {
 		editorMenuProvider.showInHierarchyView();
 	}));
 
-	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.showInWaveformViewer', (e) => {
-		editorMenuProvider.showInWaveformViewer();
+	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.addToWaveformViewer', (e) => {
+		editorMenuProvider.addToWaveformViewer();
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.copyHierarchyName', (e) => {

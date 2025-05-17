@@ -125,6 +125,7 @@ export function createVar(fullName: string, type: string, file: string, lineNumb
 
 // #region NetlistItem
 export class NetlistItem extends vscode.TreeItem {
+    public readonly name: string;
     public readonly modulePath: string;
     public readonly command: vscode.Command;
 
@@ -151,6 +152,8 @@ export class NetlistItem extends vscode.TreeItem {
         }
         super(label, collapsibleState);
 
+        this.name = name;
+
         this.modulePath = parts.join('.');
         if (this.contextValue === 'moduleDefItem') { this.modulePath = ''; }
 
@@ -159,6 +162,13 @@ export class NetlistItem extends vscode.TreeItem {
             title: 'Go to definition',
             arguments: [this],
         };
+    }
+
+    getHierarchyName(): string {
+        let result = "";
+        if (this.modulePath !== "") { result += this.modulePath + "."; }
+        if (this.name) { result += this.name; }
+        return result;
     }
 }
 
@@ -483,6 +493,13 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
         this._onDidChangeTreeData.fire(undefined);
     }
 
+    public async openWaveformIfNotPresent(element: DesignItem) {
+        let activeWaveform = element.getActiveWaveform();
+		if (!activeWaveform) {
+			await this.openWaveform(element);
+		}
+    }
+
     public async openWaveform(element: DesignItem): Promise<boolean> {
         const options: vscode.OpenDialogOptions = {
             canSelectFiles: true,
@@ -670,6 +687,30 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         this.gotoDefinition(element, true);
 
         return element;
+    }
+
+    async addToWaveform(element: NetlistItem, waveformUri: vscode.Uri) {
+        let instancePaths = [];
+        if (element.contextValue === 'varItem') {
+            const hierarchyName = element.getHierarchyName();
+            instancePaths.push(hierarchyName);
+        } else if (element.contextValue === 'scopeItem') {
+            // For scope, add all variables in it
+            if (element.children.length === 0) {
+                await this.activeDesign!.getChildrenExternal(element);
+            }
+            for (const child of element.children) {
+                if (child.contextValue === 'varItem') {
+                    const hierarchyName = child.getHierarchyName();
+                    instancePaths.push(hierarchyName);
+                }
+            }
+        }
+
+        // Add to waveform viewer
+        for (const instancePath of instancePaths) {
+            vscode.commands.executeCommand("waveformViewer.addVariable", { uri: waveformUri.toString(), instancePath: instancePath });
+        }
     }
 }
 
