@@ -16,6 +16,7 @@ const classIcon = new vscode.ThemeIcon('symbol-misc', new vscode.ThemeColor('cha
 const interfaceIcon = new vscode.ThemeIcon('debug-disconnect', new vscode.ThemeColor('charts.purple'));
 const packageIcon = new vscode.ThemeIcon('package', new vscode.ThemeColor('charts.purple'));
 const scopeIcon = new vscode.ThemeIcon('symbol-module', new vscode.ThemeColor('charts.purple'));
+const moduleDefIcon = new vscode.ThemeIcon('symbol-enum');
 
 export function createScope(fullName: string, type: string, file: string, lineNumber: number, moduleName: string, contextValue: string, parent: NetlistItem | undefined) {
 
@@ -46,6 +47,7 @@ export function createScope(fullName: string, type: string, file: string, lineNu
         case 'vhdlpackage': { icon = packageIcon; break; }
         case 'ghwgeneric': { icon = scopeIcon; break; }
         case 'vhdlarray': { icon = scopeIcon; break; }
+        case 'moduledef': { icon = moduleDefIcon; break; }
     }
 
     const module = new NetlistItem(fullName, typename, file, lineNumber, moduleName, contextValue, parent, [], vscode.TreeItemCollapsibleState.Collapsed);
@@ -112,6 +114,7 @@ export function createVar(fullName: string, type: string, file: string, lineNumb
         case 'stdulogic': { icon = defaultIcon; break; }
         case 'stdulogicvector': { icon = defaultIcon; break; }
         case 'net': { icon = wireIcon; break; }
+        case 'instance': { icon = moduleIcon; break; } // for module instance
     }
 
     variable.iconPath = icon;
@@ -294,7 +297,7 @@ export class DesignItem extends vscode.TreeItem {
         const queryResult = await conn.query(query);
         const moduleDefs = await queryResult.getAll();
         for (const moduleDef of moduleDefs) {
-            const scope = createScope(moduleDef.m.name, "vhdlarchitecture", moduleDef.m.file, moduleDef.m.lineNo, moduleDef.m.name, "moduleDefItem", undefined);
+            const scope = createScope(moduleDef.m.name, "moduledef", moduleDef.m.file, moduleDef.m.lineNo, moduleDef.m.name, "moduleDefItem", undefined);
             // scope.description = moduleDef.m.file;
             this.moduleInstances.push(scope);
         }
@@ -401,7 +404,7 @@ export class DesignItem extends vscode.TreeItem {
         const queryResult = await conn.query(query);
         const instances = await queryResult.getAll();
         for (const instance of instances) {
-            const scope = createVar(instance.i.fullName, "event", instance.i.file, instance.i.lineNo, instance.m.name, "instanceItem", element);
+            const scope = createVar(instance.i.fullName, "instance", instance.i.file, instance.i.lineNo, instance.m.name, "instanceItem", element);
             scope.description = instance.m.name;
             element.children.push(scope);
         }
@@ -418,6 +421,8 @@ export class DesignItem extends vscode.TreeItem {
         } else if (element.contextValue === 'loadItem' || element.contextValue === 'driverItem') {
             // find tree item using modulePath
             instance = await this.findTreeItem(element.modulePath);
+        } else if (element.contextValue === 'instanceItem') {
+            instance = await this.findTreeItem(element.fullName);
         }
         if (!instance) {
             console.log('Cannot find instance for ' + element.fullName); // Should not happen
@@ -440,7 +445,7 @@ export class DesignItem extends vscode.TreeItem {
         if (activeInstance.contextValue === 'scopeItem') {
             const label = typeof activeInstance.label === 'string' ? activeInstance.label : '';
             activeScope = activeScope === '' ? label : activeScope + '.' + label;
-        } else if (activeInstance.contextValue === 'instanceItem') {
+        } else if (activeInstance.contextValue === 'instanceItem') { // Should not happen
             activeScope = activeInstance.fullName;
         }
         return activeScope;
@@ -639,7 +644,7 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         if (element.contextValue === 'scopeItem' || element.contextValue === 'instanceItem') {
             // sourceFile and lineNumber for scopeItem and instanceItem is where it get instantiated.
             // Find definition in its moduleDef.
-            const moduleName = element.description; // module name is stored in description
+            const moduleName = element.moduleName;
             let index = this.activeDesign.moduleInstances.findIndex(module => module.fullName === moduleName);
             if (index < 0) {
                 console.log('Cannot find module definition for ' + moduleName);

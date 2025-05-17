@@ -122,7 +122,6 @@ export class EditorMenuProvider {
     }
 
     public async showInHierarchyView() { // TODO: handle module/check is variable
-        // TODO: not working if select instance from moduleInstancesView, as activeInstance not set
         const symbol = getWordAtCursor();
         if (!symbol) { return; }
 
