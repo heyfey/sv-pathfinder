@@ -587,6 +587,17 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
     }
 }
 
+async function showTextDocumentLocation(filePath: string, lineNumber: number) {
+    filePath = filePath.replace("ABC", "/home/heyfey"); // TODO
+
+    const uri = vscode.Uri.file(filePath);
+    await vscode.window.showTextDocument(uri, { preview: true }).then(() => {
+        const range = new vscode.Range(lineNumber - 1, 0, lineNumber - 1, 0);
+        vscode.window.activeTextEditor?.revealRange(range);
+        vscode.window.activeTextEditor!.selection = new vscode.Selection(range.start, range.start);
+    });
+}
+
 // #region HierarchyTreeProvider
 export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistItem> {
     private activeDesign: DesignItem | undefined = undefined;
@@ -660,14 +671,8 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
                 lineNumber = this.activeDesign.moduleInstances[index].lineNumber;
             }
         }
-        filePath = filePath.replace("ABC", "/home/heyfey"); // TODO
 
-        const uri = vscode.Uri.file(filePath);
-        await vscode.window.showTextDocument(uri, { preview: true }).then(() => {
-            const range = new vscode.Range(lineNumber - 1, 0, lineNumber - 1, 0);
-            vscode.window.activeTextEditor?.revealRange(range);
-            vscode.window.activeTextEditor!.selection = new vscode.Selection(range.start, range.start);
-        });
+        await showTextDocumentLocation(filePath, lineNumber);
 
         await this.setActiveInstance(element);
 
@@ -742,6 +747,20 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         this.gotoDefinition(element, true);
 
         return element;
+    }
+
+    async gotoInstantiation(element: NetlistItem) {
+        if (!this.activeDesign) { return; }
+        if (element.contextValue !== 'scopeItem') { return; }
+        const parent = element.parent!;
+
+        await showTextDocumentLocation(element.sourceFile, element.lineNumber);
+
+        // Go backward/forward will not work for now.
+        // Consider to strore more context in the stack,
+        // e.g. {action: 'gotoInstantiation', element: element}, {action: 'gotoDefinition', element: element}
+        await this.setActiveInstance(parent);
+        // this.activeDesign.lastActiveElement = parent;
     }
 
     async addToWaveform(element: NetlistItem, waveformUri: vscode.Uri) {

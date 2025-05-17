@@ -68,6 +68,10 @@ export function activate(context: vscode.ExtensionContext) {
 		hierarchyProvider.gotoDefinition(e);
 	}));
 
+	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.gotoInstantiation', (e) => {
+		hierarchyProvider.gotoInstantiation(e);
+	}));
+
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.copyName', (e) => {
 		vscode.env.clipboard.writeText(e.getHierarchyName());
 	}));
