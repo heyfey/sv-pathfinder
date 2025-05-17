@@ -165,6 +165,8 @@ export class NetlistItem extends vscode.TreeItem {
             title: 'Go to definition',
             arguments: [this],
         };
+
+        this.tooltip = label;
     }
 
     getHierarchyName(): string {
@@ -224,13 +226,15 @@ class WaveformItem extends vscode.TreeItem {
             title: 'Open Waveform',
             arguments: [{ uri: this.resourceUri }],
         };
+
+        this.tooltip = filePath;
     }
 }
 
 // #region DesignItem
 export class DesignItem extends vscode.TreeItem {
     contextValue = 'designItem';
-    readonly iconPath = new vscode.ThemeIcon('file-code');
+    readonly iconPath = new vscode.ThemeIcon('file-directory');
     readonly resourceUri: vscode.Uri;
     private activeInstance?: NetlistItem | undefined;
     readonly command: vscode.Command;
@@ -271,6 +275,8 @@ export class DesignItem extends vscode.TreeItem {
         if (filePath === '/home/heyfey/waveform/Design_kz') {
             this.load();
         }
+
+        this.tooltip = filePath;
     }
 
     async load() {
@@ -405,7 +411,7 @@ export class DesignItem extends vscode.TreeItem {
         const instances = await queryResult.getAll();
         for (const instance of instances) {
             const scope = createVar(instance.i.fullName, "instance", instance.i.file, instance.i.lineNo, instance.m.name, "instanceItem", element);
-            scope.description = instance.m.name;
+            // scope.description = instance.m.name;
             element.children.push(scope);
         }
         return element.children;
@@ -805,6 +811,8 @@ class FileItem extends vscode.TreeItem {
         else if (extension === '.vh' || extension === '.vhd' || extension === '.vhdl') {
             this.iconPath = path.join(__dirname, '..', 'media', 'file_type_vhdl.svg');
         }
+
+        this.tooltip = filePath;
     }
 }
 
