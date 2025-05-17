@@ -240,8 +240,7 @@ export class DesignItem extends vscode.TreeItem {
     public moduleInstances: NetlistItem[] = [];
 
     // Kuzu database
-    // private db?: kuzu.Database | undefined;
-    private db?: any | undefined;
+    private db?: any/*kuzu.Database*/ | undefined;
 
     // Waveform integration
     private waveforms: WaveformItem[] = [];
@@ -409,8 +408,23 @@ export class DesignItem extends vscode.TreeItem {
         return element.children;
     }
 
-    public setActiveInstance(element: NetlistItem) {
-        this.activeInstance = element.contextValue === 'varItem' ? element.parent : element;
+    public async setActiveInstance(element: NetlistItem) {
+        let instance;
+        instance = element;
+        if (element.contextValue === 'scopeItem') {
+            instance = element;
+        } else if (element.contextValue === 'varItem') {
+            instance = element.parent!;
+        } else if (element.contextValue === 'loadItem' || element.contextValue === 'driverItem') {
+            // find tree item using modulePath
+            instance = await this.findTreeItem(element.modulePath);
+        }
+        if (!instance) {
+            console.log('Cannot find instance for ' + element.fullName); // Should not happen
+            return;
+        }
+
+        this.activeInstance = instance;
     }
 
     public getActiveInstance() {
@@ -568,7 +582,6 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
     private treeData: NetlistItem[] = [];
 
     private activeScopeStatusBarItem: vscode.StatusBarItem
-    private activeInstance?: NetlistItem | undefined;
 
     constructor(
         public readonly driversView: vscode.TreeView<vscode.TreeItem>,
@@ -645,8 +658,6 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
             vscode.window.activeTextEditor!.selection = new vscode.Selection(range.start, range.start);
         });
 
-        // this.activeDesign.setActiveInstance(element);
-        // this.activeScopeStatusBarItem.text = 'Active scope: ' + this.activeDesign.getActiveScope();
         await this.setActiveInstance(element);
 
         // For varItem, also find drivers and loads for it
@@ -681,24 +692,9 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
     private async setActiveInstance(element: NetlistItem) {
         if (!this.activeDesign) { return; }
 
-        let instance;
-        instance = element;
-        if (element.contextValue === 'scopeItem') {
-            instance = element;
-        } else if (element.contextValue === 'varItem') {
-            instance = element.parent!;
-        } else if (element.contextValue === 'loadItem' || element.contextValue === 'driverItem') {
-            // find tree item using modulePath
-            instance = await this.activeDesign.findTreeItem(element.modulePath);
-        }
-        if (!instance) { return; }
-
-        if (this.activeInstance === instance) { return; }
-
-        this.activeInstance = instance;
-        this.activeDesign.setActiveInstance(instance);
+        await this.activeDesign.setActiveInstance(element);
         this.activeScopeStatusBarItem.text = 'Active scope: ' + this.activeDesign.getActiveScope();
-        this._onDidChangeActiveInstance.fire(instance);
+        this._onDidChangeActiveInstance.fire(this.activeDesign.getActiveInstance());
     }
 
     async goBackward() {
