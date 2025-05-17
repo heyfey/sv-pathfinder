@@ -611,6 +611,7 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
     private treeData: NetlistItem[] = [];
 
     private activeScopeStatusBarItem: vscode.StatusBarItem
+    public hierarchyView: vscode.TreeView<NetlistItem> | undefined;
 
     constructor(
         public readonly driversView: vscode.TreeView<vscode.TreeItem>,
@@ -628,8 +629,18 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
     public readonly onDidChangeActiveInstance: vscode.Event<NetlistItem | undefined | null | void> = this._onDidChangeActiveInstance.event;
 
     public setActiveDesign(design: DesignItem) {
+        if (this.activeDesign === design) { return; }
         this.activeDesign = design;
         this.treeData = design.treeData;
+
+        // Clear the drivers and loads tree data
+        this.driversTreeProvider.setTreeData([]);
+        this.loadsTreeProvider.setTreeData([]);
+
+        const context = design.lastContext;
+        if (context) {
+            this.hierarchyView?.reveal(context.element, { select: true, focus: false, expand: 1 });
+        }
 
         this.activeScopeStatusBarItem.text = 'Active scope: ' + design.getActiveScope();
         this.activeScopeStatusBarItem.show();
@@ -878,6 +889,11 @@ export class DriversLoadsTreeProvider implements vscode.TreeDataProvider<vscode.
     public readonly onDidChangeTreeData: vscode.Event<vscode.TreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
 
     public getTreeData(): vscode.TreeItem[] { return this.treeData; }
+
+    public setTreeData(elements: NetlistItem[]) {
+        this.treeData = elements;
+        this.refresh();
+    }
 
     public async setDriversLoadsData(elements: NetlistItem[], view: vscode.TreeView<vscode.TreeItem>) {
         this.treeData = [];

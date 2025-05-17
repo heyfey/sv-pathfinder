@@ -28,6 +28,7 @@ export function activate(context: vscode.ExtensionContext) {
 		manageCheckboxStateManually: false,
 		canSelectMany: true,
 	});
+	hierarchyProvider.hierarchyView = hierarchyView; // Use to reveal element on select design
 
 	const moduleInstancesProvider = new ModuleInstancesTreeProvider();
 	const moduleInstancesView = vscode.window.createTreeView('moduleInstancesView', {
