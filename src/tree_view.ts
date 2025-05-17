@@ -170,6 +170,28 @@ export class NetlistItem extends vscode.TreeItem {
         if (this.name) { result += this.name; }
         return result;
     }
+
+    // Method to recursively find a child element in the tree
+    async findChild(fullName: string, design: DesignItem): Promise<NetlistItem | undefined> {
+        // If the fullName is empty, return the current item
+        if (fullName === '') {
+            return this;
+        }
+
+        const subModules = fullName.split(".");
+        const currentModule = subModules.shift();
+        if (this.children.length === 0) {
+            await design.getChildrenExternal(this);
+        }
+
+        const childItem = this.children.find((child) => child.name === currentModule);
+
+        if (childItem) {
+            return await childItem.findChild(subModules.join("."), design);
+        } else {
+            return undefined;
+        }
+    }
 }
 
 // #region WaveformItem
@@ -389,7 +411,6 @@ export class DesignItem extends vscode.TreeItem {
 
     public setActiveInstance(element: NetlistItem) {
         this.activeInstance = element.contextValue === 'varItem' ? element.parent : element;
-        // TODO: How about drivers and loads?
     }
 
     public getActiveInstance() {
@@ -427,6 +448,12 @@ export class DesignItem extends vscode.TreeItem {
 
     public getActiveWaveform(): WaveformItem | undefined {
         return this.activeWaveform;
+    }
+
+    public async findTreeItem(fullName: string): Promise<NetlistItem | undefined> {
+        const element = this.treeData.find((element) => element.name === fullName.split('.')[0]);
+        if (!element) { return undefined; }
+        return await element.findChild(fullName.split('.').slice(1).join('.'), this);
     }
 }
 
@@ -495,9 +522,9 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
 
     public async openWaveformIfNotPresent(element: DesignItem) {
         let activeWaveform = element.getActiveWaveform();
-		if (!activeWaveform) {
-			await this.openWaveform(element);
-		}
+        if (!activeWaveform) {
+            await this.openWaveform(element);
+        }
     }
 
     public async openWaveform(element: DesignItem): Promise<boolean> {
@@ -544,10 +571,10 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
     private activeInstance?: NetlistItem | undefined;
 
     constructor(
-        private readonly driversView: vscode.TreeView<vscode.TreeItem>,
-        private readonly driversTreeProvider: DriversLoadsTreeProvider,
-        private readonly loadsView: vscode.TreeView<vscode.TreeItem>,
-        private readonly loadsTreeProvider: DriversLoadsTreeProvider,
+        public readonly driversView: vscode.TreeView<vscode.TreeItem>,
+        public readonly driversTreeProvider: DriversLoadsTreeProvider,
+        public readonly loadsView: vscode.TreeView<vscode.TreeItem>,
+        public readonly loadsTreeProvider: DriversLoadsTreeProvider,
     ) {
         this.activeScopeStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 97);
     }
@@ -620,13 +647,12 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
 
         // this.activeDesign.setActiveInstance(element);
         // this.activeScopeStatusBarItem.text = 'Active scope: ' + this.activeDesign.getActiveScope();
-        this.setActiveInstance(element);
+        await this.setActiveInstance(element);
 
         // For varItem, also find drivers and loads for it
         if (element.contextValue === 'varItem') {
-            await this.activeDesign.getDriversAndLoads(element);
-            this.driversTreeProvider.setDriversLoadsData(element.drivers, this.driversView);
-            this.loadsTreeProvider.setDriversLoadsData(element.loads, this.loadsView);
+            await this.getDriversAndLoads(element);
+            await this.setDriversLoadsData(element);
         }
 
         if (!isGoBackwardOrForward) {
@@ -641,16 +667,38 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         this.activeDesign.lastActiveElement = element;
     }
 
-    private setActiveInstance(element: NetlistItem) {
+    public async getDriversAndLoads(element: NetlistItem): Promise<void> {
+        if (element.contextValue !== 'varItem') { return; }
         if (!this.activeDesign) { return; }
-        // TODO: How about drivers and loads?
-        const instance = element.contextValue === 'varItem' ? element.parent : element;
+        await this.activeDesign.getDriversAndLoads(element);
+    }
+
+    public async setDriversLoadsData(element: NetlistItem) {
+        this.driversTreeProvider.setDriversLoadsData(element.drivers, this.driversView);
+        this.loadsTreeProvider.setDriversLoadsData(element.loads, this.loadsView);
+    }
+
+    private async setActiveInstance(element: NetlistItem) {
+        if (!this.activeDesign) { return; }
+
+        let instance;
+        instance = element;
+        if (element.contextValue === 'scopeItem') {
+            instance = element;
+        } else if (element.contextValue === 'varItem') {
+            instance = element.parent!;
+        } else if (element.contextValue === 'loadItem' || element.contextValue === 'driverItem') {
+            // find tree item using modulePath
+            instance = await this.activeDesign.findTreeItem(element.modulePath);
+        }
+        if (!instance) { return; }
+
         if (this.activeInstance === instance) { return; }
 
         this.activeInstance = instance;
-        this.activeDesign.setActiveInstance(element);
+        this.activeDesign.setActiveInstance(instance);
         this.activeScopeStatusBarItem.text = 'Active scope: ' + this.activeDesign.getActiveScope();
-        this._onDidChangeActiveInstance.fire(element);
+        this._onDidChangeActiveInstance.fire(instance);
     }
 
     async goBackward() {
@@ -697,7 +745,7 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         } else if (element.contextValue === 'scopeItem') {
             // For scope, add all variables in it
             if (element.children.length === 0) {
-                await this.activeDesign!.getChildrenExternal(element);
+                await this.getChildren(element);
             }
             for (const child of element.children) {
                 if (child.contextValue === 'varItem') {
@@ -784,7 +832,7 @@ export class DriversLoadsTreeProvider implements vscode.TreeDataProvider<vscode.
 
     public getTreeData(): vscode.TreeItem[] { return this.treeData; }
 
-    public async setDriversLoadsData(elements: NetlistItem[], view: vscode.TreeView<vscode.TreeItem>,) {
+    public async setDriversLoadsData(elements: NetlistItem[], view: vscode.TreeView<vscode.TreeItem>) {
         this.treeData = [];
         const files = new Map<string, FileItem>();
         for (const element of elements) {

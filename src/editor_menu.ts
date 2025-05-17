@@ -2,6 +2,20 @@ import * as vscode from 'vscode';
 
 import { OpenedDesignsTreeProvider, HierarchyTreeProvider, ModuleInstancesTreeProvider, NetlistItem } from './tree_view';
 
+function getWordAtCursor(): string | undefined {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor || !(editor.document.languageId === 'verilog' || editor.document.languageId === 'systemverilog')) {
+        return undefined;
+    }
+
+    const wordRange = editor.document.getWordRangeAtPosition(editor.selection.active);
+    if (!wordRange) { return undefined; }
+
+    const document = editor.document;
+    const word = document.getText(wordRange);
+    return word;
+}
+
 export class EditorMenuProvider {
 
     constructor(
@@ -15,7 +29,7 @@ export class EditorMenuProvider {
 
     public async selectInstance() {
         const editor = vscode.window.activeTextEditor;
-        if (!editor || editor.document.languageId !== 'verilog') {
+        if (!editor || !(editor.document.languageId === 'verilog' || editor.document.languageId === 'systemverilog')) {
             return;
         }
         const document = editor.document;
@@ -24,16 +38,13 @@ export class EditorMenuProvider {
             'vscode.executeDocumentSymbolProvider',
             document.uri
         );
-        if (!symbols) {
-            return;
-        }
+        if (!symbols) { return; }
+
         // Find all modules symbols
         const moduleSymbols = symbols.filter(
             symbol => symbol.kind === 9 /*=== vscode.SymbolKind.Module*/
         );
-        if (!moduleSymbols) {
-            return;
-        }
+        if (!moduleSymbols) { return; }
 
         const position = editor.selection.active;
         // Find which module the cursor is in
@@ -60,49 +71,72 @@ export class EditorMenuProvider {
         vscode.window.showWarningMessage('Module not found: ' + moduleSymbol.name);
     }
 
-    public async traceDriver() {
-        vscode.window.showWarningMessage('NYI');
-    }
-
-    public async traceLoad() {
-        vscode.window.showWarningMessage('NYI');
-    }
-
-    public async showInHierarchyView() { // TODO: handle module/check is variable
-        // TODO: not working if select instance from moduleInstancesView
-        const editor = vscode.window.activeTextEditor;
-        if (!editor || editor.document.languageId !== 'verilog') { return; }
-
-        const wordRange = editor.document.getWordRangeAtPosition(editor.selection.active);
-        if (!wordRange) { return; }
-
-        const document = editor.document;
-        const symbol = document.getText(wordRange);
-
+    private async findVarItem(name: string): Promise<NetlistItem | undefined> {
         const activeInstance = this.hierarchyTreeProvider.getActiveDesign()?.getActiveInstance();
         if (!activeInstance) { return; }
         if (activeInstance.children.length === 0) {
             await this.hierarchyTreeProvider.getChildren(activeInstance);
         }
-        // find and reveal the child with the same label as the symbol
+        // Find the child with the given name
         for (const child of activeInstance.children) {
-            if (child.label === symbol) {
-                this.hierarchyView.reveal(child, { select: true, focus: false, expand: 3 });
-                return;
+            if (child.name === name) {
+                return child;
             }
+        }
+        return undefined;
+    }
+
+    public async traceDriverOrLoad(traceDriver: boolean) {
+        const symbol = getWordAtCursor();
+        if (!symbol) { return; }
+
+        const element = await this.findVarItem(symbol);
+        if (!element) {
+            vscode.window.showWarningMessage('Symbol not found: ' + symbol);
+            return;
+        }
+
+        await this.hierarchyTreeProvider.getDriversAndLoads(element);
+        await this.hierarchyTreeProvider.setDriversLoadsData(element);
+
+        const children = traceDriver ? element.drivers : element.loads;
+
+        if (children.length === 0) {
+            if (traceDriver) {
+                vscode.window.showWarningMessage('No driver found for: ' + symbol);
+            } else {
+                vscode.window.showWarningMessage('No load found for: ' + symbol);
+            }
+            return;
+        }
+
+        // If there is only one driver/load, go to it
+        if (children.length === 1) {
+            await this.hierarchyTreeProvider.gotoDefinition(children[0]);
+            return;
+        }
+
+        // If there are multiple drivers/loads, focus on the drivers/loads view
+        const viewName = traceDriver ? 'driversView' : 'loadsView';
+        vscode.commands.executeCommand(`${viewName}.focus`);
+    }
+
+    public async showInHierarchyView() { // TODO: handle module/check is variable
+        // TODO: not working if select instance from moduleInstancesView, as activeInstance not set
+        const symbol = getWordAtCursor();
+        if (!symbol) { return; }
+
+        const element = await this.findVarItem(symbol);
+        if (element) {
+            this.hierarchyView.reveal(element, { select: true, focus: false, expand: 3 });
+            return;
         }
         vscode.window.showWarningMessage('Symbol not found: ' + symbol);
     }
 
     private async getHierarchyName(): Promise<string | undefined> {
-        const editor = vscode.window.activeTextEditor;
-        if (!editor || editor.document.languageId !== 'verilog') { return; }
-
-        const wordRange = editor.document.getWordRangeAtPosition(editor.selection.active);
-        if (!wordRange) { return; }
-
-        const document = editor.document;
-        const symbol = document.getText(wordRange);
+        const symbol = getWordAtCursor();
+        if (!symbol) { return; }
         const scopeName = this.hierarchyTreeProvider.getActiveDesign()?.getActiveScope();
         const hierarchyName = scopeName ? `${scopeName}.${symbol}` : symbol;
         return hierarchyName;
@@ -135,31 +169,27 @@ export class EditorMenuProvider {
 
 export async function isCursorInModule(moduleName: string) {
     const editor = vscode.window.activeTextEditor;
-    if (!editor || editor.document.languageId !== 'verilog') { return; }
+    if (!editor || !(editor.document.languageId === 'verilog' || editor.document.languageId === 'systemverilog')) {
+        return;
+    }
 
     const wordRange = editor.document.getWordRangeAtPosition(editor.selection.active);
     if (!wordRange) { return; }
 
     const position = wordRange.start;
 
-    // const document = editor.document;
-    // const symbol = document.getText(wordRange);
-    // console.log(`Symbol: ${symbol}`);
-
-    // Retrieve document symbols
+    // Get document symbols
     const symbols = await vscode.commands.executeCommand(
         'vscode.executeDocumentSymbolProvider',
         editor.document.uri
     );
 
-    if (!symbols) { return; }
     // console.log(symbols);
+    if (!symbols) { return; }
 
     // Find the module by name
     const moduleSymbol = findModuleSymbol(symbols, moduleName);
-    if (!moduleSymbol) {
-        return; // Module not found
-    }
+    if (!moduleSymbol) { return; }
 
     return Promise.resolve(moduleSymbol.range.contains(position));
 }

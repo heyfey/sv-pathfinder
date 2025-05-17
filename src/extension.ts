@@ -108,11 +108,11 @@ export function activate(context: vscode.ExtensionContext) {
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.traceDriver', (e) => {
-		editorMenuProvider.traceDriver();
+		editorMenuProvider.traceDriverOrLoad(true/*traceDriver*/);
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.traceLoad', (e) => {
-		editorMenuProvider.traceLoad();
+		editorMenuProvider.traceDriverOrLoad(false/*traceDriver*/);
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.showInHierarchyView', (e) => {
