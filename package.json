@@ -82,12 +82,27 @@
         {
           "command": "sv-pathfinder.openWaveform",
           "when": "view == 'openedDesignsView' && viewItem == 'designItem'",
+          "group": "inline"
+        },
+        {
+          "command": "sv-pathfinder.closeWaveform",
+          "when": "view == 'openedDesignsView' && viewItem == 'waveformItem'",
+          "group": "inline"
+        },
+        {
+          "command": "sv-pathfinder.openWaveform",
+          "when": "view == 'openedDesignsView' && viewItem == 'designItem'",
           "group": "0_default@1"
+        },
+        {
+          "command": "sv-pathfinder.closeWaveform",
+          "when": "view == 'openedDesignsView' && viewItem == 'waveformItem'",
+          "group": "0_default@4"
         },
         {
           "command": "sv-pathfinder.revealWaveform",
           "when": "view == 'openedDesignsView' && viewItem == 'waveformItem'",
-          "group": "0_default@2"
+          "group": "0_default@3"
         },
         {
           "command": "sv-pathfinder.gotoDefinition",
@@ -159,7 +174,13 @@
       },
       {
         "command": "sv-pathfinder.openWaveform",
-        "title": "Open Waveform"
+        "title": "Open Waveform",
+        "icon": "$(add)"
+      },
+      {
+        "command": "sv-pathfinder.closeWaveform",
+        "title": "Close Waveform",
+        "icon": "$(close)"
       },
       {
         "command": "sv-pathfinder.revealWaveform",

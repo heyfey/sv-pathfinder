@@ -76,6 +76,10 @@ export function activate(context: vscode.ExtensionContext) {
 		designProvider.revealWaveform(e);
 	}));
 
+	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.closeWaveform', (e) => {
+		designProvider.closeWaveform(e);
+	}));
+
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.selectDesign', (e) => {
 		designProvider.selectDesign(e);
 		hierarchyView.reveal(e.lastContext?.element, { select: true, focus: false, expand: 1 });

@@ -609,6 +609,29 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
         }
     }
 
+    private setActiveWaveformForDesign(design: DesignItem, waveform: WaveformItem | undefined) {
+        design.setActiveWaveform(waveform);
+        // Only care about active waveform changes for the active design
+        if (design === this.hierarchyTreeProvider.getActiveDesign()) {
+            this._onDidChangeActiveWaveformForActiveDesign.fire(waveform);
+        }
+    }
+
+    public async closeWaveform(element: WaveformItem) {
+        const design = this.getParent(element)!;
+        if (design instanceof DesignItem) { // always true
+            const index = design.getWaveforms().indexOf(element);
+            if (index >= 0) {
+                design.getWaveforms().splice(index, 1);
+                this.refresh();
+            }
+
+            if (element === design.getActiveWaveform()) {
+                this.setActiveWaveformForDesign(design, undefined);
+            }
+        }
+    }
+
     public handleCheckWaveformItem(element: vscode.TreeItem) {
         const design = this.getParent(element)!;
         if (design instanceof DesignItem) { // always true
@@ -618,11 +641,7 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
                         waveform.checkboxState = vscode.TreeItemCheckboxState.Unchecked;
                     } else {
                         waveform.checkboxState = vscode.TreeItemCheckboxState.Checked;
-                        design.setActiveWaveform(waveform);
-                        // Only care about active waveform changes for the active design
-                        if (design === this.hierarchyTreeProvider.getActiveDesign()) {
-                            this._onDidChangeActiveWaveformForActiveDesign.fire(waveform);
-                        }
+                        this.setActiveWaveformForDesign(design, waveform);
                     }
                 }
             }
@@ -633,11 +652,7 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
     public handleUncheckWaveformItem(element: vscode.TreeItem) {
         const design = this.getParent(element)!;
         if (design instanceof DesignItem) { // always true
-            design.setActiveWaveform(undefined);
-            // Only care about active waveform changes for the active design
-            if (design === this.hierarchyTreeProvider.getActiveDesign()) {
-                this._onDidChangeActiveWaveformForActiveDesign.fire(undefined);
-            }
+            this.setActiveWaveformForDesign(design, undefined);
         }
     }
 }
