@@ -38,6 +38,24 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	const designProvider = new OpenedDesignsTreeProvider(hierarchyProvider, moduleInstancesProvider);
+	const designsView = vscode.window.createTreeView('openedDesignsView', {
+		treeDataProvider: designProvider,
+		manageCheckboxStateManually: false,
+		canSelectMany: false,
+	});
+
+	context.subscriptions.push(
+		designsView.onDidChangeCheckboxState((event) => {
+			for (const [item, state] of event.items) {
+				if (state === vscode.TreeItemCheckboxState.Checked) {
+					designProvider.handleCheckWaveformItem(item);
+				} else if (state === vscode.TreeItemCheckboxState.Unchecked) {
+					designProvider.handleUncheckWaveformItem(item);
+				}
+			}
+		})
+	);
+
 
 	const editorMenuProvider = new EditorMenuProvider(designProvider, hierarchyView, hierarchyProvider, moduleInstancesView, moduleInstancesProvider);
 
@@ -47,7 +65,6 @@ export function activate(context: vscode.ExtensionContext) {
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.openDesign', () => {
-		vscode.window.registerTreeDataProvider('openedDesignsView', designProvider);
 		designProvider.addDesign('/home/heyfey/waveform/Design_kz');
 		designProvider.addDesign('/home/heyfey/waveform/Another_Design_kz');
 	}));
@@ -175,6 +192,7 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.window.onDidChangeVisibleTextEditors(() => annotationProvider.handleChangeVisibleTextEditors()),
 		vscode.workspace.onDidChangeTextDocument((e) => annotationProvider.handleChangeTextDocument(e)),
 		hierarchyProvider.onDidChangeActiveInstance((e) => annotationProvider.handleActiveInstanceChanges(e)),
+		designProvider.onDidChangeActiveWaveformForActiveDesign((e) => annotationProvider.handleActiveWaveformChanges(e)),
 	);
 
 	// Initial update for the active editor

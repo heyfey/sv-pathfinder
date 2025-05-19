@@ -228,6 +228,7 @@ class WaveformItem extends vscode.TreeItem {
         };
 
         this.tooltip = filePath;
+        this.checkboxState = vscode.TreeItemCheckboxState.Unchecked;
     }
 }
 
@@ -469,13 +470,26 @@ export class DesignItem extends vscode.TreeItem {
     }
 
     public addWaveform(uri: vscode.Uri) {
-        this.waveforms = []; // Only allow one waveform per design now, thus clear the old one
-        this.waveforms.push(new WaveformItem(uri, this, vscode.TreeItemCollapsibleState.None));
-        this.activeWaveform = this.waveforms[0];
+        let index = this.waveforms.findIndex(waveform => waveform.resourceUri.fsPath === uri.fsPath);
+        if (index < 0) {
+            const waveform = new WaveformItem(uri, this, vscode.TreeItemCollapsibleState.None);
+            this.waveforms.push(waveform);
+            if (this.waveforms.length === 1) { // Set active if it's the only waveform
+                this.setActiveWaveform(waveform);
+                waveform.checkboxState = vscode.TreeItemCheckboxState.Checked;
+            }
+        } else {
+            // Do nothing. Maybe reveal the waveform?
+        }
     }
 
     public getWaveforms(): WaveformItem[] {
         return this.waveforms;
+    }
+
+    public setActiveWaveform(waveform: WaveformItem | undefined) {
+        if (this.activeWaveform === waveform) { return; }
+        this.activeWaveform = waveform;
     }
 
     public getActiveWaveform(): WaveformItem | undefined {
@@ -502,6 +516,9 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
 
     private _onDidChangeTreeData: vscode.EventEmitter<vscode.TreeItem | undefined | null | void> = new vscode.EventEmitter<vscode.TreeItem | undefined | null | void>();
     public readonly onDidChangeTreeData: vscode.Event<vscode.TreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
+
+    private _onDidChangeActiveWaveformForActiveDesign: vscode.EventEmitter<vscode.TreeItem | undefined | null | void> = new vscode.EventEmitter<vscode.TreeItem | undefined | null | void>();
+    public readonly onDidChangeActiveWaveformForActiveDesign: vscode.Event<vscode.TreeItem | undefined | null | void> = this._onDidChangeActiveWaveformForActiveDesign.event;
 
     addDesign(designPath: string) {
         let index = this.designList.findIndex(design => design.label === designPath);
@@ -530,7 +547,7 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
         return Promise.resolve([]);
     }
 
-    getParent?(element: vscode.TreeItem): vscode.ProviderResult<vscode.TreeItem> {
+    getParent(element: vscode.TreeItem): vscode.ProviderResult<vscode.TreeItem> {
         if (element instanceof WaveformItem) {
             return element.design;
         }
@@ -592,6 +609,38 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
             return;
         }
     }
+
+    public handleCheckWaveformItem(element: vscode.TreeItem) {
+        const design = this.getParent(element)!;
+        if (design instanceof DesignItem) { // always true
+            for (const waveform of design.getWaveforms()) {
+                if (waveform instanceof WaveformItem) { // always true
+                    if (waveform !== element) {
+                        waveform.checkboxState = vscode.TreeItemCheckboxState.Unchecked;
+                    } else {
+                        waveform.checkboxState = vscode.TreeItemCheckboxState.Checked;
+                        design.setActiveWaveform(waveform);
+                        // Only care about active waveform changes for the active design
+                        if (design === this.hierarchyTreeProvider.getActiveDesign()) {
+                            this._onDidChangeActiveWaveformForActiveDesign.fire(waveform);
+                        }
+                    }
+                }
+            }
+            this.refresh();
+        }
+    }
+
+    public handleUncheckWaveformItem(element: vscode.TreeItem) {
+        const design = this.getParent(element)!;
+        if (design instanceof DesignItem) { // always true
+            design.setActiveWaveform(undefined);
+            // Only care about active waveform changes for the active design
+            if (design === this.hierarchyTreeProvider.getActiveDesign()) {
+                this._onDidChangeActiveWaveformForActiveDesign.fire(undefined);
+            }
+        }
+    }
 }
 
 async function showTextDocumentLocation(filePath: string, lineNumber: number) {
@@ -610,7 +659,7 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
     private activeDesign: DesignItem | undefined = undefined;
     private treeData: NetlistItem[] = [];
 
-    private activeScopeStatusBarItem: vscode.StatusBarItem
+    private activeScopeStatusBarItem: vscode.StatusBarItem;
     public hierarchyView: vscode.TreeView<NetlistItem> | undefined;
 
     constructor(
@@ -639,7 +688,7 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
 
         const context = design.lastContext;
         if (context) {
-            this.hierarchyView?.reveal(context.element, { select: true, focus: false, expand: 1 });
+            this.hierarchyView?.reveal(context.element, { select: true, focus: false, expand: 1 }); // TODO
         }
 
         this.activeScopeStatusBarItem.text = 'Active scope: ' + design.getActiveScope();
@@ -823,6 +872,7 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
 
 // }
 
+// #region DriverLoadItem
 class DriverLoadItem extends vscode.TreeItem {
     readonly contextValue = 'driverLoadItem';
     constructor(
@@ -835,6 +885,7 @@ class DriverLoadItem extends vscode.TreeItem {
     }
 }
 
+// #region FileItem
 class FileItem extends vscode.TreeItem {
     constructor(
         public readonly filePath: string,

@@ -116,6 +116,10 @@ export class WaveformValueAnnotationProvider {
         this.debounceUpdateDecorations();
     }
 
+    public async handleActiveWaveformChanges(e: void | vscode.TreeItem | null | undefined) {
+        this.debounceUpdateDecorations();
+    }
+
     public async debounceUpdateDecorations() {
         // Clear any existing timer
         clearTimeout(this.debounceTimer);
@@ -137,6 +141,14 @@ export class WaveformValueAnnotationProvider {
     }
 
     public async updateDecorationsForEditor(editor: vscode.TextEditor) {
+        // Clear all existing decorations
+        for (const decorationType of this.decorationTypesMap.values()) {
+            decorationType.dispose();
+        }
+        // Clear all cached results
+        this.decorationTypesMap.clear();
+        this.rangesMap.clear();
+
         // Get metadata from the active design
         const activeDesign = this.hierarchyTreeProvider.getActiveDesign();
         if (!activeDesign) { return; }
@@ -146,14 +158,6 @@ export class WaveformValueAnnotationProvider {
 
         const activeWaveform = activeDesign.getActiveWaveform();
         if (!activeWaveform) { return; }
-
-        // Clear all existing decorations
-        for (const decorationType of this.decorationTypesMap.values()) {
-            decorationType.dispose();
-        }
-        // Clear all cached results
-        this.decorationTypesMap.clear();
-        this.rangesMap.clear();
 
         const document = editor.document;
         // Get symbols from the document
