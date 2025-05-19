@@ -247,7 +247,6 @@ export class DesignItem extends vscode.TreeItem {
     // Hierarchy
     public treeData: NetlistItem[] = [];
     // For go backward and forward
-    // public lastActiveElement: NetlistItem | undefined = undefined;
     public lastContext: gotoContext | undefined = undefined;
     public backwardStack: gotoContext[] = [];
     public forwardStack: gotoContext[] = [];
@@ -521,7 +520,7 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
     public readonly onDidChangeActiveWaveformForActiveDesign: vscode.Event<vscode.TreeItem | undefined | null | void> = this._onDidChangeActiveWaveformForActiveDesign.event;
 
     addDesign(designPath: string) {
-        let index = this.designList.findIndex(design => design.label === designPath);
+        let index = this.designList.findIndex(design => design.resourceUri.fsPath === designPath);
         if (index < 0) {
             const design = new DesignItem(designPath);
             this.designList.push(design);
@@ -660,7 +659,6 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
     private treeData: NetlistItem[] = [];
 
     private activeScopeStatusBarItem: vscode.StatusBarItem;
-    public hierarchyView: vscode.TreeView<NetlistItem> | undefined;
 
     constructor(
         public readonly driversView: vscode.TreeView<vscode.TreeItem>,
@@ -685,11 +683,6 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         // Clear the drivers and loads tree data
         this.driversTreeProvider.setTreeData([]);
         this.loadsTreeProvider.setTreeData([]);
-
-        const context = design.lastContext;
-        if (context) {
-            this.hierarchyView?.reveal(context.element, { select: true, focus: false, expand: 1 }); // TODO
-        }
 
         this.activeScopeStatusBarItem.text = 'Active scope: ' + design.getActiveScope();
         this.activeScopeStatusBarItem.show();

@@ -28,7 +28,6 @@ export function activate(context: vscode.ExtensionContext) {
 		manageCheckboxStateManually: false,
 		canSelectMany: true,
 	});
-	hierarchyProvider.hierarchyView = hierarchyView; // Use to reveal element on select design
 
 	const moduleInstancesProvider = new ModuleInstancesTreeProvider();
 	const moduleInstancesView = vscode.window.createTreeView('moduleInstancesView', {
@@ -79,7 +78,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.selectDesign', (e) => {
 		designProvider.selectDesign(e);
-		hierarchyView.reveal(e.lastActiveElement, { select: true, focus: false, expand: 1 });
+		hierarchyView.reveal(e.lastContext?.element, { select: true, focus: false, expand: 1 });
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.gotoDefinition', (e) => {
