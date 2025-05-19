@@ -64,8 +64,11 @@ export function activate(context: vscode.ExtensionContext) {
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.openDesign', () => {
-		designProvider.addDesign('/home/heyfey/waveform/Design_kz');
-		designProvider.addDesign('/home/heyfey/waveform/Another_Design_kz');
+		designProvider.openDesign();
+	}));
+
+	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.closeDesign', (e) => {
+		designProvider.closeDesign(e);
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.openWaveform', (e) => {

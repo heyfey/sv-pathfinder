@@ -63,6 +63,11 @@
       ],
       "view/title": [
         {
+          "command": "sv-pathfinder.openDesign",
+          "when": "view == openedDesignsView",
+          "group": "navigation"
+        },
+        {
           "command": "sv-pathfinder.goBackward",
           "when": "view == hierarchyView",
           "group": "navigation"
@@ -82,7 +87,12 @@
         {
           "command": "sv-pathfinder.openWaveform",
           "when": "view == 'openedDesignsView' && viewItem == 'designItem'",
-          "group": "inline"
+          "group": "inline@0"
+        },
+        {
+          "command": "sv-pathfinder.closeDesign",
+          "when": "view == 'openedDesignsView' && viewItem == 'designItem'",
+          "group": "inline@1"
         },
         {
           "command": "sv-pathfinder.closeWaveform",
@@ -170,7 +180,13 @@
       },
       {
         "command": "sv-pathfinder.openDesign",
-        "title": "Open Design"
+        "title": "Open Design",
+        "icon": "$(file-directory-create)"
+      },
+      {
+        "command": "sv-pathfinder.closeDesign",
+        "title": "Close Design",
+        "icon": "$(close)"
       },
       {
         "command": "sv-pathfinder.openWaveform",

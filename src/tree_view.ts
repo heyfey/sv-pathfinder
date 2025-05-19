@@ -278,16 +278,10 @@ export class DesignItem extends vscode.TreeItem {
             arguments: [this],
         };
 
-        // for testing
-        if (filePath === '/home/heyfey/waveform/Design_kz') {
-            this.load();
-        }
-
         this.tooltip = filePath;
     }
 
-    async load() {
-        // console.log(this.resourceUri.fsPath);
+    async load(): Promise<boolean> {
         try {
             await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
@@ -299,10 +293,25 @@ export class DesignItem extends vscode.TreeItem {
                 await this.loadModuleDefs(conn);
                 await this.loadTopModules(conn);
             });
+            return true;
         } catch (error) {
             vscode.window.showErrorMessage('Failed to load design database: ' + error);
-            return;
+            return false;
         }
+    }
+
+    async close() {
+        if (this.db) {
+            this.db.close();
+            this.db = undefined;
+        }
+        this.treeData = [];
+        this.moduleInstances = [];
+        this.activeInstance = undefined;
+        this.waveforms = [];
+        this.activeWaveform = undefined;
+        this.backwardStack = [];
+        this.forwardStack = [];
     }
 
     private async loadModuleDefs(conn: any/*kuzu.Connection*/) {
@@ -519,17 +528,51 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
     private _onDidChangeActiveWaveformForActiveDesign: vscode.EventEmitter<vscode.TreeItem | undefined | null | void> = new vscode.EventEmitter<vscode.TreeItem | undefined | null | void>();
     public readonly onDidChangeActiveWaveformForActiveDesign: vscode.Event<vscode.TreeItem | undefined | null | void> = this._onDidChangeActiveWaveformForActiveDesign.event;
 
-    addDesign(designPath: string) {
+    public async openDesign(): Promise<boolean> {
+        const options: vscode.OpenDialogOptions = {
+            canSelectFiles: true,
+            canSelectFolders: true,
+            canSelectMany: false,
+            filters: {
+                'Designs': ['elab.kz', 'uhdm', 'simv.daidir'],
+            }
+        };
+
+        const uris = await vscode.window.showOpenDialog(options);
+        if (!uris || uris.length === 0) { return false; }
+        const selectedFile = uris[0]; // Get the first (and only) selected file
+        this.addDesign(selectedFile.fsPath);
+        return true;
+    }
+
+    private async addDesign(designPath: string) {
         let index = this.designList.findIndex(design => design.resourceUri.fsPath === designPath);
         if (index < 0) {
             const design = new DesignItem(designPath);
-            this.designList.push(design);
+            const success = await design.load();
+            if (success) {
+                this.designList.push(design);
+            }
         } else {
             // this.designList[index] = database;
             // reveal the design
         }
         this.refresh();
         // return this.designList.length;
+    }
+
+    public async closeDesign(element: DesignItem) {
+        await element.close();
+        // Remove the design from the list
+        const index = this.designList.indexOf(element);
+        if (index >= 0) {
+            this.designList.splice(index, 1);
+        }
+        this.refresh();
+        if (this.hierarchyTreeProvider.getActiveDesign() === element) {
+            this.hierarchyTreeProvider.setActiveDesign(undefined);
+            this.moduleInstancesTreeProvider.setActiveDesign(undefined);
+        }
     }
 
     getTreeItem(element: vscode.TreeItem): vscode.TreeItem | Thenable<vscode.TreeItem> {
@@ -690,17 +733,22 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
     private _onDidChangeActiveInstance: vscode.EventEmitter<NetlistItem | undefined | null | void> = new vscode.EventEmitter<NetlistItem | undefined | null | void>();
     public readonly onDidChangeActiveInstance: vscode.Event<NetlistItem | undefined | null | void> = this._onDidChangeActiveInstance.event;
 
-    public setActiveDesign(design: DesignItem) {
+    public setActiveDesign(design: DesignItem | undefined) {
         if (this.activeDesign === design) { return; }
         this.activeDesign = design;
-        this.treeData = design.treeData;
 
         // Clear the drivers and loads tree data
         this.driversTreeProvider.setTreeData([]);
         this.loadsTreeProvider.setTreeData([]);
 
-        this.activeScopeStatusBarItem.text = 'Active scope: ' + design.getActiveScope();
-        this.activeScopeStatusBarItem.show();
+        if (design) {
+            this.treeData = design.treeData;
+            this.activeScopeStatusBarItem.text = 'Active scope: ' + design.getActiveScope();
+            this.activeScopeStatusBarItem.show();
+        } else {
+            this.treeData = [];
+            this.activeScopeStatusBarItem.hide();
+        }
 
         this._onDidChangeTreeData.fire(undefined); // Trigger a refresh of the Netlist view
     }
@@ -1026,9 +1074,13 @@ export class ModuleInstancesTreeProvider implements vscode.TreeDataProvider<Netl
     //     this.refresh();
     // }
 
-    public setActiveDesign(design: DesignItem) {
+    public setActiveDesign(design: DesignItem | undefined) {
         this.activeDesign = design;
-        this.treeData = design.moduleInstances;
+        if (design) {
+            this.treeData = design.moduleInstances;
+        } else {
+            this.treeData = [];
+        }
 
         this._onDidChangeTreeData.fire(undefined); // Trigger a refresh of the Netlist view
     }
