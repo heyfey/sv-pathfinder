@@ -50,7 +50,7 @@ export function createScope(fullName: string, type: string, file: string, lineNu
         case 'moduledef': { icon = moduleDefIcon; break; }
     }
 
-    const module = new NetlistItem(fullName, typename, file, lineNumber, moduleName, contextValue, parent, [], vscode.TreeItemCollapsibleState.Collapsed);
+    const module = new NetlistItem(fullName, typename, 0, file, lineNumber, moduleName, contextValue, parent, [], vscode.TreeItemCollapsibleState.Collapsed);
     module.iconPath = icon;
 
     return module;
@@ -67,13 +67,13 @@ const stringIcon = new vscode.ThemeIcon('symbol-key', new vscode.ThemeColor('cha
 const portIcon = new vscode.ThemeIcon('plug', new vscode.ThemeColor('charts.green'));
 const timeIcon = new vscode.ThemeIcon('watch', new vscode.ThemeColor('charts.green'));
 
-export function createVar(fullName: string, type: string, file: string, lineNumber: number, moduleName: string, contextValue: string, parent: NetlistItem | undefined) {
+export function createVar(fullName: string, type: string, width: number, file: string, lineNumber: number, moduleName: string, contextValue: string, parent: NetlistItem | undefined) {
     //   const field = bitRangeString(msb, lsb);
 
     // field is already included in signal name for fsdb
     //   if (!isFsdb) name = name + field;
 
-    const variable = new NetlistItem(fullName, type, file, lineNumber, moduleName, contextValue, parent, [], vscode.TreeItemCollapsibleState.None);
+    const variable = new NetlistItem(fullName, type, width, file, lineNumber, moduleName, contextValue, parent, [], vscode.TreeItemCollapsibleState.None);
     const typename = type.toLocaleLowerCase();
     let icon;
 
@@ -118,10 +118,10 @@ export function createVar(fullName: string, type: string, file: string, lineNumb
     }
 
     variable.iconPath = icon;
-    //   if ((typename === 'wire') || (typename === 'reg') || (icon === defaultIcon)) {
-    //     if (width > 1) {variable.iconPath = regIcon;}
-    //     else           {variable.iconPath = wireIcon;}
-    //   }
+      if ((typename === 'wire') || (typename === 'reg') || (typename === 'net') || (icon === defaultIcon)) {
+        if (width > 1) {variable.iconPath = regIcon;}
+        else           {variable.iconPath = wireIcon;}
+      }
 
     return variable;
 }
@@ -139,6 +139,7 @@ export class NetlistItem extends vscode.TreeItem {
     constructor(
         public readonly fullName: string,
         public readonly type: string,
+        public readonly width: number,
         public readonly sourceFile: string,
         public readonly lineNumber: number,
         public readonly moduleName: string,
@@ -152,6 +153,9 @@ export class NetlistItem extends vscode.TreeItem {
         let label = fullName;
         if (contextValue === 'varItem' || contextValue === 'scopeItem') {
             label = name;
+        }
+        if (contextValue === 'varItem' && width > 1) {
+            label = name + "[" + (width-1) + ":0]"; // TODO: fix hard-coded bit range
         }
         super(label, collapsibleState);
 
@@ -384,7 +388,7 @@ export class DesignItem extends vscode.TreeItem {
         const vars = await queryResult.getAll();
         const result: NetlistItem[] = [];
         for (const variable of vars) {
-            const v = createVar(variable.v.fullName, variable.v.type, variable.v.file, variable.v.lineNo, element.moduleName, "varItem", element);
+            const v = createVar(variable.v.fullName, variable.v.type, variable.v.width, variable.v.file, variable.v.lineNo, element.moduleName, "varItem", element);
             result.push(v);
         }
         return result;
@@ -398,7 +402,7 @@ export class DesignItem extends vscode.TreeItem {
         const drivers = await queryResult.getAll();
         // console.log(drivers);
         for (const driver of drivers) {
-            const dvr = createVar(driver.dvr.fullName, "driver", driver.dvr.file, driver.dvr.lineNo, "TODO", "driverItem", element);
+            const dvr = createVar(driver.dvr.fullName, "driver", 0, driver.dvr.file, driver.dvr.lineNo, "TODO", "driverItem", element);
             // console.log(driver.dvr);
             element.drivers.push(dvr);
         }
@@ -408,7 +412,7 @@ export class DesignItem extends vscode.TreeItem {
         const loads = await queryResult2.getAll();
         // console.log(loads);
         for (const load of loads) {
-            const ld = createVar(load.ld.fullName, "load", load.ld.file, load.ld.lineNo, "TODO", "loadItem", element);
+            const ld = createVar(load.ld.fullName, "load", 0, load.ld.file, load.ld.lineNo, "TODO", "loadItem", element);
             // console.log(load.ld);
             element.loads.push(ld);
         }
@@ -426,7 +430,7 @@ export class DesignItem extends vscode.TreeItem {
         const queryResult = await conn.query(query);
         const instances = await queryResult.getAll();
         for (const instance of instances) {
-            const scope = createVar(instance.i.fullName, "instance", instance.i.file, instance.i.lineNo, instance.m.name, "instanceItem", element);
+            const scope = createVar(instance.i.fullName, "instance", 0, instance.i.file, instance.i.lineNo, instance.m.name, "instanceItem", element);
             // scope.description = instance.m.name;
             element.children.push(scope);
         }
