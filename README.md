@@ -1,6 +1,4 @@
-# sv-pathfinder README
-
-This is the README for your extension "sv-pathfinder". After writing up a brief description, we recommend including the following sections.
+# sv-pathfinder
 
 ## Features
 

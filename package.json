@@ -1,17 +1,31 @@
 {
   "name": "sv-pathfinder",
+  "publisher": "heyfey",
   "displayName": "sv-pathfinder",
   "description": "There are venoms and virtues aplenty in the wilds, if you know where to look.",
+  "icon": "media/icon.png",
   "version": "0.0.1",
+  "repository": "https://github.com/heyfey/sv-pathfinder",
   "engines": {
     "vscode": "^1.97.0"
   },
   "categories": [
+    "Debuggers",
+    "Programming Languages",
     "Other"
   ],
-  "activationEvents": [
-    "*"
+  "keywords": [
+    "SystemVerilog",
+    "Verilog",
+    "RTL",
+    "GLS",
+    "Testbench",
+    "Debuggers",
+    "Waveform",
+    "Logic Simulation",
+    "Logic Analyzer"
   ],
+  "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
@@ -26,7 +40,7 @@
     "viewsWelcome": [
       {
         "view": "openedDesignsView",
-        "contents": "Open a design database which can be debugged (uhdm, elab.kz or simv.daidar) \n[Open Design](command:sv-pathfinder.openDesign) \n [learn more](https://code.visualstudio.com/api/extension-guides/tree-view/)."
+        "contents": "Open a design database which can be debugged (uhdm, elab.kz or daidar) \n[Open Design](command:sv-pathfinder.openDesign) \n [learn more](https://github.com/heyfey/sv-pathfinder)."
       }
     ],
     "views": {
@@ -272,7 +286,7 @@
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "20.x",
-    "@types/vscode": "^1.99.0",
+    "@types/vscode": "^1.97.0",
     "@typescript-eslint/eslint-plugin": "^8.22.0",
     "@typescript-eslint/parser": "^8.22.0",
     "@vscode/test-cli": "^0.0.10",

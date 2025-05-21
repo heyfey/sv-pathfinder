@@ -30,12 +30,12 @@ async function main() {
 		],
 		bundle: true,
 		format: 'cjs',
-		minify: production,
+		// minify: production, // have issue with kuzu
 		sourcemap: !production,
 		sourcesContent: false,
 		platform: 'node',
 		outfile: 'dist/extension.js',
-		external: ['vscode'],
+		external: ['vscode'], // add 'kuzu'?
 		logLevel: 'silent',
 		plugins: [
 			/* add to the end of plugins array */
