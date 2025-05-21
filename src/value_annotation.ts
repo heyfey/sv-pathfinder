@@ -57,13 +57,13 @@ export class WaveformValueAnnotationProvider {
         // Access the exported API
         const api = waveformViewer.exports;
         // Verify the API and event exist
-        if (api && api.markerSetEvent) {
+        if (api && api.onDidSetMarker) {
             // Subscribe to the event and return the Disposable
-            const disposable = api.markerSetEvent.event((data: any) => {
+            const disposable = api.onDidSetMarker((data: any) => {
                 // Check is interested waveform file
                 // TODO: change to data.uri
                 // if (data.uri !== this.hierarchyTreeProvider.getActiveDesign()?.getActiveWaveform()?.resourceUri.toString()) {
-                if (data.filePath !== this.hierarchyTreeProvider.getActiveDesign()?.getActiveWaveform()?.resourceUri.fsPath) {
+                if (data.uri.fsPath !== this.hierarchyTreeProvider.getActiveDesign()?.getActiveWaveform()?.resourceUri.fsPath) {
                     return;
                 }
                 // Check if the timestamp has changed
