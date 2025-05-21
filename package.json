@@ -55,11 +55,6 @@
     },
     "menus": {
       "editor/title/context": [
-        {
-          "command": "sv-pathfinder.helloWorld",
-          "when": "view == 'openedDesignsView'",
-          "group": "1_open"
-        }
       ],
       "view/title": [
         {
@@ -79,11 +74,6 @@
         }
       ],
       "view/item/context": [
-        {
-          "command": "sv-pathfinder.helloWorld",
-          "when": "view == 'openedDesignsView'",
-          "group": "0_default@0"
-        },
         {
           "command": "sv-pathfinder.openWaveform",
           "when": "view == 'openedDesignsView' && viewItem == 'designItem'",
@@ -174,10 +164,6 @@
       ]
     },
     "commands": [
-      {
-        "command": "sv-pathfinder.helloWorld",
-        "title": "Hello World"
-      },
       {
         "command": "sv-pathfinder.openDesign",
         "title": "Open Design",
