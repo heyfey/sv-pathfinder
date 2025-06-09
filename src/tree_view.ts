@@ -4,6 +4,8 @@ import path from 'path';
 // Must use require instead of import somehow
 const kuzu = require("kuzu");
 
+const uhdmAddon = require('../build/Release/uhdm_addon.node');
+
 // Scopes
 const moduleIcon = new vscode.ThemeIcon('chip', new vscode.ThemeColor('charts.purple'));
 const taskIcon = new vscode.ThemeIcon('debug-stack-frame', new vscode.ThemeColor('charts.blue'));
@@ -18,7 +20,7 @@ const packageIcon = new vscode.ThemeIcon('package', new vscode.ThemeColor('chart
 const scopeIcon = new vscode.ThemeIcon('symbol-module', new vscode.ThemeColor('charts.purple'));
 const moduleDefIcon = new vscode.ThemeIcon('symbol-enum');
 
-export function createScope(fullName: string, type: string, file: string, lineNumber: number, moduleName: string, contextValue: string, parent: NetlistItem | undefined) {
+export function createScope(fullName: string, type: string, file: string, lineNumber: number, columnNumber: number, moduleName: string, contextValue: string, parent: NetlistItem | undefined, handle: any | undefined) {
 
     let icon = scopeIcon;
     const typename = type.toLocaleLowerCase();
@@ -50,7 +52,7 @@ export function createScope(fullName: string, type: string, file: string, lineNu
         case 'moduledef': { icon = moduleDefIcon; break; }
     }
 
-    const module = new NetlistItem(fullName, typename, 0, file, lineNumber, moduleName, contextValue, parent, [], vscode.TreeItemCollapsibleState.Collapsed);
+    const module = new NetlistItem(fullName, typename, 0, file, lineNumber, columnNumber, moduleName, contextValue, parent, [], handle, vscode.TreeItemCollapsibleState.Collapsed);
     module.iconPath = icon;
 
     return module;
@@ -67,13 +69,13 @@ const stringIcon = new vscode.ThemeIcon('symbol-key', new vscode.ThemeColor('cha
 const portIcon = new vscode.ThemeIcon('plug', new vscode.ThemeColor('charts.green'));
 const timeIcon = new vscode.ThemeIcon('watch', new vscode.ThemeColor('charts.green'));
 
-export function createVar(fullName: string, type: string, width: number, file: string, lineNumber: number, moduleName: string, contextValue: string, parent: NetlistItem | undefined) {
+export function createVar(fullName: string, type: string, width: number, file: string, lineNumber: number, columnNumber: number, moduleName: string, contextValue: string, parent: NetlistItem | undefined) {
     //   const field = bitRangeString(msb, lsb);
 
     // field is already included in signal name for fsdb
     //   if (!isFsdb) name = name + field;
 
-    const variable = new NetlistItem(fullName, type, width, file, lineNumber, moduleName, contextValue, parent, [], vscode.TreeItemCollapsibleState.None);
+    const variable = new NetlistItem(fullName, type, width, file, lineNumber, columnNumber, moduleName, contextValue, parent, [], vscode.TreeItemCollapsibleState.None);
     const typename = type.toLocaleLowerCase();
     let icon;
 
@@ -118,10 +120,10 @@ export function createVar(fullName: string, type: string, width: number, file: s
     }
 
     variable.iconPath = icon;
-      if ((typename === 'wire') || (typename === 'reg') || (typename === 'net') || (icon === defaultIcon)) {
-        if (width > 1) {variable.iconPath = regIcon;}
-        else           {variable.iconPath = wireIcon;}
-      }
+    if ((typename === 'wire') || (typename === 'reg') || (typename === 'net') || (icon === defaultIcon)) {
+        if (width > 1) { variable.iconPath = regIcon; }
+        else { variable.iconPath = wireIcon; }
+    }
 
     return variable;
 }
@@ -142,12 +144,16 @@ export class NetlistItem extends vscode.TreeItem {
         public readonly width: number,
         public readonly sourceFile: string,
         public readonly lineNumber: number,
+        public readonly columnNumber: number,
         public readonly moduleName: string,
         public readonly contextValue: string,
         public readonly parent: NetlistItem | undefined,
         public children: NetlistItem[] = [],
+        public readonly handle: any | undefined, // only used by UHDM for instance handles
         collapsibleState?: vscode.TreeItemCollapsibleState,
     ) {
+        fullName = fullName.replace("work@", ""); // remove prefix for UHDM
+
         const parts = fullName.split('.');
         const name = parts.pop() || '';
         let label = fullName;
@@ -155,7 +161,7 @@ export class NetlistItem extends vscode.TreeItem {
             label = name;
         }
         if (contextValue === 'varItem' && width > 1) {
-            label = name + "[" + (width-1) + ":0]"; // TODO: fix hard-coded bit range
+            label = name + "[" + (width - 1) + ":0]"; // TODO: fix hard-coded bit range
         }
         super(label, collapsibleState);
 
@@ -171,6 +177,7 @@ export class NetlistItem extends vscode.TreeItem {
         };
 
         this.tooltip = label;
+        this.tooltip += `\nType: ${this.type}\n contextValue:  ${this.contextValue}\n fullName: ${this.fullName}\n Name: ${this.name}\n Module: ${this.moduleName}\n modulePath: file: ${this.modulePath}\n ${this.sourceFile}\n line: ${this.lineNumber}${this.columnNumber > 0 ? `, column: ${this.columnNumber}` : ''}\n witdh: ${this.width}`;
     }
 
     getHierarchyName(): string {
@@ -323,7 +330,7 @@ export class DesignItem extends vscode.TreeItem {
         const queryResult = await conn.query(query);
         const moduleDefs = await queryResult.getAll();
         for (const moduleDef of moduleDefs) {
-            const scope = createScope(moduleDef.m.name, "moduledef", moduleDef.m.file, moduleDef.m.lineNo, moduleDef.m.name, "moduleDefItem", undefined);
+            const scope = createScope(moduleDef.m.name, "moduledef", moduleDef.m.file, moduleDef.m.lineNo, -1, moduleDef.m.name, "moduleDefItem", undefined, undefined);
             // scope.description = moduleDef.m.file;
             this.moduleInstances.push(scope);
         }
@@ -335,7 +342,7 @@ export class DesignItem extends vscode.TreeItem {
         const topModules = await queryResult.getAll();
         for (const topModule of topModules) {
             const moduleName = await this.getModuleName(conn, topModule.i.fullName) || "unknown";
-            const scope = createScope(topModule.i.fullName, "module", topModule.i.file, topModule.i.lineNo, moduleName, "scopeItem", undefined);
+            const scope = createScope(topModule.i.fullName, "module", topModule.i.file, topModule.i.lineNo, -1, moduleName, "scopeItem", undefined, undefined);
             scope.description = moduleName;
             this.treeData.push(scope);
         }
@@ -366,7 +373,7 @@ export class DesignItem extends vscode.TreeItem {
         return element.children;
     }
 
-    private async getSubScopes(element: NetlistItem): Promise<NetlistItem[]> {
+    public async getSubScopes(element: NetlistItem): Promise<NetlistItem[]> { // TODO: make it abstract
         const conn = new kuzu.Connection(this.db);
         const query = `MATCH (i:Instance {fullName: "${element.fullName}"})-[:subInstance]->(sub_i:Instance) RETURN sub_i;`;
         const queryResult = await conn.query(query);
@@ -374,21 +381,21 @@ export class DesignItem extends vscode.TreeItem {
         const result: NetlistItem[] = [];
         for (const subInstance of subInstances) {
             const moduleName = await this.getModuleName(conn, subInstance.sub_i.fullName) || "unknown";
-            const scope = createScope(subInstance.sub_i.fullName, "module", subInstance.sub_i.file, subInstance.sub_i.lineNo, moduleName, "scopeItem", element);
+            const scope = createScope(subInstance.sub_i.fullName, "module", subInstance.sub_i.file, subInstance.sub_i.lineNo, -1, moduleName, "scopeItem", element, undefined);
             scope.description = moduleName;
             result.push(scope);
         }
         return result;
     }
 
-    private async getVariables(element: NetlistItem): Promise<NetlistItem[]> {
+    public async getVariables(element: NetlistItem): Promise<NetlistItem[]> { // TODO: make it abstract
         const conn = new kuzu.Connection(this.db);
         const query = `MATCH (i:Instance {fullName: "${element.fullName}"})-[:Var]->(v:Variable) RETURN v;`;
         const queryResult = await conn.query(query);
         const vars = await queryResult.getAll();
         const result: NetlistItem[] = [];
         for (const variable of vars) {
-            const v = createVar(variable.v.fullName, variable.v.type, variable.v.width, variable.v.file, variable.v.lineNo, element.moduleName, "varItem", element);
+            const v = createVar(variable.v.fullName, variable.v.type, variable.v.width, variable.v.file, variable.v.lineNo, -1, element.moduleName, "varItem", element);
             result.push(v);
         }
         return result;
@@ -402,7 +409,7 @@ export class DesignItem extends vscode.TreeItem {
         const drivers = await queryResult.getAll();
         // console.log(drivers);
         for (const driver of drivers) {
-            const dvr = createVar(driver.dvr.fullName, "driver", 0, driver.dvr.file, driver.dvr.lineNo, "TODO", "driverItem", element);
+            const dvr = createVar(driver.dvr.fullName, "driver", 0, driver.dvr.file, driver.dvr.lineNo, -1, "TODO", "driverItem", element);
             // console.log(driver.dvr);
             element.drivers.push(dvr);
         }
@@ -412,7 +419,7 @@ export class DesignItem extends vscode.TreeItem {
         const loads = await queryResult2.getAll();
         // console.log(loads);
         for (const load of loads) {
-            const ld = createVar(load.ld.fullName, "load", 0, load.ld.file, load.ld.lineNo, "TODO", "loadItem", element);
+            const ld = createVar(load.ld.fullName, "load", 0, load.ld.file, load.ld.lineNo, -1, "TODO", "loadItem", element);
             // console.log(load.ld);
             element.loads.push(ld);
         }
@@ -430,7 +437,7 @@ export class DesignItem extends vscode.TreeItem {
         const queryResult = await conn.query(query);
         const instances = await queryResult.getAll();
         for (const instance of instances) {
-            const scope = createVar(instance.i.fullName, "instance", 0, instance.i.file, instance.i.lineNo, instance.m.name, "instanceItem", element);
+            const scope = createVar(instance.i.fullName, "instance", 0, instance.i.file, instance.i.lineNo, -1, instance.m.name, "instanceItem", element);
             // scope.description = instance.m.name;
             element.children.push(scope);
         }
@@ -515,6 +522,93 @@ export class DesignItem extends vscode.TreeItem {
     }
 }
 
+// #region UhdmDesignItem
+class UhdmDesignItem extends DesignItem {
+    async load(): Promise<boolean> {
+        try {
+            await vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: "Reading design database: " + this.resourceUri.fsPath,
+                cancellable: false
+            }, async () => {
+                await uhdmAddon.loadDesign(this.resourceUri.fsPath);
+                await this.loadTopModulesUhdm();
+                // await this.loadModuleDefsUhdm();
+            });
+            return true;
+        } catch (error) {
+            vscode.window.showErrorMessage('Failed to load design database: ' + error);
+            return false;
+        }
+    }
+
+    private async loadTopModulesUhdm() {
+        const topModules = await uhdmAddon.getTopModules();
+        for (const topModule of topModules) {
+            const defName = topModule.defName.replace("work@", ""); // remove prefix for UHDM
+            const scope = createScope(topModule.name, "module", topModule.file, topModule.line, topModule.column, defName, "scopeItem", undefined, topModule.handle);
+            scope.description = defName;
+            this.treeData.push(scope);
+        }
+    }
+
+    public async getSubScopes(element: NetlistItem): Promise<NetlistItem[]> { // TODO: make it private
+        const subScopes = await uhdmAddon.getSubScopes(element.handle);
+        const result: NetlistItem[] = [];
+        for (const subScope of subScopes) {
+            const defName = subScope.defName.replace("work@", ""); // remove prefix for UHDM
+            const scope = createScope(subScope.name, "module", subScope.file, subScope.line, subScope.column, defName, "scopeItem", element, subScope.handle);
+            scope.description = defName;
+            result.push(scope);
+        }
+        return result;
+    }
+
+    public async getVariables(element: NetlistItem): Promise<NetlistItem[]> { // TODO: make it private
+        const vars = await uhdmAddon.getVars(element.handle);
+        const result: NetlistItem[] = [];
+        for (const variable of vars) {
+            const v = createVar(variable.name, variable.type, variable.width, variable.file, variable.line, variable.column, element.moduleName, "varItem", element);
+            result.push(v);
+        }
+        return result;
+    }
+
+    public async getDriversAndLoads(element: NetlistItem): Promise<void> {
+        return;
+    }
+
+    // private async loadModuleDefsUhdm() {
+    //     const query = `MATCH (m:ModuleDef) RETURN m;`;
+    //     const queryResult = await conn.query(query);
+    //     const moduleDefs = await queryResult.getAll();
+    //     for (const moduleDef of moduleDefs) {
+    //         const scope = createScope(moduleDef.m.name, "moduledef", moduleDef.m.file, moduleDef.m.lineNo, -1, moduleDef.m.name, "moduleDefItem", undefined, undefined);
+    //         // scope.description = moduleDef.m.file;
+    //         this.moduleInstances.push(scope);
+    //     }
+    // }
+
+    // public async getModuleInstancesExternal(element: NetlistItem | undefined): Promise<NetlistItem[]> {
+    //     if (!element) {
+    //         return this.moduleInstances;
+    //     }
+    //     if (element.children.length > 0) {
+    //         return element.children; // Returns cached children
+    //     }
+    //     const conn = new kuzu.Connection(this.db);
+    //     const query = `MATCH (m:ModuleDef {name: "${element.fullName}"})-[:instantiate]->(i:Instance) RETURN m,i;`;
+    //     const queryResult = await conn.query(query);
+    //     const instances = await queryResult.getAll();
+    //     for (const instance of instances) {
+    //         const scope = createVar(instance.i.fullName, "instance", 0, instance.i.file, instance.i.lineNo, -1, instance.m.name, "instanceItem", element);
+    //         // scope.description = instance.m.name;
+    //         element.children.push(scope);
+    //     }
+    //     return element.children;
+    // }
+}
+
 // #region OpenedDesignsTreeProvider
 export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
     private designList: DesignItem[] = [];
@@ -552,10 +646,20 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
     private async addDesign(designPath: string) {
         let index = this.designList.findIndex(design => design.resourceUri.fsPath === designPath);
         if (index < 0) {
-            const design = new DesignItem(designPath);
-            const success = await design.load();
-            if (success) {
-                this.designList.push(design);
+            const fileType = designPath.split('.').pop()?.toLocaleLowerCase() || '';
+            if (fileType === 'uhdm') {
+                const design = new UhdmDesignItem(designPath);
+                const success = await design.load();
+                if (success) {
+                    this.designList.push(design);
+                }
+
+            } else {
+                const design = new DesignItem(designPath);
+                const success = await design.load();
+                if (success) {
+                    this.designList.push(design);
+                }
             }
         } else {
             // this.designList[index] = database;
@@ -704,12 +808,13 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
     }
 }
 
-async function showTextDocumentLocation(filePath: string, lineNumber: number) {
+async function showTextDocumentLocation(filePath: string, lineNumber: number, columnNumber: number) {
     filePath = filePath.replace("ABC", "/home/heyfey"); // TODO
 
     const uri = vscode.Uri.file(filePath);
+    columnNumber = columnNumber > 0 ? columnNumber - 1 : 0; // Convert to 0-based index
     await vscode.window.showTextDocument(uri, { preview: true }).then(() => {
-        const range = new vscode.Range(lineNumber - 1, 0, lineNumber - 1, 0);
+        const range = new vscode.Range(lineNumber - 1, columnNumber, lineNumber - 1, columnNumber);
         vscode.window.activeTextEditor?.revealRange(range);
         vscode.window.activeTextEditor!.selection = new vscode.Selection(range.start, range.start);
     });
@@ -803,20 +908,28 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         let filePath = element.sourceFile;
         let lineNumber = element.lineNumber;
         if (element.contextValue === 'scopeItem' || element.contextValue === 'instanceItem') {
-            // sourceFile and lineNumber for scopeItem and instanceItem is where it get instantiated.
-            // Find definition in its moduleDef.
-            const moduleName = element.moduleName;
-            let index = this.activeDesign.moduleInstances.findIndex(module => module.fullName === moduleName);
-            if (index < 0) {
-                console.log('Cannot find module definition for ' + moduleName);
-                return;
+            // sourceFile and lineNumber for scopeItem and instanceItem is where it get instantiated. Find definition in its moduleDef instead.
+            if (this.activeDesign instanceof UhdmDesignItem) { 
+                // Only need to get moduleDef for non-top-module, as sourceFile and lineNumber for top-module is already correct
+                if (element.parent) {
+                    const moduleDef = await uhdmAddon.getModuleDef(element.handle);
+                    filePath = moduleDef.file;
+                    lineNumber = moduleDef.line;
+                }
             } else {
-                filePath = this.activeDesign.moduleInstances[index].sourceFile;
-                lineNumber = this.activeDesign.moduleInstances[index].lineNumber;
+                const moduleName = element.moduleName;
+                let index = this.activeDesign.moduleInstances.findIndex(module => module.fullName === moduleName);
+                if (index < 0) {
+                    console.log('Cannot find module definition for ' + moduleName);
+                    return;
+                } else {
+                    filePath = this.activeDesign.moduleInstances[index].sourceFile;
+                    lineNumber = this.activeDesign.moduleInstances[index].lineNumber;
+                }
             }
         }
 
-        await showTextDocumentLocation(filePath, lineNumber);
+        await showTextDocumentLocation(filePath, lineNumber, element.columnNumber);
 
         await this.setActiveInstance(element);
 
@@ -895,9 +1008,9 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
     async gotoInstantiation(element: NetlistItem, isGoBackwardOrForward: boolean = false) {
         if (!this.activeDesign) { return; }
         if (element.contextValue !== 'scopeItem') { return; }
-        const parent = element.parent!;
+        const parent = element.parent ? element.parent : element; // For top-module, consider itself as parent
 
-        await showTextDocumentLocation(element.sourceFile, element.lineNumber);
+        await showTextDocumentLocation(element.sourceFile, element.lineNumber, element.columnNumber);
         await this.setActiveInstance(parent);
         await this.setContextForGoBackwardOrForward(element, 'gotoInstantiation', isGoBackwardOrForward);
     }
