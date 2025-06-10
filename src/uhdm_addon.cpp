@@ -4,8 +4,10 @@
 #include <uhdm/uhdm.h>
 #include <uhdm/vpi_user.h>
 
-#include <map>
+#include <random>
 #include <string>
+// #include <map>
+#include <unordered_map>
 #include <vector>
 
 class VpiHandleWrap : public Napi::ObjectWrap<VpiHandleWrap> {
@@ -51,43 +53,94 @@ class VpiHandleWrap : public Napi::ObjectWrap<VpiHandleWrap> {
 // Define the static member
 Napi::FunctionReference VpiHandleWrap::constructor;
 
-// Global variables
-UHDM::Serializer serializer;
-std::map<std::string, vpiHandle> moduleMap;
-vpiHandle design = nullptr;
+// Data structures for moduleDef:Instances
+// typedef struct {
+//   std::string fullName;
+//   std::string name;
+//   std::string file;
+//   int line;
+//   int column;
+// } instContext;
+
+// typedef struct {
+//   std::string name;
+//   std::string file;
+//   int line;
+//   int column;
+// } moduleDefContext;
+
+// typedef std::map<std::string, moduleDefContext> ModuleDefContextMap;
+// typedef std::unordered_map<std::string, std::vector<instContext>>
+//     ModuleDefInstContextMap;  // All instances in each module definition
+
+typedef struct {
+  std::string filename;
+  std::unique_ptr<UHDM::Serializer> serializer;
+  vpiHandle design;
+  // ModuleDefContextMap moduleDefContextMap;
+  // ModuleDefInstContextMap moduleDefInstContextMap;
+} DesignContext;
+
+std::unordered_map<int, DesignContext> designContextMap;
 
 // Function to load UHDM design
-Napi::Value LoadDesign(const Napi::CallbackInfo& info) {
+Napi::Number LoadDesign(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
   if (info.Length() < 1 || !info[0].IsString()) {
     Napi::TypeError::New(env, "String argument (filename) expected")
         .ThrowAsJavaScriptException();
-    return env.Null();
+    return Napi::Number::New(env, -1);
   }
 
   std::string filename = info[0].As<Napi::String>().Utf8Value();
-  const std::vector<vpiHandle>& restoredDesigns = serializer.Restore(filename);
+  auto serializer = std::make_unique<UHDM::Serializer>();
+  const std::vector<vpiHandle>& restoredDesigns = serializer->Restore(filename);
   if (restoredDesigns.empty()) {
     Napi::Error::New(env, "Failed to restore design from " + filename)
         .ThrowAsJavaScriptException();
-    return env.Null();
+    return Napi::Number::New(env, -1);
   }
 
-  design = restoredDesigns[0]; // Only consider the first design
+  vpiHandle design = restoredDesigns[0];  // Only consider the first design
   if (!vpi_get(vpiElaborated, design)) {
     UHDM::ElaboratorContext* elaboratorContext =
-        new UHDM::ElaboratorContext(&serializer);
+        new UHDM::ElaboratorContext(serializer.get());
     elaboratorContext->m_elaborator.listenDesigns(restoredDesigns);
     delete elaboratorContext;
   }
 
-  return Napi::String::New(env, "Design loaded successfully");
+  // Generate random id for design context
+  static std::random_device rd;
+  static std::mt19937 gen(rd());
+  static std::uniform_int_distribution<> dis(1, 1000000);
+  int designId = dis(gen);
+  // Create a new DesignContext and store it
+  designContextMap[designId] =
+      DesignContext{filename, std::move(serializer), design};
+
+  return Napi::Number::New(env, designId);
 }
 
 // Wrap getTopModules
 Napi::Value GetTopModules(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
+  // Check if there is at least one argument and it’s a number (design ID)
+  if (info.Length() < 1 || !info[0].IsNumber()) {
+    Napi::TypeError::New(env, "Number argument (design ID) expected")
+        .ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  // Get the design ID from the first argument
+  int designId = info[0].As<Napi::Number>().Int32Value();
+  // Check if the design ID exists in the designContextMap
+  auto it = designContextMap.find(designId);
+  if (it == designContextMap.end()) {
+    Napi::Error::New(env, "Design ID not found").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  // Get the design handle from the DesignContext
+  vpiHandle design = it->second.design;
   if (!design) {
     Napi::Error::New(env, "Design not loaded").ThrowAsJavaScriptException();
     return env.Null();
@@ -123,12 +176,6 @@ Napi::Value GetSubScopes(const Napi::CallbackInfo& info) {
       !info[0].As<Napi::Object>().InstanceOf(VpiHandleWrap::GetConstructor())) {
     Napi::TypeError::New(env, "VpiHandleWrap argument expected")
         .ThrowAsJavaScriptException();
-    return env.Null();
-  }
-
-  // Ensure the design is loaded
-  if (!design) {
-    Napi::Error::New(env, "Design not loaded").ThrowAsJavaScriptException();
     return env.Null();
   }
 
@@ -236,8 +283,10 @@ Napi::Value GetModuleDef(const Napi::CallbackInfo& info) {
   vpiHandle instHandle = wrap->GetHandle();
 
   Napi::Object result = Napi::Object::New(env);
-  if (const char* s = vpi_get_str(vpiDefName, instHandle)) result.Set("defName", s);
-  if (const char* s = vpi_get_str(vpiDefFile, instHandle)) result.Set("file", s);
+  if (const char* s = vpi_get_str(vpiDefName, instHandle))
+    result.Set("defName", s);
+  if (const char* s = vpi_get_str(vpiDefFile, instHandle))
+    result.Set("file", s);
   result.Set("line", vpi_get(vpiDefLineNo, instHandle));
 
   return result;

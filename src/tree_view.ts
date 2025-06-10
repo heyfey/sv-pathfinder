@@ -524,6 +524,8 @@ export class DesignItem extends vscode.TreeItem {
 
 // #region UhdmDesignItem
 class UhdmDesignItem extends DesignItem {
+    private designId = -1; // Used to identify the design in UHDM addon
+
     async load(): Promise<boolean> {
         try {
             await vscode.window.withProgress({
@@ -531,7 +533,7 @@ class UhdmDesignItem extends DesignItem {
                 title: "Reading design database: " + this.resourceUri.fsPath,
                 cancellable: false
             }, async () => {
-                await uhdmAddon.loadDesign(this.resourceUri.fsPath);
+                this.designId = await uhdmAddon.loadDesign(this.resourceUri.fsPath);
                 await this.loadTopModulesUhdm();
                 // await this.loadModuleDefsUhdm();
             });
@@ -543,7 +545,7 @@ class UhdmDesignItem extends DesignItem {
     }
 
     private async loadTopModulesUhdm() {
-        const topModules = await uhdmAddon.getTopModules();
+        const topModules = await uhdmAddon.getTopModules(this.designId);
         for (const topModule of topModules) {
             const defName = topModule.defName.replace("work@", ""); // remove prefix for UHDM
             const scope = createScope(topModule.name, "module", topModule.file, topModule.line, topModule.column, defName, "scopeItem", undefined, topModule.handle);
