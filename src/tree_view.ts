@@ -723,6 +723,16 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
         if (!element) { return; }
         this.hierarchyTreeProvider.setActiveDesign(element);
         this.moduleInstancesTreeProvider.setActiveDesign(element);
+        if (element instanceof UhdmDesignItem) {
+            // Hide the not used views for UHDM designs
+            vscode.commands.executeCommand('setContext', 'sv-pathfinder.driversViewVisible', false);
+            vscode.commands.executeCommand('setContext', 'sv-pathfinder.loadsViewVisible', false);
+            vscode.commands.executeCommand('setContext', 'sv-pathfinder.moduleInstancesViewVisible', false);
+        } else {
+            vscode.commands.executeCommand('setContext', 'sv-pathfinder.driversViewVisible', true);
+            vscode.commands.executeCommand('setContext', 'sv-pathfinder.loadsViewVisible', true);
+            vscode.commands.executeCommand('setContext', 'sv-pathfinder.moduleInstancesViewVisible', true);
+        }
         this.refresh();
     }
 

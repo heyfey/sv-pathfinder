@@ -55,15 +55,18 @@
         },
         {
           "id": "driversView",
-          "name": "Drivers"
+          "name": "Drivers",
+          "when": "sv-pathfinder.driversViewVisible"
         },
         {
           "id": "loadsView",
-          "name": "Loads"
+          "name": "Loads",
+          "when": "sv-pathfinder.loadsViewVisible"
         },
         {
           "id": "moduleInstancesView",
-          "name": "Module Instances"
+          "name": "Module Instances",
+          "when": "sv-pathfinder.moduleInstancesViewVisible"
         }
       ]
     },
@@ -147,17 +150,17 @@
       "editor/context": [
         {
           "command": "sv-pathfinder.selectInstance",
-          "when": "resourceLangId == verilog",
+          "when": "resourceLangId == verilog && sv-pathfinder.moduleInstancesViewVisible",
           "group": "1_designNavigation@0"
         },
         {
           "command": "sv-pathfinder.traceDriver",
-          "when": "resourceLangId == verilog",
+          "when": "resourceLangId == verilog && sv-pathfinder.driversViewVisible",
           "group": "1_designNavigation@1"
         },
         {
           "command": "sv-pathfinder.traceLoad",
-          "when": "resourceLangId == verilog",
+          "when": "resourceLangId == verilog && sv-pathfinder.loadsViewVisible",
           "group": "1_designNavigation@2"
         },
         {
