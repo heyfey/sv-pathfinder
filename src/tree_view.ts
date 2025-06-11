@@ -177,7 +177,7 @@ export class NetlistItem extends vscode.TreeItem {
         };
 
         this.tooltip = label;
-        this.tooltip += `\nType: ${this.type}\n contextValue:  ${this.contextValue}\n fullName: ${this.fullName}\n Name: ${this.name}\n Module: ${this.moduleName}\n modulePath: file: ${this.modulePath}\n ${this.sourceFile}\n line: ${this.lineNumber}${this.columnNumber > 0 ? `, column: ${this.columnNumber}` : ''}\n witdh: ${this.width}`;
+        // this.tooltip += `\nType: ${this.type}\n contextValue:  ${this.contextValue}\n fullName: ${this.fullName}\n Name: ${this.name}\n Module: ${this.moduleName}\n modulePath: file: ${this.modulePath}\n ${this.sourceFile}\n line: ${this.lineNumber}${this.columnNumber > 0 ? `, column: ${this.columnNumber}` : ''}\n witdh: ${this.width}`;
     }
 
     getHierarchyName(): string {
