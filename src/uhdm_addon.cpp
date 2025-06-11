@@ -207,7 +207,8 @@ Napi::Value GetSubScopes(const Napi::CallbackInfo& info) {
     // manage it
   }
 
-  // TODO: Handle genScopes, functions, etc.
+  // TODO: Handle genScope, genScopeArray, scope, function, task, interface,
+  // interfaceArray, etc.
 
   // Release the iterator
   vpi_release_handle(instItr);
@@ -260,11 +261,12 @@ Napi::Value GetVars(const Napi::CallbackInfo& info) {
 
   // Collect variables of each type
   collectVars(vpiNet, "net");
+  collectVars(vpiArrayNet, "net");
   collectVars(vpiReg, "reg");
+  collectVars(vpiVariables, "integer");
   collectVars(vpiIntegerVar, "integer");
   collectVars(vpiRealVar, "real");
-  // TODO: vpiArrayNet
-  // TODO: vpiVariables (integer), vpiParameter
+  collectVars(vpiParameter, "parameter");
 
   return result;
 }
@@ -295,36 +297,36 @@ Napi::Value GetModuleDef(const Napi::CallbackInfo& info) {
 }
 
 Napi::Value UnloadDesign(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
+  Napi::Env env = info.Env();
 
-    // Validate input: Expecting a single number argument (design ID)
-    if (info.Length() < 1 || !info[0].IsNumber()) {
-        Napi::TypeError::New(env, "Number argument (design ID) expected")
-            .ThrowAsJavaScriptException();
-        return env.Null();
-    }
+  // Validate input: Expecting a single number argument (design ID)
+  if (info.Length() < 1 || !info[0].IsNumber()) {
+    Napi::TypeError::New(env, "Number argument (design ID) expected")
+        .ThrowAsJavaScriptException();
+    return env.Null();
+  }
 
-    // Get the design ID from the argument
-    int designId = info[0].As<Napi::Number>().Int32Value();
+  // Get the design ID from the argument
+  int designId = info[0].As<Napi::Number>().Int32Value();
 
-    // Find the design context in the map
-    auto it = designContextMap.find(designId);
-    if (it == designContextMap.end()) {
-        Napi::Error::New(env, "Design ID not found").ThrowAsJavaScriptException();
-        return env.Null();
-    }
+  // Find the design context in the map
+  auto it = designContextMap.find(designId);
+  if (it == designContextMap.end()) {
+    Napi::Error::New(env, "Design ID not found").ThrowAsJavaScriptException();
+    return env.Null();
+  }
 
-    // Release the design handle if it exists
-    if (it->second.design) {
-        vpi_release_handle(it->second.design);
-        it->second.design = nullptr;  // Set to null after releasing
-    }
+  // Release the design handle if it exists
+  if (it->second.design) {
+    vpi_release_handle(it->second.design);
+    it->second.design = nullptr;  // Set to null after releasing
+  }
 
-    // Remove the design context from the map
-    designContextMap.erase(it);
+  // Remove the design context from the map
+  designContextMap.erase(it);
 
-    // Return undefined to indicate successful completion
-    return env.Undefined();
+  // Return undefined to indicate successful completion
+  return env.Undefined();
 }
 
 // Initialize the addon
