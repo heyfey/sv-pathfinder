@@ -830,7 +830,7 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
 }
 
 async function showTextDocumentLocation(filePath: string, lineNumber: number, columnNumber: number) {
-    filePath = filePath.replace("ABC", "/home/heyfey"); // TODO
+    // filePath = filePath.replace("ABC", "/home/heyfey");
 
     const uri = vscode.Uri.file(filePath);
     columnNumber = columnNumber > 0 ? columnNumber - 1 : 0; // Convert to 0-based index
@@ -1111,7 +1111,7 @@ class FileItem extends vscode.TreeItem {
 }
 
 async function getLineContent(filePath: string, lineNumber: number): Promise<string> {
-    filePath = filePath.replace("ABC", "/home/heyfey"); // TODO
+    // filePath = filePath.replace("ABC", "/home/heyfey");
     try {
         const document = await vscode.workspace.openTextDocument(filePath);
         const lineContent = document.lineAt(lineNumber - 1).text;
