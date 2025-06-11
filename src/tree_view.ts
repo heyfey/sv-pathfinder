@@ -620,7 +620,7 @@ class UhdmDesignItem extends DesignItem {
     }
 
     protected async unload(): Promise<void> {
-        // TODO
+        await uhdmAddon.unloadDesign(this.designId);
     }
 }
 

@@ -263,6 +263,8 @@ Napi::Value GetVars(const Napi::CallbackInfo& info) {
   collectVars(vpiReg, "reg");
   collectVars(vpiIntegerVar, "integer");
   collectVars(vpiRealVar, "real");
+  // TODO: vpiArrayNet
+  // TODO: vpiVariables (integer), vpiParameter
 
   return result;
 }
@@ -292,10 +294,44 @@ Napi::Value GetModuleDef(const Napi::CallbackInfo& info) {
   return result;
 }
 
+Napi::Value UnloadDesign(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+
+    // Validate input: Expecting a single number argument (design ID)
+    if (info.Length() < 1 || !info[0].IsNumber()) {
+        Napi::TypeError::New(env, "Number argument (design ID) expected")
+            .ThrowAsJavaScriptException();
+        return env.Null();
+    }
+
+    // Get the design ID from the argument
+    int designId = info[0].As<Napi::Number>().Int32Value();
+
+    // Find the design context in the map
+    auto it = designContextMap.find(designId);
+    if (it == designContextMap.end()) {
+        Napi::Error::New(env, "Design ID not found").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+
+    // Release the design handle if it exists
+    if (it->second.design) {
+        vpi_release_handle(it->second.design);
+        it->second.design = nullptr;  // Set to null after releasing
+    }
+
+    // Remove the design context from the map
+    designContextMap.erase(it);
+
+    // Return undefined to indicate successful completion
+    return env.Undefined();
+}
+
 // Initialize the addon
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   VpiHandleWrap::Init(env);  // Set up the VpiHandleWrap class
   exports.Set("loadDesign", Napi::Function::New(env, LoadDesign));
+  exports.Set("unloadDesign", Napi::Function::New(env, UnloadDesign));
   exports.Set("getTopModules", Napi::Function::New(env, GetTopModules));
   exports.Set("getSubScopes", Napi::Function::New(env, GetSubScopes));
   exports.Set("getVars", Napi::Function::New(env, GetVars));
