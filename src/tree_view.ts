@@ -249,7 +249,7 @@ interface gotoContext {
 }
 
 // #region DesignItem
-export class DesignItem extends vscode.TreeItem {
+export abstract class DesignItem extends vscode.TreeItem {
     contextValue = 'designItem';
     readonly iconPath = new vscode.ThemeIcon('file-directory');
     readonly resourceUri: vscode.Uri;
@@ -263,9 +263,6 @@ export class DesignItem extends vscode.TreeItem {
     public forwardStack: gotoContext[] = [];
     // Module Instances
     public moduleInstances: NetlistItem[] = [];
-
-    // Kuzu database
-    private db?: any/*kuzu.Database*/ | undefined;
 
     // Waveform integration
     private waveforms: WaveformItem[] = [];
@@ -292,30 +289,15 @@ export class DesignItem extends vscode.TreeItem {
         this.tooltip = filePath;
     }
 
-    async load(): Promise<boolean> {
-        try {
-            await vscode.window.withProgress({
-                location: vscode.ProgressLocation.Notification,
-                title: "Reading design database: " + this.resourceUri.fsPath,
-                cancellable: false
-            }, async () => {
-                this.db = new kuzu.Database(this.resourceUri.fsPath, 0, true, true, 0);
-                const conn = new kuzu.Connection(this.db);
-                await this.loadModuleDefs(conn);
-                await this.loadTopModules(conn);
-            });
-            return true;
-        } catch (error) {
-            vscode.window.showErrorMessage('Failed to load design database: ' + error);
-            return false;
-        }
-    }
+    // Abstract methods to load treeData for different kinds of design databases
+    public abstract load(): Promise<boolean>;
+    protected abstract unload(): Promise<void>;
+    public abstract getChildrenExternal(element: NetlistItem | undefined): Promise<NetlistItem[]>;
+    public abstract getDriversAndLoadsExternal(element: NetlistItem): Promise<void>;
+    public abstract getModuleInstancesExternal(element: NetlistItem | undefined): Promise<NetlistItem[]>;
 
-    async close() {
-        if (this.db) {
-            this.db.close();
-            this.db = undefined;
-        }
+    public async close() {
+        await this.unload();
         this.treeData = [];
         this.moduleInstances = [];
         this.activeInstance = undefined;
@@ -323,125 +305,6 @@ export class DesignItem extends vscode.TreeItem {
         this.activeWaveform = undefined;
         this.backwardStack = [];
         this.forwardStack = [];
-    }
-
-    private async loadModuleDefs(conn: any/*kuzu.Connection*/) {
-        const query = `MATCH (m:ModuleDef) RETURN m;`;
-        const queryResult = await conn.query(query);
-        const moduleDefs = await queryResult.getAll();
-        for (const moduleDef of moduleDefs) {
-            const scope = createScope(moduleDef.m.name, "moduledef", moduleDef.m.file, moduleDef.m.lineNo, -1, moduleDef.m.name, "moduleDefItem", undefined, undefined);
-            // scope.description = moduleDef.m.file;
-            this.moduleInstances.push(scope);
-        }
-    }
-
-    private async loadTopModules(conn: any/*kuzu.Connection*/) {
-        const query = `MATCH (i:Instance) WHERE i.isTopModule = true RETURN i;`;
-        const queryResult = await conn.query(query);
-        const topModules = await queryResult.getAll();
-        for (const topModule of topModules) {
-            const moduleName = await this.getModuleName(conn, topModule.i.fullName) || "unknown";
-            const scope = createScope(topModule.i.fullName, "module", topModule.i.file, topModule.i.lineNo, -1, moduleName, "scopeItem", undefined, undefined);
-            scope.description = moduleName;
-            this.treeData.push(scope);
-        }
-    }
-
-    private async getModuleName(conn: any/*kuzu.Connection*/, instanceName: string): Promise<string | undefined> {
-        const query = `MATCH (m:ModuleDef)-[:instantiate]->(i:Instance {fullName: "${instanceName}"}) RETURN m LIMIT 1;`;
-        const queryResult = await conn.query(query);
-        const moduleDefs = await queryResult.getAll();
-        for (const moduleDef of moduleDefs) {
-            return moduleDef.m.name;
-        }
-        return undefined;
-    }
-
-    public async getChildrenExternal(element: NetlistItem | undefined): Promise<NetlistItem[]> {
-        if (!element) {
-            return this.treeData; // Returns top-level netlist items
-        }
-        if (element.children.length > 0) {
-            return element.children; // Returns cached children
-        }
-        const [subScopes, variables] = await Promise.all([
-            this.getSubScopes(element),
-            this.getVariables(element)
-        ]);
-        element.children = [...subScopes, ...variables];
-        return element.children;
-    }
-
-    public async getSubScopes(element: NetlistItem): Promise<NetlistItem[]> { // TODO: make it abstract
-        const conn = new kuzu.Connection(this.db);
-        const query = `MATCH (i:Instance {fullName: "${element.fullName}"})-[:subInstance]->(sub_i:Instance) RETURN sub_i;`;
-        const queryResult = await conn.query(query);
-        const subInstances = await queryResult.getAll();
-        const result: NetlistItem[] = [];
-        for (const subInstance of subInstances) {
-            const moduleName = await this.getModuleName(conn, subInstance.sub_i.fullName) || "unknown";
-            const scope = createScope(subInstance.sub_i.fullName, "module", subInstance.sub_i.file, subInstance.sub_i.lineNo, -1, moduleName, "scopeItem", element, undefined);
-            scope.description = moduleName;
-            result.push(scope);
-        }
-        return result;
-    }
-
-    public async getVariables(element: NetlistItem): Promise<NetlistItem[]> { // TODO: make it abstract
-        const conn = new kuzu.Connection(this.db);
-        const query = `MATCH (i:Instance {fullName: "${element.fullName}"})-[:Var]->(v:Variable) RETURN v;`;
-        const queryResult = await conn.query(query);
-        const vars = await queryResult.getAll();
-        const result: NetlistItem[] = [];
-        for (const variable of vars) {
-            const v = createVar(variable.v.fullName, variable.v.type, variable.v.width, variable.v.file, variable.v.lineNo, -1, element.moduleName, "varItem", element);
-            result.push(v);
-        }
-        return result;
-    }
-
-    public async getDriversAndLoads(element: NetlistItem): Promise<void> {
-        if (element.drivers.length > 0 || element.loads.length > 0) { return; }
-        const conn = new kuzu.Connection(this.db);
-        const query = `MATCH (v:Variable {fullName: "${element.fullName}"})-[:driver]->(dvr:Assignment) RETURN dvr;`;
-        const queryResult = await conn.query(query);
-        const drivers = await queryResult.getAll();
-        // console.log(drivers);
-        for (const driver of drivers) {
-            const dvr = createVar(driver.dvr.fullName, "driver", 0, driver.dvr.file, driver.dvr.lineNo, -1, "TODO", "driverItem", element);
-            // console.log(driver.dvr);
-            element.drivers.push(dvr);
-        }
-
-        const query2 = `MATCH (v:Variable {fullName: "${element.fullName}"})-[:load]->(ld:Assignment) RETURN ld;`;
-        const queryResult2 = await conn.query(query2);
-        const loads = await queryResult2.getAll();
-        // console.log(loads);
-        for (const load of loads) {
-            const ld = createVar(load.ld.fullName, "load", 0, load.ld.file, load.ld.lineNo, -1, "TODO", "loadItem", element);
-            // console.log(load.ld);
-            element.loads.push(ld);
-        }
-    }
-
-    public async getModuleInstancesExternal(element: NetlistItem | undefined): Promise<NetlistItem[]> {
-        if (!element) {
-            return this.moduleInstances;
-        }
-        if (element.children.length > 0) {
-            return element.children; // Returns cached children
-        }
-        const conn = new kuzu.Connection(this.db);
-        const query = `MATCH (m:ModuleDef {name: "${element.fullName}"})-[:instantiate]->(i:Instance) RETURN m,i;`;
-        const queryResult = await conn.query(query);
-        const instances = await queryResult.getAll();
-        for (const instance of instances) {
-            const scope = createVar(instance.i.fullName, "instance", 0, instance.i.file, instance.i.lineNo, -1, instance.m.name, "instanceItem", element);
-            // scope.description = instance.m.name;
-            element.children.push(scope);
-        }
-        return element.children;
     }
 
     public async setActiveInstance(element: NetlistItem) {
@@ -522,20 +385,22 @@ export class DesignItem extends vscode.TreeItem {
     }
 }
 
-// #region UhdmDesignItem
-class UhdmDesignItem extends DesignItem {
-    private designId = -1; // Used to identify the design in UHDM addon
+// #region KuzuDesignItem
+class KuzuDesignItem extends DesignItem {
+    // Kuzu database
+    private db?: any/*kuzu.Database*/ | undefined;
 
-    async load(): Promise<boolean> {
+    public async load(): Promise<boolean> {
         try {
             await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
                 title: "Reading design database: " + this.resourceUri.fsPath,
                 cancellable: false
             }, async () => {
-                this.designId = await uhdmAddon.loadDesign(this.resourceUri.fsPath);
-                await this.loadTopModulesUhdm();
-                // await this.loadModuleDefsUhdm();
+                this.db = new kuzu.Database(this.resourceUri.fsPath, 0, true, true, 0);
+                const conn = new kuzu.Connection(this.db);
+                await this.loadModuleDefs(conn);
+                await this.loadTopModules(conn);
             });
             return true;
         } catch (error) {
@@ -544,7 +409,162 @@ class UhdmDesignItem extends DesignItem {
         }
     }
 
-    private async loadTopModulesUhdm() {
+    private async loadModuleDefs(conn: any/*kuzu.Connection*/) {
+        const query = `MATCH (m:ModuleDef) RETURN m;`;
+        const queryResult = await conn.query(query);
+        const moduleDefs = await queryResult.getAll();
+        for (const moduleDef of moduleDefs) {
+            const scope = createScope(moduleDef.m.name, "moduledef", moduleDef.m.file, moduleDef.m.lineNo, -1, moduleDef.m.name, "moduleDefItem", undefined, undefined);
+            // scope.description = moduleDef.m.file;
+            this.moduleInstances.push(scope);
+        }
+    }
+
+    private async loadTopModules(conn: any/*kuzu.Connection*/) {
+        const query = `MATCH (i:Instance) WHERE i.isTopModule = true RETURN i;`;
+        const queryResult = await conn.query(query);
+        const topModules = await queryResult.getAll();
+        for (const topModule of topModules) {
+            const moduleName = await this.getModuleName(conn, topModule.i.fullName) || "unknown";
+            const scope = createScope(topModule.i.fullName, "module", topModule.i.file, topModule.i.lineNo, -1, moduleName, "scopeItem", undefined, undefined);
+            scope.description = moduleName;
+            this.treeData.push(scope);
+        }
+    }
+
+    private async getModuleName(conn: any/*kuzu.Connection*/, instanceName: string): Promise<string | undefined> {
+        const query = `MATCH (m:ModuleDef)-[:instantiate]->(i:Instance {fullName: "${instanceName}"}) RETURN m LIMIT 1;`;
+        const queryResult = await conn.query(query);
+        const moduleDefs = await queryResult.getAll();
+        for (const moduleDef of moduleDefs) {
+            return moduleDef.m.name;
+        }
+        return undefined;
+    }
+
+    public async getChildrenExternal(element: NetlistItem | undefined): Promise<NetlistItem[]> {
+        if (!element) {
+            return this.treeData; // Returns top-level netlist items
+        }
+        if (element.children.length > 0) {
+            return element.children; // Returns cached children
+        }
+        const [subScopes, variables] = await Promise.all([
+            this.getSubScopes(element),
+            this.getVariables(element)
+        ]);
+        element.children = [...subScopes, ...variables];
+        return element.children;
+    }
+
+    private async getSubScopes(element: NetlistItem): Promise<NetlistItem[]> {
+        const conn = new kuzu.Connection(this.db);
+        const query = `MATCH (i:Instance {fullName: "${element.fullName}"})-[:subInstance]->(sub_i:Instance) RETURN sub_i;`;
+        const queryResult = await conn.query(query);
+        const subInstances = await queryResult.getAll();
+        const result: NetlistItem[] = [];
+        for (const subInstance of subInstances) {
+            const moduleName = await this.getModuleName(conn, subInstance.sub_i.fullName) || "unknown";
+            const scope = createScope(subInstance.sub_i.fullName, "module", subInstance.sub_i.file, subInstance.sub_i.lineNo, -1, moduleName, "scopeItem", element, undefined);
+            scope.description = moduleName;
+            result.push(scope);
+        }
+        return result;
+    }
+
+    private async getVariables(element: NetlistItem): Promise<NetlistItem[]> {
+        const conn = new kuzu.Connection(this.db);
+        const query = `MATCH (i:Instance {fullName: "${element.fullName}"})-[:Var]->(v:Variable) RETURN v;`;
+        const queryResult = await conn.query(query);
+        const vars = await queryResult.getAll();
+        const result: NetlistItem[] = [];
+        for (const variable of vars) {
+            const v = createVar(variable.v.fullName, variable.v.type, variable.v.width, variable.v.file, variable.v.lineNo, -1, element.moduleName, "varItem", element);
+            result.push(v);
+        }
+        return result;
+    }
+
+    public async getDriversAndLoadsExternal(element: NetlistItem): Promise<void> {
+        if (element.drivers.length > 0 || element.loads.length > 0) { return; }
+        const conn = new kuzu.Connection(this.db);
+        const query = `MATCH (v:Variable {fullName: "${element.fullName}"})-[:driver]->(dvr:Assignment) RETURN dvr;`;
+        const queryResult = await conn.query(query);
+        const drivers = await queryResult.getAll();
+        // console.log(drivers);
+        for (const driver of drivers) {
+            const dvr = createVar(driver.dvr.fullName, "driver", 0, driver.dvr.file, driver.dvr.lineNo, -1, "TODO", "driverItem", element);
+            // console.log(driver.dvr);
+            element.drivers.push(dvr);
+        }
+
+        const query2 = `MATCH (v:Variable {fullName: "${element.fullName}"})-[:load]->(ld:Assignment) RETURN ld;`;
+        const queryResult2 = await conn.query(query2);
+        const loads = await queryResult2.getAll();
+        // console.log(loads);
+        for (const load of loads) {
+            const ld = createVar(load.ld.fullName, "load", 0, load.ld.file, load.ld.lineNo, -1, "TODO", "loadItem", element);
+            // console.log(load.ld);
+            element.loads.push(ld);
+        }
+    }
+
+    public async getModuleInstancesExternal(element: NetlistItem | undefined): Promise<NetlistItem[]> {
+        if (!element) {
+            return this.moduleInstances;
+        }
+        if (element.children.length > 0) {
+            return element.children; // Returns cached children
+        }
+        element.children = await this.getModuleInstances(element);
+        return element.children;
+    }
+
+    private async getModuleInstances(element: NetlistItem): Promise<NetlistItem[]> {
+        const conn = new kuzu.Connection(this.db);
+        const query = `MATCH (m:ModuleDef {name: "${element.fullName}"})-[:instantiate]->(i:Instance) RETURN m,i;`;
+        const queryResult = await conn.query(query);
+        const instances = await queryResult.getAll();
+        const result: NetlistItem[] = [];
+        for (const instance of instances) {
+            const scope = createVar(instance.i.fullName, "instance", 0, instance.i.file, instance.i.lineNo, -1, instance.m.name, "instanceItem", element);
+            // scope.description = instance.m.name;
+            result.push(scope);
+        }
+        return result;
+    }
+
+    protected async unload(): Promise<void> {
+        if (this.db) {
+            this.db.close();
+            this.db = undefined;
+        }
+    }
+}
+
+// #region UhdmDesignItem
+class UhdmDesignItem extends DesignItem {
+    private designId = -1; // Used to identify the design in UHDM addon
+
+    public async load(): Promise<boolean> {
+        try {
+            await vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: "Reading design database: " + this.resourceUri.fsPath,
+                cancellable: false
+            }, async () => {
+                this.designId = await uhdmAddon.loadDesign(this.resourceUri.fsPath);
+                await this.loadTopModules();
+                // await this.loadModuleDefs();
+            });
+            return true;
+        } catch (error) {
+            vscode.window.showErrorMessage('Failed to load design database: ' + error);
+            return false;
+        }
+    }
+
+    private async loadTopModules() {
         const topModules = await uhdmAddon.getTopModules(this.designId);
         for (const topModule of topModules) {
             const defName = topModule.defName.replace("work@", ""); // remove prefix for UHDM
@@ -554,7 +574,22 @@ class UhdmDesignItem extends DesignItem {
         }
     }
 
-    public async getSubScopes(element: NetlistItem): Promise<NetlistItem[]> { // TODO: make it private
+    public async getChildrenExternal(element: NetlistItem | undefined): Promise<NetlistItem[]> {
+        if (!element) {
+            return this.treeData; // Returns top-level netlist items
+        }
+        if (element.children.length > 0) {
+            return element.children; // Returns cached children
+        }
+        const [subScopes, variables] = await Promise.all([
+            this.getSubScopes(element),
+            this.getVariables(element)
+        ]);
+        element.children = [...subScopes, ...variables];
+        return element.children;
+    }
+
+    private async getSubScopes(element: NetlistItem): Promise<NetlistItem[]> {
         const subScopes = await uhdmAddon.getSubScopes(element.handle);
         const result: NetlistItem[] = [];
         for (const subScope of subScopes) {
@@ -566,7 +601,7 @@ class UhdmDesignItem extends DesignItem {
         return result;
     }
 
-    public async getVariables(element: NetlistItem): Promise<NetlistItem[]> { // TODO: make it private
+    private async getVariables(element: NetlistItem): Promise<NetlistItem[]> {
         const vars = await uhdmAddon.getVars(element.handle);
         const result: NetlistItem[] = [];
         for (const variable of vars) {
@@ -576,39 +611,17 @@ class UhdmDesignItem extends DesignItem {
         return result;
     }
 
-    public async getDriversAndLoads(element: NetlistItem): Promise<void> {
+    public async getDriversAndLoadsExternal(element: NetlistItem): Promise<void> {
         return;
     }
 
-    // private async loadModuleDefsUhdm() {
-    //     const query = `MATCH (m:ModuleDef) RETURN m;`;
-    //     const queryResult = await conn.query(query);
-    //     const moduleDefs = await queryResult.getAll();
-    //     for (const moduleDef of moduleDefs) {
-    //         const scope = createScope(moduleDef.m.name, "moduledef", moduleDef.m.file, moduleDef.m.lineNo, -1, moduleDef.m.name, "moduleDefItem", undefined, undefined);
-    //         // scope.description = moduleDef.m.file;
-    //         this.moduleInstances.push(scope);
-    //     }
-    // }
+    public async getModuleInstancesExternal(element: NetlistItem | undefined): Promise<NetlistItem[]> {
+        return [];
+    }
 
-    // public async getModuleInstancesExternal(element: NetlistItem | undefined): Promise<NetlistItem[]> {
-    //     if (!element) {
-    //         return this.moduleInstances;
-    //     }
-    //     if (element.children.length > 0) {
-    //         return element.children; // Returns cached children
-    //     }
-    //     const conn = new kuzu.Connection(this.db);
-    //     const query = `MATCH (m:ModuleDef {name: "${element.fullName}"})-[:instantiate]->(i:Instance) RETURN m,i;`;
-    //     const queryResult = await conn.query(query);
-    //     const instances = await queryResult.getAll();
-    //     for (const instance of instances) {
-    //         const scope = createVar(instance.i.fullName, "instance", 0, instance.i.file, instance.i.lineNo, -1, instance.m.name, "instanceItem", element);
-    //         // scope.description = instance.m.name;
-    //         element.children.push(scope);
-    //     }
-    //     return element.children;
-    // }
+    protected async unload(): Promise<void> {
+        // TODO
+    }
 }
 
 // #region OpenedDesignsTreeProvider
@@ -649,19 +662,15 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
         let index = this.designList.findIndex(design => design.resourceUri.fsPath === designPath);
         if (index < 0) {
             const fileType = designPath.split('.').pop()?.toLocaleLowerCase() || '';
+            let design: DesignItem;
             if (fileType === 'uhdm') {
-                const design = new UhdmDesignItem(designPath);
-                const success = await design.load();
-                if (success) {
-                    this.designList.push(design);
-                }
-
+                design = new UhdmDesignItem(designPath);
             } else {
-                const design = new DesignItem(designPath);
-                const success = await design.load();
-                if (success) {
-                    this.designList.push(design);
-                }
+                design = new KuzuDesignItem(designPath);
+            }
+            const success = await design.load();
+            if (success) {
+                this.designList.push(design);
             }
         } else {
             // this.designList[index] = database;
@@ -911,7 +920,7 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         let lineNumber = element.lineNumber;
         if (element.contextValue === 'scopeItem' || element.contextValue === 'instanceItem') {
             // sourceFile and lineNumber for scopeItem and instanceItem is where it get instantiated. Find definition in its moduleDef instead.
-            if (this.activeDesign instanceof UhdmDesignItem) { 
+            if (this.activeDesign instanceof UhdmDesignItem) {
                 // Only need to get moduleDef for non-top-module, as sourceFile and lineNumber for top-module is already correct
                 if (element.parent) {
                     const moduleDef = await uhdmAddon.getModuleDef(element.handle);
@@ -947,7 +956,7 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
     public async getDriversAndLoads(element: NetlistItem): Promise<void> {
         if (element.contextValue !== 'varItem') { return; }
         if (!this.activeDesign) { return; }
-        await this.activeDesign.getDriversAndLoads(element);
+        await this.activeDesign.getDriversAndLoadsExternal(element);
     }
 
     public async setDriversLoadsData(element: NetlistItem) {
