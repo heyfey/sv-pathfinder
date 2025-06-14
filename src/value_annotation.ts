@@ -2,6 +2,11 @@ import * as vscode from 'vscode';
 
 import { HierarchyTreeProvider, NetlistItem } from './tree_view';
 
+import * as treeSitter from "web-tree-sitter";
+const VerilogWasmPath = '/home/heyfey/git-repos/sv-pathfinder/parser/tree-sitter-verilog.wasm';
+// const VhdlWasmPath = '/home/heyfey/git-repos/sv-pathfinder/parser/tree-sitter-vhdl.wasm';
+const fs = require('fs');
+
 // In vscode definition, vscode.SymbolKind.Module === 1
 // However, the SymbolKind for verilog module turns out depends on the
 // language server used. For example:
@@ -38,12 +43,125 @@ export class WaveformValueAnnotationProvider {
     private debounceTimer: NodeJS.Timeout;
     private debounceTimerDelay: number = 100; // 100ms delay
 
+    private verilogParser: any;
+    private verilogLanguage: any;
+    // private vhdlParser: any;
+
     constructor(
         private readonly hierarchyTreeProvider: HierarchyTreeProvider,
     ) {
         // Initialize the debounce timer
         this.debounceTimer = setTimeout(() => { }, 0);
+        this.createParser();
     }
+
+    private async createParser() {
+        await treeSitter.Parser.init();
+        this.verilogParser = new treeSitter.Parser();
+        this.verilogLanguage = await treeSitter.Language.load(VerilogWasmPath);
+        this.verilogParser.setLanguage(this.verilogLanguage);
+        console.log(this.verilogParser);
+
+        await this.testParser();
+    }
+
+    private async testParser() {
+        let filePath = "/home/heyfey/waveform/Design/BJsource.v";
+        filePath = "/home/heyfey/waveform/Design/tb_CPUsystem.v";
+        const sourceCode = fs.readFileSync(filePath, 'utf8');
+        const tree = this.verilogParser.parse(sourceCode);
+        // console.log(tree.rootNode.toString());
+        // this.traverse(tree.rootNode, 0);
+        const targetModule = await this.findModuleNode(tree, 'tb_CPUsystem');
+        // console.log(targetModule ? `Found module: ${targetModule.text}` : "Module not found.");
+        this.findNodesUnderModule(targetModule);
+    }
+
+    private traverse(node: any, depth: number = 0) {
+        const indent = ' '.repeat(depth * 2);
+        console.log(`[${depth}]${indent}Node type: ${node.type}, text: ${node.text}, start: ${node.startPosition.row}:${node.startPosition.column}, end: ${node.endPosition.row}:${node.endPosition.column}`);
+        for (const child of node.namedChildren) {
+            this.traverse(child, depth + 1);
+        }
+    }
+
+    private findModuleNode(tree: treeSitter.Tree, moduleName: string) {
+        const query = new treeSitter.Query(this.verilogLanguage, `
+            (module_declaration
+                (module_header
+                    (simple_identifier) @name
+                    (#eq? @name "${moduleName}")
+                )
+            ) @module
+          `);
+
+        const matches = query.matches(tree.rootNode);
+        if (matches.length === 0) {
+            console.log(`Module '${moduleName}' not found.`);
+            return;
+        }
+        const moduleCapture = matches[0].captures.find(c => c.name === 'module');
+        return moduleCapture ? moduleCapture.node : undefined;
+    }
+
+    private findNodesUnderModule(moduleNode: treeSitter.Node | undefined): treeSitter.Node[] {
+        if (!moduleNode) { return []; }
+        // Exclude certain parent types to collect only identifiers for variables and ports.
+        // Note: The parent types are based on the tree-sitter-verilog grammar.
+        const excludedParentTypes = ['module_header', 'module_instantiation', 'instance_identifier', 'port_identifier'];
+        return this.collectFilteredIdentifiers(moduleNode, excludedParentTypes);
+    }
+
+    private collectFilteredIdentifiers(node: treeSitter.Node, excludedParentTypes: string[]): treeSitter.Node[] {
+        // There are two ways to collect identifiers:
+        // 1. Using tree-sitter query
+        // 2. Using tree-sitter cursor
+        // Not sure which is faster.
+        return this.collectFilteredIdentifiersQuery(node, excludedParentTypes);
+        // return this.collectFilteredIdentifiersCursor(node, excludedParentTypes);
+    }
+
+    private collectFilteredIdentifiersQuery(node: treeSitter.Node, excludedParentTypes: string[]): treeSitter.Node[] {
+        const query = new treeSitter.Query(this.verilogLanguage, `(simple_identifier) @id`);
+        const matches = query.matches(node);
+
+        const filteredIds = matches.filter(match => {
+            const node = match.captures[0].node;
+            const parent = node.parent;
+            return parent && !excludedParentTypes.includes(parent.type);
+        });
+        const identifiers = filteredIds.map(match => match.captures[0].node);
+        // console.log(identifiers.map(id => id.text));
+        return identifiers;
+    }
+
+    private collectFilteredIdentifiersCursor(node: treeSitter.Node, excludedParentTypes: string[]): treeSitter.Node[] {
+        const identifiers: treeSitter.Node[] = [];
+        const cursor = node.walk();
+        let visiting = true;
+
+        // Can we only visit the named children?
+        while (visiting) {
+            const current = cursor.currentNode;
+            // console.log(`Visiting node: ${current.type}, text: ${current.text}`);
+            if (current.type === 'simple_identifier' &&
+                current.parent &&
+                !excludedParentTypes.includes(current.parent.type)) {
+                identifiers.push(current);
+            }
+            if (cursor.gotoFirstChild()) { continue; }
+            if (cursor.gotoNextSibling()) { continue; }
+            do {
+                if (!cursor.gotoParent()) {
+                    visiting = false;
+                    break;
+                }
+            } while (!cursor.gotoNextSibling());
+        }
+        // console.log(identifiers.map(id => id.text));
+        return identifiers;
+    }
+
 
     // #region handle events
     async listenToMarkerSetEventEvent(): Promise<vscode.Disposable | undefined> {
@@ -158,6 +276,9 @@ export class WaveformValueAnnotationProvider {
 
         const activeWaveform = activeDesign.getActiveWaveform();
         if (!activeWaveform) { return; }
+
+        // const tree = this.verilogParser.parse(editor.document.getText());
+        // console.log(tree);
 
         const document = editor.document;
         // Get symbols from the document
