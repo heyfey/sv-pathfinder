@@ -7,15 +7,6 @@ const VerilogWasmPath = '/home/heyfey/git-repos/sv-pathfinder/parser/tree-sitter
 // const VhdlWasmPath = '/home/heyfey/git-repos/sv-pathfinder/parser/tree-sitter-vhdl.wasm';
 const fs = require('fs');
 
-// In vscode definition, vscode.SymbolKind.Module === 1
-// However, the SymbolKind for verilog module turns out depends on the
-// language server used. For example:
-//  4 in svlangserver
-//  5 in Verible
-//  9 in SystemVerilog - Language Support
-// Using SystemVerilog - Language Support here
-const SymbolKindModule = 9;
-
 function parseWaveformValue(values: string): string | undefined {
     const v = JSON.parse(values);
     const v1 = v[0];
@@ -75,7 +66,7 @@ export class WaveformValueAnnotationProvider {
         this.traverse(tree.rootNode, 0);
         const targetModule = await this.findModuleNode(tree, 'CPU');
         // console.log(targetModule ? `Found module: ${targetModule.text}` : "Module not found.");
-        this.findNodesUnderModule(targetModule);
+        this.collectIdentifiers(targetModule);
     }
 
     private traverse(node: treeSitter.Node, depth: number = 0) {
@@ -84,6 +75,10 @@ export class WaveformValueAnnotationProvider {
         for (const child of node.namedChildren.filter((child): child is treeSitter.Node => child !== null)) {
             this.traverse(child, depth + 1);
         }
+    }
+
+    private parseDocument(document: vscode.TextDocument): treeSitter.Tree | null {
+        return this.verilogParser.parse(document.getText());
     }
 
     private findModuleNode(tree: treeSitter.Tree, moduleName: string) {
@@ -105,7 +100,7 @@ export class WaveformValueAnnotationProvider {
         return moduleCapture ? moduleCapture.node : undefined;
     }
 
-    private findNodesUnderModule(moduleNode: treeSitter.Node | undefined): treeSitter.Node[] {
+    private collectIdentifiers(moduleNode: treeSitter.Node | undefined): treeSitter.Node[] {
         if (!moduleNode) { return []; }
         // Exclude certain parent types to collect only identifiers for variables and ports.
         // Note: The parent types are based on the tree-sitter-verilog grammar.
@@ -262,13 +257,7 @@ export class WaveformValueAnnotationProvider {
     }
 
     public async updateDecorationsForEditor(editor: vscode.TextEditor) {
-        // Clear all existing decorations
-        for (const decorationType of this.decorationTypesMap.values()) {
-            decorationType.dispose();
-        }
-        // Clear all cached results
-        this.decorationTypesMap.clear();
-        this.rangesMap.clear();
+        this.clearDecorations();
 
         // Get metadata from the active design
         const activeDesign = this.hierarchyTreeProvider.getActiveDesign();
@@ -281,53 +270,28 @@ export class WaveformValueAnnotationProvider {
         if (!activeWaveform) { return; }
 
         const document = editor.document;
-        // // Get symbols from the document
-        // const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
-        //     'vscode.executeDocumentSymbolProvider',
-        //     document.uri
-        // );
-        // if (!symbols) { return; }
-
-        // Find the module symbol
-        // const moduleSymbol = symbols.find(
-        //     symbol => symbol.name === activeModule && symbol.kind === SymbolKindModule
-        // );
-        // if (!moduleSymbol) {
-        //     return;
-        // }
-        // const moduleRange = moduleSymbol.range;
         this.targetFile = document.uri.fsPath; // TODO: use source file in NetlistItem
 
-        // Get all unique variables within the module
-        const variables = [];
-        const nameSet = new Set();
-        // for (const child of moduleSymbol.children) {
-        //     if ((child.kind === vscode.SymbolKind.Variable || child.kind === vscode.SymbolKind.Field)
-        //         && !nameSet.has(child.name)) {
-        //         nameSet.add(child.name);
-        //         variables.push(child);
-        //     }
-        // }
+        const tree = this.parseDocument(document);
+        if (!tree) { return; }
 
-        const tree = this.verilogParser.parse(document.getText());
-        const targetModule = await this.findModuleNode(tree, activeModule);
-        const nodes = this.findNodesUnderModule(targetModule);
-        // Get all unique variables within the module
+        const targetModule = this.findModuleNode(tree, activeModule);
+        if (!targetModule) { return; }
+
+        const nodes = this.collectIdentifiers(targetModule);
+        if (nodes.length === 0) { return; }
+
+        // Get all unique variable names within the module
+        const variableNameSet = new Set();
         for (const node of nodes) {
-            nameSet.add(node.text);
-            const range = new vscode.Range(
-                new vscode.Position(node.startPosition.row, node.startPosition.column),
-                new vscode.Position(node.endPosition.row, node.endPosition.column)
-            );
-            variables.push(new vscode.DocumentSymbol(node.text, '', vscode.SymbolKind.Variable, range, range));
+            variableNameSet.add(node.text);
         }
-        // console.log(variables);
 
         // Get instance paths for variables
         const scopeName = activeDesign.getActiveScope();
         const instancePaths = [];
-        for (const variable of variables) {
-            const instancePath = scopeName + '.' + variable.name;
+        for (const variableName of variableNameSet) {
+            const instancePath = scopeName ? `${scopeName}.${variableName}` : variableName;
             instancePaths.push(instancePath);
         }
         // console.log('Instance paths:', instancePaths);
@@ -348,7 +312,7 @@ export class WaveformValueAnnotationProvider {
             waveformValueMap.set(variableName, value);
         }
 
-        // Store [variableName, decorationType] in a map
+        // Store [variableName, decorationType] in decorationTypesMap
         for (const [variableName, value] of waveformValueMap) {
             const decorationType = vscode.window.createTextEditorDecorationType({
                 after: {
@@ -363,29 +327,7 @@ export class WaveformValueAnnotationProvider {
             this.decorationTypesMap.set(variableName, decorationType);
         }
 
-        // For each variable, find all occurrences and store them in a map: [variableName, vscode.Range[]]
-        // for (const variable of variables) {
-        //     // Skip the variable that didn't found in the waveform viewer
-        //     if (!waveformValueMap.get(variable.name)) { continue; }
-
-        //     const position = variable.selectionRange.start;
-        //     const references = await vscode.commands.executeCommand<vscode.Location[]>(
-        //         'vscode.executeReferenceProvider',
-        //         document.uri,
-        //         position
-        //     );
-        //     if (references) {
-        //         // Filter references within the module scope
-        //         const filteredReferences = references.filter(
-        //             ref => ref.uri.toString() === document.uri.toString() &&
-        //                 moduleRange.contains(ref.range)
-        //         );
-
-        //         // Store ranges for each variable
-        //         this.rangesMap.set(variable.name, filteredReferences.map(ref => ref.range));
-        //     }
-        // }
-
+        // Create ranges for each variable
         for (const node of nodes) {
             // Skip the node that didn't found in the waveform viewer
             if (!waveformValueMap.get(node.text)) { continue; }
@@ -409,5 +351,15 @@ export class WaveformValueAnnotationProvider {
                 editor.setDecorations(decorationType, ranges);
             }
         }
+    }
+
+    private clearDecorations() {
+        // Clear all existing decorations
+        for (const decorationType of this.decorationTypesMap.values()) {
+            decorationType.dispose();
+        }
+        // Clear all cached results
+        this.decorationTypesMap.clear();
+        this.rangesMap.clear();
     }
 }
