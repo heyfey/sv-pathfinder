@@ -68,19 +68,20 @@ export class WaveformValueAnnotationProvider {
     private async testParser() {
         let filePath = "/home/heyfey/waveform/Design/BJsource.v";
         filePath = "/home/heyfey/waveform/Design/tb_CPUsystem.v";
+        filePath = "/home/heyfey/waveform/Design/CPU.v";
         const sourceCode = fs.readFileSync(filePath, 'utf8');
         const tree = this.verilogParser.parse(sourceCode);
         // console.log(tree.rootNode.toString());
-        // this.traverse(tree.rootNode, 0);
-        const targetModule = await this.findModuleNode(tree, 'tb_CPUsystem');
+        this.traverse(tree.rootNode, 0);
+        const targetModule = await this.findModuleNode(tree, 'CPU');
         // console.log(targetModule ? `Found module: ${targetModule.text}` : "Module not found.");
         this.findNodesUnderModule(targetModule);
     }
 
-    private traverse(node: any, depth: number = 0) {
+    private traverse(node: treeSitter.Node, depth: number = 0) {
         const indent = ' '.repeat(depth * 2);
         console.log(`[${depth}]${indent}Node type: ${node.type}, text: ${node.text}, start: ${node.startPosition.row}:${node.startPosition.column}, end: ${node.endPosition.row}:${node.endPosition.column}`);
-        for (const child of node.namedChildren) {
+        for (const child of node.namedChildren.filter((child): child is treeSitter.Node => child !== null)) {
             this.traverse(child, depth + 1);
         }
     }
@@ -108,7 +109,7 @@ export class WaveformValueAnnotationProvider {
         if (!moduleNode) { return []; }
         // Exclude certain parent types to collect only identifiers for variables and ports.
         // Note: The parent types are based on the tree-sitter-verilog grammar.
-        const excludedParentTypes = ['module_header', 'module_instantiation', 'instance_identifier', 'port_identifier'];
+        const excludedParentTypes = ['module_header', 'module_instantiation', 'instance_identifier'];
         return this.collectFilteredIdentifiers(moduleNode, excludedParentTypes);
     }
 
@@ -128,10 +129,11 @@ export class WaveformValueAnnotationProvider {
         const filteredIds = matches.filter(match => {
             const node = match.captures[0].node;
             const parent = node.parent;
-            return parent && !excludedParentTypes.includes(parent.type);
+            return parent && !excludedParentTypes.includes(parent.type) &&
+                !(parent.type === 'port_identifier' && parent.parent && parent.parent.type === 'named_port_connection');
         });
         const identifiers = filteredIds.map(match => match.captures[0].node);
-        // console.log(identifiers.map(id => id.text));
+        console.log(identifiers.map(id => id.text));
         return identifiers;
     }
 
@@ -146,7 +148,8 @@ export class WaveformValueAnnotationProvider {
             // console.log(`Visiting node: ${current.type}, text: ${current.text}`);
             if (current.type === 'simple_identifier' &&
                 current.parent &&
-                !excludedParentTypes.includes(current.parent.type)) {
+                !excludedParentTypes.includes(current.parent.type) &&
+                !(current.parent.type === 'port_identifier' && current.parent.parent && current.parent.parent.type === 'named_port_connection')) {
                 identifiers.push(current);
             }
             if (cursor.gotoFirstChild()) { continue; }
@@ -277,37 +280,48 @@ export class WaveformValueAnnotationProvider {
         const activeWaveform = activeDesign.getActiveWaveform();
         if (!activeWaveform) { return; }
 
-        // const tree = this.verilogParser.parse(editor.document.getText());
-        // console.log(tree);
-
         const document = editor.document;
-        // Get symbols from the document
-        const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
-            'vscode.executeDocumentSymbolProvider',
-            document.uri
-        );
-        if (!symbols) { return; }
+        // // Get symbols from the document
+        // const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
+        //     'vscode.executeDocumentSymbolProvider',
+        //     document.uri
+        // );
+        // if (!symbols) { return; }
 
         // Find the module symbol
-        const moduleSymbol = symbols.find(
-            symbol => symbol.name === activeModule && symbol.kind === SymbolKindModule
-        );
-        if (!moduleSymbol) {
-            return;
-        }
-        const moduleRange = moduleSymbol.range;
+        // const moduleSymbol = symbols.find(
+        //     symbol => symbol.name === activeModule && symbol.kind === SymbolKindModule
+        // );
+        // if (!moduleSymbol) {
+        //     return;
+        // }
+        // const moduleRange = moduleSymbol.range;
         this.targetFile = document.uri.fsPath; // TODO: use source file in NetlistItem
 
         // Get all unique variables within the module
         const variables = [];
         const nameSet = new Set();
-        for (const child of moduleSymbol.children) {
-            if ((child.kind === vscode.SymbolKind.Variable || child.kind === vscode.SymbolKind.Field)
-                && !nameSet.has(child.name)) {
-                nameSet.add(child.name);
-                variables.push(child);
-            }
+        // for (const child of moduleSymbol.children) {
+        //     if ((child.kind === vscode.SymbolKind.Variable || child.kind === vscode.SymbolKind.Field)
+        //         && !nameSet.has(child.name)) {
+        //         nameSet.add(child.name);
+        //         variables.push(child);
+        //     }
+        // }
+
+        const tree = this.verilogParser.parse(document.getText());
+        const targetModule = await this.findModuleNode(tree, activeModule);
+        const nodes = this.findNodesUnderModule(targetModule);
+        // Get all unique variables within the module
+        for (const node of nodes) {
+            nameSet.add(node.text);
+            const range = new vscode.Range(
+                new vscode.Position(node.startPosition.row, node.startPosition.column),
+                new vscode.Position(node.endPosition.row, node.endPosition.column)
+            );
+            variables.push(new vscode.DocumentSymbol(node.text, '', vscode.SymbolKind.Variable, range, range));
         }
+        // console.log(variables);
 
         // Get instance paths for variables
         const scopeName = activeDesign.getActiveScope();
@@ -350,25 +364,41 @@ export class WaveformValueAnnotationProvider {
         }
 
         // For each variable, find all occurrences and store them in a map: [variableName, vscode.Range[]]
-        for (const variable of variables) {
-            // Skip the variable that didn't found in the waveform viewer
-            if (!waveformValueMap.get(variable.name)) { continue; }
+        // for (const variable of variables) {
+        //     // Skip the variable that didn't found in the waveform viewer
+        //     if (!waveformValueMap.get(variable.name)) { continue; }
 
-            const position = variable.selectionRange.start;
-            const references = await vscode.commands.executeCommand<vscode.Location[]>(
-                'vscode.executeReferenceProvider',
-                document.uri,
-                position
+        //     const position = variable.selectionRange.start;
+        //     const references = await vscode.commands.executeCommand<vscode.Location[]>(
+        //         'vscode.executeReferenceProvider',
+        //         document.uri,
+        //         position
+        //     );
+        //     if (references) {
+        //         // Filter references within the module scope
+        //         const filteredReferences = references.filter(
+        //             ref => ref.uri.toString() === document.uri.toString() &&
+        //                 moduleRange.contains(ref.range)
+        //         );
+
+        //         // Store ranges for each variable
+        //         this.rangesMap.set(variable.name, filteredReferences.map(ref => ref.range));
+        //     }
+        // }
+
+        for (const node of nodes) {
+            // Skip the node that didn't found in the waveform viewer
+            if (!waveformValueMap.get(node.text)) { continue; }
+            const range = new vscode.Range(
+                new vscode.Position(node.startPosition.row, node.startPosition.column),
+                new vscode.Position(node.endPosition.row, node.endPosition.column)
             );
-            if (references) {
-                // Filter references within the module scope
-                const filteredReferences = references.filter(
-                    ref => ref.uri.toString() === document.uri.toString() &&
-                        moduleRange.contains(ref.range)
-                );
-
-                // Store ranges for each variable
-                this.rangesMap.set(variable.name, filteredReferences.map(ref => ref.range));
+            // Append the range to the rangesMap for the variable
+            if (this.rangesMap.has(node.text)) {
+                this.rangesMap.get(node.text)?.push(range);
+            }
+            else {
+                this.rangesMap.set(node.text, [range]);
             }
         }
 
