@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { OpenedDesignsTreeProvider, HierarchyTreeProvider, DriversLoadsTreeProvider, ModuleInstancesTreeProvider } from './tree_view';
 import { EditorMenuProvider, isCursorInModule } from './editor_menu';
 import { WaveformValueAnnotationProvider } from './value_annotation';
+import { Parser } from './parser';
 
 export function activate(context: vscode.ExtensionContext) {
 	console.log('SV Pathfinder: There are venoms and virtues aplenty in the wilds, if you know where to look.');
@@ -55,6 +56,7 @@ export function activate(context: vscode.ExtensionContext) {
 		})
 	);
 
+	const parser = new Parser();
 
 	const editorMenuProvider = new EditorMenuProvider(designProvider, hierarchyView, hierarchyProvider, moduleInstancesView, moduleInstancesProvider);
 
@@ -180,7 +182,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 
 	// #region Value Annotation
-	const annotationProvider = new WaveformValueAnnotationProvider(hierarchyProvider);
+	const annotationProvider = new WaveformValueAnnotationProvider(hierarchyProvider, parser);
 	annotationProvider.listenToMarkerSetEventEvent().then(disposable => {
 		if (disposable) {
 			// Register the disposable for cleanup on deactivation
