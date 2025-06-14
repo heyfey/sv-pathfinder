@@ -12,6 +12,8 @@ export class Parser {
     // private vhdlParser: any;
     // private vhdlLanguage: any;
 
+    private treeCache: Map<string, treeSitter.Tree> = new Map();
+
     constructor() {
         this.init();
     }
@@ -21,6 +23,11 @@ export class Parser {
         this.verilogParser = new treeSitter.Parser();
         this.verilogLanguage = await treeSitter.Language.load(VerilogWasmPath);
         this.verilogParser.setLanguage(this.verilogLanguage);
+
+        // Register listener for document changes
+        vscode.workspace.onDidChangeTextDocument((event) => {
+            this.handleChangeTextDocument(event);
+        });
 
         // this.testParser();
     }
@@ -48,12 +55,24 @@ export class Parser {
         }
     }
 
+    private handleChangeTextDocument(e: vscode.TextDocumentChangeEvent) {
+        const uri = e.document.uri.toString();
+        this.treeCache.delete(uri); // Invalidate cache for changed document
+    }
+
     public parseText(text: string): treeSitter.Tree {
         return this.verilogParser.parse(text);
     }
 
     public parseDocument(document: vscode.TextDocument): treeSitter.Tree {
-        return this.parseText(document.getText());
+        const uri = document.uri.toString();
+        if (this.treeCache.has(uri)) {
+            return this.treeCache.get(uri)!; // Return cached tree
+        }
+
+        const tree = this.parseText(document.getText());
+        this.treeCache.set(uri, tree); // Cache the result
+        return tree;
     }
 
     public async parseAndCollectIdentifiersInModule(document: vscode.TextDocument, moduleName: string): Promise<treeSitter.Node[] | undefined> {
@@ -113,17 +132,17 @@ export class Parser {
             const node = match.captures[0].node;
             const parent = node.parent;
             return parent && !excludedParentTypes.includes(parent.type) &&
-            // Exclude port identifiers that are part of named port connections.
-            //     mid m1 ( .portA(portB), ...
-            // Want to exclude portA and include portB.
-            // Tree sitter will parse this like:
-            // ...
-            //   Node type: named_port_connection, text: .portA(portB), start: 83:1, end: 83:14
-            //     Node type: port_identifier, text: portA, start: 83:2, end: 83:7
-            //       Node type: simple_identifier, text: portA, start: 83:2, end: 83:7
-            //     Node type: expression, text: portB, start: 83:8, end: 83:13
-            //       Node type: primary, text: portB, start: 83:8, end: 83:13
-            //         Node type: simple_identifier, text: portB, start: 83:8, end: 83:13
+                // Exclude port identifiers that are part of named port connections.
+                //     mid m1 ( .portA(portB), ...
+                // Want to exclude portA and include portB.
+                // Tree sitter will parse this like:
+                // ...
+                //   Node type: named_port_connection, text: .portA(portB), start: 83:1, end: 83:14
+                //     Node type: port_identifier, text: portA, start: 83:2, end: 83:7
+                //       Node type: simple_identifier, text: portA, start: 83:2, end: 83:7
+                //     Node type: expression, text: portB, start: 83:8, end: 83:13
+                //       Node type: primary, text: portB, start: 83:8, end: 83:13
+                //         Node type: simple_identifier, text: portB, start: 83:8, end: 83:13
                 !(parent.type === 'port_identifier' && parent.parent && parent.parent.type === 'named_port_connection');
         });
         return filteredIds.map(match => match.captures[0].node);
