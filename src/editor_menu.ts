@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 
 import { OpenedDesignsTreeProvider, HierarchyTreeProvider, ModuleInstancesTreeProvider, NetlistItem } from './tree_view';
+import { Parser } from './parser';
 
 function getWordAtCursor(): string | undefined {
     const editor = vscode.window.activeTextEditor;
@@ -24,6 +25,7 @@ export class EditorMenuProvider {
         private readonly hierarchyTreeProvider: HierarchyTreeProvider,
         private readonly moduleInstancesView: vscode.TreeView<NetlistItem>,
         private readonly moduleInstancesTreeProvider: ModuleInstancesTreeProvider,
+        private readonly parser: Parser,
     ) {
     }
 
@@ -32,43 +34,25 @@ export class EditorMenuProvider {
         if (!editor || !(editor.document.languageId === 'verilog' || editor.document.languageId === 'systemverilog')) {
             return;
         }
-        const document = editor.document;
-        // Get document symbols
-        const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
-            'vscode.executeDocumentSymbolProvider',
-            document.uri
-        );
-        if (!symbols) { return; }
 
-        // Find all modules symbols
-        const moduleSymbols = symbols.filter(
-            symbol => symbol.kind === 9 /*=== vscode.SymbolKind.Module*/
-        );
-        if (!moduleSymbols) { return; }
-
-        const position = editor.selection.active;
-        // Find which module the cursor is in
-        const moduleSymbol = moduleSymbols.find(
-            symbol => symbol.range.contains(position)
-        );
-        if (!moduleSymbol) {
+        const moduleName = await this.parser.getModuleAtCursor();
+        if (!moduleName) {
             vscode.window.showWarningMessage('Cursor not in a module.');
             return;
         }
-
         // Reveal the target module
         const modules = await this.moduleInstancesTreeProvider.getChildren();
         if (!modules) {
-            vscode.window.showWarningMessage('Module not found: ' + moduleSymbol.name);
+            vscode.window.showWarningMessage('Module not found: ' + moduleName);
             return;
         }
         for (const module of modules) {
-            if (module.label === moduleSymbol.name) {
+            if (module.name === moduleName) {
                 this.moduleInstancesView.reveal(module, { select: true, focus: false, expand: 3 });
                 return;
             }
         }
-        vscode.window.showWarningMessage('Module not found: ' + moduleSymbol.name);
+        vscode.window.showWarningMessage('Module not found: ' + moduleName);
     }
 
     private async findVarItem(name: string): Promise<NetlistItem | undefined> {
@@ -163,49 +147,4 @@ export class EditorMenuProvider {
         // Copy to clipboard
         await vscode.env.clipboard.writeText(hierarchyName);
     }
-}
-
-
-export async function isCursorInModule(moduleName: string) {
-    const editor = vscode.window.activeTextEditor;
-    if (!editor || !(editor.document.languageId === 'verilog' || editor.document.languageId === 'systemverilog')) {
-        return;
-    }
-
-    const wordRange = editor.document.getWordRangeAtPosition(editor.selection.active);
-    if (!wordRange) { return; }
-
-    const position = wordRange.start;
-
-    // Get document symbols
-    const symbols = await vscode.commands.executeCommand(
-        'vscode.executeDocumentSymbolProvider',
-        editor.document.uri
-    );
-
-    // console.log(symbols);
-    if (!symbols) { return; }
-
-    // Find the module by name
-    const moduleSymbol = findModuleSymbol(symbols, moduleName);
-    if (!moduleSymbol) { return; }
-
-    return Promise.resolve(moduleSymbol.range.contains(position));
-}
-
-function findModuleSymbol(symbols: any, moduleName: string) {
-    for (const symbol of symbols) {
-        // Module == 9 , Variable == 12 or 7. Need to test more verilog language servers.
-        if (symbol.kind === 9 /*=== vscode.SymbolKind.Module*/ && symbol.name === moduleName) {
-            return symbol;
-        }
-        // Recursively search in children. Only needed if modules inside module is possible.
-        // if (symbol.children) {
-        //     const found = findModuleSymbol(symbol.children, moduleName);
-        //     if (found) {
-        //         return found;
-        //     }
-        // }
-    }
-    return null;
 }

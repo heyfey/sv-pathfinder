@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 
 import { OpenedDesignsTreeProvider, HierarchyTreeProvider, DriversLoadsTreeProvider, ModuleInstancesTreeProvider } from './tree_view';
-import { EditorMenuProvider, isCursorInModule } from './editor_menu';
+import { EditorMenuProvider } from './editor_menu';
 import { WaveformValueAnnotationProvider } from './value_annotation';
 import { Parser } from './parser';
 
@@ -57,8 +57,7 @@ export function activate(context: vscode.ExtensionContext) {
 	);
 
 	const parser = new Parser();
-
-	const editorMenuProvider = new EditorMenuProvider(designProvider, hierarchyView, hierarchyProvider, moduleInstancesView, moduleInstancesProvider);
+	const editorMenuProvider = new EditorMenuProvider(designProvider, hierarchyView, hierarchyProvider, moduleInstancesView, moduleInstancesProvider, parser);
 
 	// #region External Commands
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.openDesign', () => {
@@ -170,7 +169,7 @@ export function activate(context: vscode.ExtensionContext) {
 			// const position = editor.selection.active;
 			// const wordRange = editor.document.getWordRangeAtPosition(position);
 			// const isWord = !!wordRange; // True if cursor is on a word
-			const isEnabled = /*isWord &&*/ await isCursorInModule(activeModule);
+			const isEnabled = /*isWord &&*/ await parser.isCursorInModule(activeModule);
 			vscode.commands.executeCommand('setContext', 'sv-pathfinder.isCommandEnabled', isEnabled);
 		} else {
 			vscode.commands.executeCommand('setContext', 'sv-pathfinder.isCommandEnabled', false);

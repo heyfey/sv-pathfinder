@@ -100,10 +100,7 @@ export class Parser {
             ) @module
         `);
         const matches = query.matches(tree.rootNode);
-        if (matches.length === 0) {
-            console.log(`Module '${moduleName}' not found.`);
-            return undefined;
-        }
+        if (matches.length === 0) { return undefined; }
         const moduleCapture = matches[0].captures.find(c => c.name === 'module');
         return moduleCapture ? moduleCapture.node : undefined;
     }
@@ -174,5 +171,59 @@ export class Parser {
         }
         // console.log(identifiers.map(id => id.text));
         return identifiers;
+    }
+
+    // Find which module the current cursor is in
+    public async getModuleAtCursor(): Promise<string | undefined> {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor || !(editor.document.languageId === 'verilog' || editor.document.languageId === 'systemverilog')) {
+            return undefined;
+        }
+        const position = editor.selection.active;
+        const tree = this.parseDocument(editor.document);
+        if (!tree) { return undefined; }
+
+        // Find all module declarations and check if the cursor is within any of them
+        const query = new treeSitter.Query(this.verilogLanguage, `
+            (module_declaration
+                (module_header
+                    (simple_identifier) @name
+                )
+            ) @module
+        `);
+        const matches = query.matches(tree.rootNode);
+        for (const match of matches) {
+            const moduleNode = match.captures.find(c => c.name === 'module')?.node;
+            if (moduleNode && moduleNode.startPosition.row <= position.line && moduleNode.endPosition.row >= position.line) {
+                const nameNode = match.captures.find(c => c.name === 'name')?.node;
+                if (nameNode) {
+                    return nameNode.text; // Return the module name
+                }
+            }
+        }
+        return undefined; // No module found at cursor
+    }
+
+    public async isCursorInModule(moduleName: string): Promise<boolean> {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor || !(editor.document.languageId === 'verilog' || editor.document.languageId === 'systemverilog')) {
+            return false;
+        }
+
+        const wordRange = editor.document.getWordRangeAtPosition(editor.selection.active);
+        if (!wordRange) { return false; }
+
+        const position = wordRange.start;
+
+        const tree = this.parseDocument(editor.document);
+        if (!tree) { return false; }
+
+        const moduleNode = this.findModuleNode(tree, moduleName);
+        if (!moduleNode) { return false; }
+        const moduleRange = new vscode.Range(
+            new vscode.Position(moduleNode.startPosition.row, moduleNode.startPosition.column),
+            new vscode.Position(moduleNode.endPosition.row, moduleNode.endPosition.column)
+        );
+        return moduleRange.contains(position);
     }
 }
