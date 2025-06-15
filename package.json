@@ -286,6 +286,7 @@
     "test": "vscode-test"
   },
   "devDependencies": {
+    "@types/emscripten": "^1.40.1",
     "@types/mocha": "^10.0.10",
     "@types/node": "20.x",
     "@types/vscode": "^1.97.0",
