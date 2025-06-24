@@ -28,6 +28,21 @@
   "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
+    "configuration": {
+      "title": "SV-Pathfinder",
+      "properties": {
+        "sv-pathfinder.remotePathPrefix": {
+          "type": "string",
+          "scope": "resource",
+          "description": "Replace the remote path prefix with the local path prefix when jumping to source files. This is useful when the debug database is generated on the different machine. Only take effect when sv-pathfinder.localPathPrefix is also set."
+        },
+        "sv-pathfinder.localPathPrefix": {
+          "type": "string",
+          "scope": "resource",
+          "description": "Replace the remote path prefix with the local path prefix when jumping to source files. This is useful when the debug database is generated on the different machine. Only take effect when sv-pathfinder.remotePathPrefix is also set."
+        }
+      }
+    },
     "viewsContainers": {
       "activitybar": [
         {

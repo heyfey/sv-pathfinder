@@ -829,9 +829,18 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
     }
 }
 
-async function showTextDocumentLocation(filePath: string, lineNumber: number, columnNumber: number) {
-    // filePath = filePath.replace("ABC", "/home/heyfey");
+function replaceFilePathIfNeeded(filePath: string) {
+    // get from and to from configuration
+    const from = vscode.workspace.getConfiguration('sv-pathfinder').get('remotePathPrefix', '');
+    const to = vscode.workspace.getConfiguration('sv-pathfinder').get('localPathPrefix', '');
+    if (!from || !to || from === to) {
+        return filePath; // No replacement needed
+    }
+    return filePath.replace(from, to);
+}
 
+async function showTextDocumentLocation(filePath: string, lineNumber: number, columnNumber: number) {
+    filePath = replaceFilePathIfNeeded(filePath);
     const uri = vscode.Uri.file(filePath);
     columnNumber = columnNumber > 0 ? columnNumber - 1 : 0; // Convert to 0-based index
     await vscode.window.showTextDocument(uri, { preview: true }).then(() => {
@@ -1111,7 +1120,7 @@ class FileItem extends vscode.TreeItem {
 }
 
 async function getLineContent(filePath: string, lineNumber: number): Promise<string> {
-    // filePath = filePath.replace("ABC", "/home/heyfey");
+    filePath = replaceFilePathIfNeeded(filePath);
     try {
         const document = await vscode.workspace.openTextDocument(filePath);
         const lineContent = document.lineAt(lineNumber - 1).text;
