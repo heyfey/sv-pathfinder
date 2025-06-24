@@ -4,8 +4,6 @@ import path from 'path';
 // Must use require instead of import somehow
 const kuzu = require("kuzu");
 
-const uhdmAddon = require('../build/Release/uhdm_addon.node');
-
 // Scopes
 const moduleIcon = new vscode.ThemeIcon('chip', new vscode.ThemeColor('charts.purple'));
 const taskIcon = new vscode.ThemeIcon('debug-stack-frame', new vscode.ThemeColor('charts.blue'));
@@ -545,15 +543,22 @@ class KuzuDesignItem extends DesignItem {
 // #region UhdmDesignItem
 class UhdmDesignItem extends DesignItem {
     private designId = -1; // Used to identify the design in UHDM addon
+    public uhdmAddon?: any | undefined; // TODO(heyfey): make it private
 
     public async load(): Promise<boolean> {
+        try {
+            this.uhdmAddon = require('../build/Release/uhdm_addon.node');
+        } catch (error) {
+            vscode.window.showErrorMessage('Failed to load UHDM addon: ' + error);
+            return false;
+        }
         try {
             await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
                 title: "Reading design database: " + this.resourceUri.fsPath,
                 cancellable: false
             }, async () => {
-                this.designId = await uhdmAddon.loadDesign(this.resourceUri.fsPath);
+                this.designId = await this.uhdmAddon.loadDesign(this.resourceUri.fsPath);
                 await this.loadTopModules();
                 // await this.loadModuleDefs();
             });
@@ -565,7 +570,7 @@ class UhdmDesignItem extends DesignItem {
     }
 
     private async loadTopModules() {
-        const topModules = await uhdmAddon.getTopModules(this.designId);
+        const topModules = await this.uhdmAddon.getTopModules(this.designId);
         for (const topModule of topModules) {
             const defName = topModule.defName.replace("work@", ""); // remove prefix for UHDM
             const scope = createScope(topModule.name, "module", topModule.file, topModule.line, topModule.column, defName, "scopeItem", undefined, topModule.handle);
@@ -590,7 +595,7 @@ class UhdmDesignItem extends DesignItem {
     }
 
     private async getSubScopes(element: NetlistItem): Promise<NetlistItem[]> {
-        const subScopes = await uhdmAddon.getSubScopes(element.handle);
+        const subScopes = await this.uhdmAddon.getSubScopes(element.handle);
         const result: NetlistItem[] = [];
         for (const subScope of subScopes) {
             const defName = subScope.defName.replace("work@", ""); // remove prefix for UHDM
@@ -602,7 +607,7 @@ class UhdmDesignItem extends DesignItem {
     }
 
     private async getVariables(element: NetlistItem): Promise<NetlistItem[]> {
-        const vars = await uhdmAddon.getVars(element.handle);
+        const vars = await this.uhdmAddon.getVars(element.handle);
         const result: NetlistItem[] = [];
         for (const variable of vars) {
             const v = createVar(variable.name, variable.type, variable.width, variable.file, variable.line, variable.column, element.moduleName, "varItem", element);
@@ -620,7 +625,7 @@ class UhdmDesignItem extends DesignItem {
     }
 
     protected async unload(): Promise<void> {
-        await uhdmAddon.unloadDesign(this.designId);
+        await this.uhdmAddon.unloadDesign(this.designId);
     }
 }
 
@@ -942,7 +947,7 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
             if (this.activeDesign instanceof UhdmDesignItem) {
                 // Only need to get moduleDef for non-top-module, as sourceFile and lineNumber for top-module is already correct
                 if (element.parent) {
-                    const moduleDef = await uhdmAddon.getModuleDef(element.handle);
+                    const moduleDef = await this.activeDesign!.uhdmAddon.getModuleDef(element.handle);
                     filePath = moduleDef.file;
                     lineNumber = moduleDef.line;
                 }
