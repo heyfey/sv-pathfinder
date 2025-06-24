@@ -3,17 +3,25 @@ import * as vscode from 'vscode';
 import { HierarchyTreeProvider, NetlistItem } from './tree_view';
 import { Parser } from './parser';
 
-function parseWaveformValue(values: string): string | undefined {
-    const v = JSON.parse(values);
-    const v1 = v[0];
-    const v2 = v[1];
-    if (v1 === undefined) {
+function parseWaveformValue(values: any): string | undefined {
+    let v: string[];
+    if (typeof values === 'string') {
+        v = JSON.parse(values);
+    } else if (Array.isArray(values)) {
+        v = values;
+    } else {
+        console.error(`Unexpected type for values: ${typeof values}`);
         return undefined;
     }
-    if (v2) {
-        return `${v1}->${v2}`;
+    let result: string = v[0];
+    if (v.length === 1) {
+        return `${result}`;
     }
-    return `${v1}`;
+    for (let i = 1; i < v.length; i++) {
+        result += '->';
+        result += v[i];
+    }
+    return `${result}`;
 }
 
 // #region WaveformValueAnnotationProvider
