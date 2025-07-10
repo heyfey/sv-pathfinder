@@ -255,7 +255,7 @@ export abstract class DesignItem extends vscode.TreeItem {
     readonly command: vscode.Command;
     // Hierarchy
     public treeData: NetlistItem[] = [];
-    // For go backward and forward
+    // For go back and forward
     public lastContext: gotoContext | undefined = undefined;
     public backwardStack: gotoContext[] = [];
     public forwardStack: gotoContext[] = [];
@@ -920,12 +920,12 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         throw new Error('Method not implemented.');
     }
 
-    private async setContextForGoBackwardOrForward(element: NetlistItem, action: string, isGoBackwardOrForward: boolean) {
+    private async setContextForGoBackOrForward(element: NetlistItem, action: string, isGoBackOrForward: boolean) {
         if (!this.activeDesign) { return; }
-        if (!isGoBackwardOrForward) {
+        if (!isGoBackOrForward) {
             if (this.activeDesign.lastContext) {
                 this.activeDesign.backwardStack.push(this.activeDesign.lastContext);
-                await vscode.commands.executeCommand('setContext', 'sv-pathfinder.isGoBackwardEnabled', true);
+                await vscode.commands.executeCommand('setContext', 'sv-pathfinder.isGoBackEnabled', true);
             }
 
             this.activeDesign.forwardStack = []; // Clear forward stack
@@ -937,7 +937,7 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         };
     }
 
-    async gotoDefinition(element: NetlistItem, isGoBackwardOrForward: boolean = false) {
+    async gotoDefinition(element: NetlistItem, isGoBackOrForward: boolean = false) {
         if (!this.activeDesign) { return; }
 
         let filePath = element.sourceFile;
@@ -974,7 +974,7 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
             await this.setDriversLoadsData(element);
         }
 
-        await this.setContextForGoBackwardOrForward(element, 'gotoDefinition', isGoBackwardOrForward);
+        await this.setContextForGoBackOrForward(element, 'gotoDefinition', isGoBackOrForward);
     }
 
     public async getDriversAndLoads(element: NetlistItem): Promise<void> {
@@ -996,7 +996,7 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         this._onDidChangeActiveInstance.fire(this.activeDesign.getActiveInstance());
     }
 
-    async goBackward() {
+    async goBack() {
         if (!this.activeDesign) { return; }
         if (this.activeDesign.backwardStack.length === 0) { return; }
 
@@ -1007,7 +1007,7 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
 
         const context = this.activeDesign.backwardStack.pop()!;
         if (this.activeDesign.backwardStack.length === 0) {
-            await vscode.commands.executeCommand('setContext', 'sv-pathfinder.isGoBackwardEnabled', false);
+            await vscode.commands.executeCommand('setContext', 'sv-pathfinder.isGoBackEnabled', false);
         }
 
         if (context.action === 'gotoDefinition') {
@@ -1024,7 +1024,7 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
 
         if (this.activeDesign.lastContext) { // should always true
             this.activeDesign.backwardStack.push(this.activeDesign.lastContext);
-            await vscode.commands.executeCommand('setContext', 'sv-pathfinder.isGoBackwardEnabled', true);
+            await vscode.commands.executeCommand('setContext', 'sv-pathfinder.isGoBackEnabled', true);
         }
 
         const context = this.activeDesign.forwardStack.pop()!;
@@ -1040,14 +1040,14 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         return context.element;
     }
 
-    async gotoInstantiation(element: NetlistItem, isGoBackwardOrForward: boolean = false) {
+    async gotoInstantiation(element: NetlistItem, isGoBackOrForward: boolean = false) {
         if (!this.activeDesign) { return; }
         if (element.contextValue !== 'scopeItem') { return; }
         const parent = element.parent ? element.parent : element; // For top-module, consider itself as parent
 
         await showTextDocumentLocation(element.sourceFile, element.lineNumber, element.columnNumber);
         await this.setActiveInstance(parent);
-        await this.setContextForGoBackwardOrForward(element, 'gotoInstantiation', isGoBackwardOrForward);
+        await this.setContextForGoBackOrForward(element, 'gotoInstantiation', isGoBackOrForward);
     }
 
     async addToWaveform(element: NetlistItem, waveformUri: vscode.Uri) {

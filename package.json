@@ -62,7 +62,7 @@
       "svPathfinderActivityBar": [
         {
           "id": "openedDesignsView",
-          "name": "Opened Designs"
+          "name": "Designs"
         },
         {
           "id": "hierarchyView",
@@ -80,7 +80,7 @@
         },
         {
           "id": "moduleInstancesView",
-          "name": "Module Instances",
+          "name": "Instances",
           "when": "sv-pathfinder.moduleInstancesViewVisible"
         }
       ]
@@ -94,7 +94,7 @@
           "group": "navigation"
         },
         {
-          "command": "sv-pathfinder.goBackward",
+          "command": "sv-pathfinder.goBack",
           "when": "view == hierarchyView",
           "group": "navigation"
         },
@@ -273,10 +273,10 @@
         "enablement": "sv-pathfinder.isCommandEnabled"
       },
       {
-        "command": "sv-pathfinder.goBackward",
-        "title": "Go Backward",
+        "command": "sv-pathfinder.goBack",
+        "title": "Go Back",
         "icon": "$(arrow-left)",
-        "enablement": "sv-pathfinder.isGoBackwardEnabled"
+        "enablement": "sv-pathfinder.isGoBackEnabled"
       },
       {
         "command": "sv-pathfinder.goForward",

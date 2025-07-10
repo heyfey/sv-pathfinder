@@ -114,8 +114,8 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	}
 
-	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.goBackward', async (e) => {
-		const element = await hierarchyProvider.goBackward();
+	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.goBack', async (e) => {
+		const element = await hierarchyProvider.goBack();
 		if (element) {
 			hierarchyView.reveal(element, { select: true, focus: false, expand: 1 });
 		}
