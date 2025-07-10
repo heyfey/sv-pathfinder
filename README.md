@@ -1,69 +1,45 @@
 # sv-pathfinder
 
+[sv-pathfinder](https://github.com/heyfey/sv-pathfinder) is an open-source VS Code extension for RTL tracing, and seamlessly integrates with the waveform viewer [VaporView](https://github.com/heyfey/sv-pathfinder)
+
+![](https://github.com/heyfey/sv-pathfinder/blob/main/readme_assets/overview.png?raw=true)
+
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+### Browse design hierarchy
 
-For example if there is an image subfolder under your extension project workspace:
+![](https://github.com/heyfey/sv-pathfinder/blob/main/readme_assets/browse.gif?raw=true)
 
-\!\[feature X\]\(images/feature-x.png\)
+### Go back/foward
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+![](https://github.com/heyfey/sv-pathfinder/blob/main/readme_assets/goback.gif?raw=true)
+
+### Select instance
+
+![](https://github.com/heyfey/sv-pathfinder/blob/main/readme_assets/instance.gif?raw=true)
+
+
+## Waveform Integration
+
+sv-pathfinder is seamlessly integrated with VaporView – [Download VaporView](https://marketplace.visualstudio.com/items?itemName=lramseyer.vaporview)
+
+### Signal value annotation
+
+![](https://github.com/heyfey/sv-pathfinder/blob/main/readme_assets/value_annotation.gif?raw=true)
+
+
+### Adding signals to the waveform viewer
+
+![](https://github.com/heyfey/sv-pathfinder/blob/main/readme_assets/add_to_waveform.gif?raw=true)
+
+## Supported Design Database
+
+TBD
 
 ## Requirements
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+This extension requires VS Code 1.97.0 or later
 
-## Extension Settings
+## Acknowledgements
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
-For example:
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
-
-## Known Issues
-
-Calling out known issues can help limit users opening duplicate issues against your extension.
-
-## Release Notes
-
-Users appreciate release notes as you update your extension.
-
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
-
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+Many thanks to [@lramseyer](https://github.com/Lramseyer) for all of his great work and inspiration.
