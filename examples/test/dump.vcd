@@ -1,0 +1,626 @@
+$timescale
+	1s
+$end
+$scope module top $end
+$var reg 1 4 clk $end
+$scope module cif $end
+$var reg 1 5 clk $end
+$var reg 1 6 rst $end
+$var reg 1 7 load $end
+$var reg 4 ! data [3:0] $end
+$var reg 4 " count [3:0] $end
+$scope module cb $end
+$var reg 1 8 rst $end
+$var reg 1 9 load $end
+$var reg 4 # data [3:0] $end
+$var reg 4 $ count [3:0] $end
+$upscope $end
+$scope module dut $end
+$var reg 1 5 clk $end
+$var reg 1 6 rst $end
+$var reg 1 7 load $end
+$var reg 4 ! data [3:0] $end
+$var reg 4 " count [3:0] $end
+$upscope $end
+$scope module wrapper $end
+$var reg 1 5 clk $end
+$var reg 1 6 rst $end
+$var reg 1 7 load $end
+$var reg 4 ! data [3:0] $end
+$var reg 4 " count [3:0] $end
+$upscope $end
+$scope module tb $end
+$var reg 1 5 clk $end
+$var reg 4 " count [3:0] $end
+$var reg 1 6 rst $end
+$var reg 1 7 load $end
+$var reg 4 ! data [3:0] $end
+$upscope $end
+$upscope $end
+$scope module smc_inst $end
+$var wire 1 : clk $end
+$var wire 1 ; rst $end
+$var wire 1 < load $end
+$var wire 4 % data [3:0] $end
+$var wire 4 & count [3:0] $end
+$var wire 4 3 internal_count [1][3:0] $end
+$var wire 4 2 internal_count [0][3:0] $end
+$scope begin gen_extra $end
+$var wire 1 = dummy $end
+$upscope $end
+$scope begin gen_mc[0] $end
+$scope module mc_inst $end
+$var wire 1 : clk $end
+$var wire 1 ; rst $end
+$var wire 1 < load $end
+$var wire 4 % data [3:0] $end
+$var wire 4 ' count [3:0] $end
+$var wire 1 < internal_load [0:0] $end
+$var wire 4 ( internal_data [0][3:0] $end
+$var wire 4 ) internal_count [0][3:0] $end
+$scope begin gen_wrappers[0] $end
+$scope module wrp $end
+$var wire 1 : clk $end
+$var wire 1 ; rst $end
+$var wire 1 < load $end
+$var wire 4 * data [3:0] $end
+$var wire 4 + count [3:0] $end
+$upscope $end
+$upscope $end
+$upscope $end
+$upscope $end
+$scope begin gen_mc[1] $end
+$scope module mc_inst $end
+$var wire 1 : clk $end
+$var wire 1 ; rst $end
+$var wire 1 < load $end
+$var wire 4 % data [3:0] $end
+$var wire 4 , count [3:0] $end
+$var wire 1 < internal_load [0:0] $end
+$var wire 4 - internal_data [0][3:0] $end
+$var wire 4 . internal_count [0][3:0] $end
+$scope begin gen_wrappers[0] $end
+$scope module wrp $end
+$var wire 1 : clk $end
+$var wire 1 ; rst $end
+$var wire 1 < load $end
+$var wire 4 / data [3:0] $end
+$var wire 4 0 count [3:0] $end
+$upscope $end
+$upscope $end
+$upscope $end
+$upscope $end
+$upscope $end
+$upscope $end
+$scope module test $end
+$scope begin unnamed$$_0 $end
+$scope begin unnamed$$_1 $end
+$upscope $end
+$scope begin unnamed$$_3 $end
+$upscope $end
+$upscope $end
+$upscope $end
+$scope module _vcs_unit__1409569418 $end
+$upscope $end
+$enddefinitions $end
+$dumpvars
+bxxxx !
+x=
+bxxxx "
+bxxxx $
+bxxxx (
+bxxxx 0
+bxxxx 2
+bxxxx )
+bxxxx 3
+04
+bxxxx %
+bxxxx *
+05
+16
+bxxxx +
+x7
+x8
+bxxxx #
+x<
+bxxxx &
+bxxxx ,
+x9
+0:
+bxxxx -
+1;
+bxxxx '
+bxxxx .
+bxxxx /
+$end
+#5
+b0000 .
+b0000 +
+b0000 2
+b0000 "
+b0000 0
+06
+14
+b0000 )
+b0000 3
+15
+b0000 '
+b0000 ,
+b0000 &
+0;
+1:
+#10
+04
+05
+0:
+#15
+15
+1:
+b0101 #
+b0001 +
+b0110 /
+b0101 !
+1=
+b0001 .
+b0000 $
+b0101 (
+b0001 )
+b0001 0
+b0001 2
+b0001 "
+19
+b0101 %
+b0110 *
+14
+1<
+b0001 &
+17
+b0001 3
+b0001 ,
+b0001 '
+b0101 -
+#20
+05
+0:
+04
+#25
+1:
+14
+b0010 -
+b1000 '
+b0010 #
+b0010 !
+b1000 +
+b0011 /
+b1000 "
+b0010 (
+b1000 .
+b0001 $
+b1000 2
+b1000 )
+b1000 0
+15
+b1000 ,
+b0010 %
+b0011 *
+b1000 3
+b1000 &
+#30
+0:
+04
+05
+#35
+14
+15
+b0101 &
+b0101 3
+b0110 #
+09
+b0101 2
+b0101 '
+b0110 -
+b1000 $
+b0111 /
+b0110 !
+b0101 +
+b0101 .
+b0101 "
+b0110 (
+1:
+b0111 *
+b0101 )
+0<
+b0101 0
+b0110 %
+b0101 ,
+07
+#40
+05
+04
+0:
+#45
+14
+1:
+17
+b0110 ,
+b0110 .
+19
+b0000 #
+b0110 &
+b0110 3
+b0110 +
+b0000 -
+b0110 2
+b0110 '
+b0000 !
+b0101 $
+b0001 /
+15
+b0000 %
+b0001 *
+b0110 "
+b0000 (
+b0110 0
+b0110 )
+1<
+#50
+0:
+04
+05
+#55
+14
+15
+b0011 )
+b1000 !
+b0011 .
+b0011 ,
+b0011 '
+b0011 3
+b1000 #
+b0011 &
+b0011 2
+b0011 +
+b1000 -
+1:
+b0011 0
+b1000 %
+b0110 $
+b1001 /
+b1000 (
+b1001 *
+b0011 "
+#60
+05
+04
+0:
+#65
+14
+1:
+b1011 "
+b0010 *
+0<
+09
+b1011 2
+07
+b1011 )
+b1011 &
+b1011 ,
+b0001 !
+b1011 .
+b0001 #
+b1011 '
+b1011 3
+15
+b0001 (
+b1011 0
+b1011 +
+b0001 -
+b0010 /
+b0001 %
+b0011 $
+#70
+0:
+04
+05
+#75
+14
+15
+19
+1<
+b1100 "
+b1100 .
+b1100 )
+b1100 2
+17
+b1100 &
+b1100 ,
+1:
+b1100 '
+b1011 $
+b1100 3
+b1100 0
+b1100 +
+#80
+05
+04
+0:
+#85
+14
+1:
+b0100 +
+b0100 0
+b0101 %
+b0101 #
+b0110 /
+b0110 *
+b0100 2
+b0100 "
+b0100 )
+b0101 !
+b0100 .
+15
+b0100 3
+b0100 &
+b0101 (
+b0100 ,
+b1100 $
+b0101 -
+b0100 '
+#90
+0:
+04
+05
+#95
+14
+15
+b1000 '
+b0100 -
+b1000 )
+b0100 %
+0=
+b1000 0
+07
+b1000 +
+b0100 !
+b1000 "
+b0100 #
+09
+0<
+b1000 2
+b0101 /
+b0101 *
+1:
+b0100 $
+b1000 3
+b1000 .
+b1000 ,
+b1000 &
+b0100 (
+#100
+04
+05
+0:
+#105
+15
+1:
+14
+b1001 &
+b1001 2
+b1001 '
+1=
+b0011 %
+b0011 -
+b1001 +
+b1001 0
+b1001 )
+b0011 (
+b0011 !
+b1001 "
+b1001 ,
+b0011 #
+b0100 /
+b0100 *
+b1001 .
+b1000 $
+b1001 3
+#110
+04
+05
+0:
+#115
+15
+1:
+14
+b1010 3
+b1001 $
+b1010 '
+b1010 )
+b1010 +
+b1010 0
+b1010 .
+b1010 ,
+b1010 &
+b1010 "
+0=
+b1010 2
+#120
+04
+05
+0:
+#125
+15
+1:
+14
+b1011 2
+b1011 )
+1=
+b1011 '
+b1011 3
+b1010 $
+b1011 "
+b1011 .
+b1011 +
+b1011 0
+b1011 &
+b1011 ,
+#130
+04
+05
+0:
+#135
+15
+1:
+14
+b1100 ,
+b1100 '
+b1100 &
+0=
+b1100 2
+b1100 )
+b1100 0
+b1100 "
+b1100 3
+b1011 $
+b1100 +
+b1100 .
+#140
+04
+05
+0:
+#145
+15
+1:
+14
+b1101 .
+1=
+b1101 +
+b1101 &
+b1101 ,
+b1101 '
+b1100 $
+b1101 0
+b1101 2
+b1101 )
+b1101 3
+b1101 "
+#150
+04
+05
+0:
+#155
+15
+1:
+14
+b1110 "
+b1110 &
+b1110 3
+b1110 +
+b1110 .
+0=
+b1110 )
+b1101 $
+b1110 ,
+b1110 '
+b1110 2
+b1110 0
+#160
+04
+05
+0:
+#165
+15
+1:
+14
+b1111 0
+b1111 +
+b1111 2
+b1111 3
+b1111 "
+b1111 &
+b1111 '
+b1111 )
+b1111 .
+1=
+b1111 ,
+b1110 $
+#170
+04
+05
+0:
+#175
+15
+1:
+14
+b1111 $
+b0000 3
+b0000 ,
+b0000 2
+b0000 0
+b0000 +
+0=
+b0000 '
+b0000 "
+b0000 &
+b0000 .
+b0000 )
+#180
+04
+05
+0:
+#185
+15
+1:
+14
+b0001 )
+b0001 2
+b0001 .
+b0001 ,
+b0000 $
+b0001 3
+b0001 &
+1=
+b0001 0
+b0001 +
+b0001 "
+b0001 '
+#190
+04
+05
+0:
+#195
+15
+1:
+14
+b0010 '
+b0010 ,
+b0010 "
+b0010 .
+b0010 )
+b0010 2
+b0010 +
+b0010 &
+b0001 $
+b0010 3
+b0010 0
+0=
+#200
+04
+05
+0:
+#205
+15
+1:
+b0011 &
+b0011 2
+b0011 )
+b0011 ,
+b0011 '
+b0011 0
+b0011 .
+b0010 $
+b0011 +
+b0011 "
+1=
+b0011 3
+14
+
