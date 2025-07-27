@@ -2,12 +2,12 @@
   "name": "sv-pathfinder",
   "publisher": "heyfey",
   "displayName": "sv-pathfinder",
-  "description": "There are venoms and virtues aplenty in the wilds, if you know where to look.",
+  "description": "SystemVerilog design navigation and RTL-tracing for VS Code. Seamlessly integrates with waveform viewer.",
   "icon": "media/icon.png",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "repository": "https://github.com/heyfey/sv-pathfinder",
   "engines": {
-    "vscode": "^1.97.0"
+    "vscode": "^1.93.0"
   },
   "categories": [
     "Debuggers",
@@ -29,7 +29,7 @@
   "main": "./dist/extension.js",
   "contributes": {
     "configuration": {
-      "title": "SV-Pathfinder",
+      "title": "sv-pathfinder",
       "properties": {
         "sv-pathfinder.remotePathPrefix": {
           "type": "string",
@@ -47,7 +47,7 @@
       "activitybar": [
         {
           "id": "svPathfinderActivityBar",
-          "title": "SV-Pathfinder",
+          "title": "sv-pathfinder",
           "icon": "media/activityBar.svg"
         }
       ]
@@ -309,7 +309,7 @@
     "@types/emscripten": "^1.40.1",
     "@types/mocha": "^10.0.10",
     "@types/node": "20.x",
-    "@types/vscode": "^1.97.0",
+    "@types/vscode": "^1.93.0",
     "@typescript-eslint/eslint-plugin": "^8.22.0",
     "@typescript-eslint/parser": "^8.22.0",
     "@vscode/test-cli": "^0.0.10",

@@ -52,7 +52,7 @@ sv-pathfinder is seamlessly integrated with VaporView – [Download](https://mar
 
 ## Requirements
 
-This extension requires VS Code 1.97.0 or later
+This extension requires VS Code 1.93.0 or later
 
 ## Acknowledgements
 
