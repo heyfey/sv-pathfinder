@@ -1,8 +1,20 @@
 # sv-pathfinder
 
-[sv-pathfinder](https://github.com/heyfey/sv-pathfinder) is an open-source VS Code extension for RTL tracing, and seamlessly integrates with the waveform viewer [VaporView](https://github.com/heyfey/sv-pathfinder)
+[sv-pathfinder](https://github.com/heyfey/sv-pathfinder) is an open-source VS Code extension for RTL tracing and design navigation, and seamlessly integrates with the waveform viewer [VaporView](https://github.com/heyfey/sv-pathfinder)
 
 ![](https://github.com/heyfey/sv-pathfinder/blob/main/readme_assets/overview.png?raw=true)
+
+## Getting Started
+
+sv-pathfinder currently supports [UHDM](https://github.com/chipsalliance/UHDM) databases for design navigation.
+
+Generating UHDM using [Surelog](https://github.com/chipsalliance/Surelog):
+```bash
+# ./slpp_all/surelog.uhdm will be generated
+surelog dut.v tb.sv -elabuhdm -parse -sverilog -d uhdm
+```
+
+> Limitations: only supports Linux64 for now. Tested on Ubuntu 22.04
 
 ## Features
 
@@ -21,7 +33,7 @@
 
 ## Waveform Integration
 
-sv-pathfinder is seamlessly integrated with VaporView – [Download VaporView](https://marketplace.visualstudio.com/items?itemName=lramseyer.vaporview)
+sv-pathfinder is seamlessly integrated with VaporView – [Download](https://marketplace.visualstudio.com/items?itemName=lramseyer.vaporview)
 
 ### Signal value annotation
 
@@ -32,9 +44,11 @@ sv-pathfinder is seamlessly integrated with VaporView – [Download VaporView](h
 
 ![](https://github.com/heyfey/sv-pathfinder/blob/main/readme_assets/add_to_waveform.gif?raw=true)
 
-## Supported Design Database
+## Settings
 
-TBD
+- `"sv-pathfinder.remotePathPrefix": string`
+- `"sv-pathfinder.localPathPrefix": string`
+    - Replace the remote path prefix with the local path prefix when jumping to source files. This is useful when the debug database is generated on the different machine/path. Only take effect when both set.
 
 ## Requirements
 
