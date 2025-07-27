@@ -72,8 +72,11 @@ export function activate(context: vscode.ExtensionContext) {
 		designProvider.closeDesign(e);
 	}));
 
-	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.openWaveform', (e) => {
-		designProvider.openWaveform(e);
+	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.openWaveform', async (e) => {
+		const element = await designProvider.openWaveform(e);
+		if (element) {
+			designsView.reveal(element, { select: true, focus: false, expand: 1 });
+		}
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.revealWaveform', (e) => {

@@ -131,7 +131,7 @@ export class EditorMenuProvider {
             return;
         }
         const activeDesign = this.hierarchyTreeProvider.getActiveDesign()!;
-        this.designProvider.openWaveformIfNotPresent(activeDesign);
+        await this.designProvider.openWaveformIfNotPresent(activeDesign);
         const activeWaveform = activeDesign.getActiveWaveform();
         if (activeWaveform) {
             // Add to waveform viewer

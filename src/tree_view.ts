@@ -357,7 +357,7 @@ export abstract class DesignItem extends vscode.TreeItem {
         return this.activeInstance?.moduleName;
     }
 
-    public addWaveform(uri: vscode.Uri) {
+    public addWaveform(uri: vscode.Uri) : WaveformItem | undefined {
         let index = this.waveforms.findIndex(waveform => waveform.resourceUri.fsPath === uri.fsPath);
         if (index < 0) {
             const waveform = new WaveformItem(uri, this, vscode.TreeItemCollapsibleState.None);
@@ -365,10 +365,12 @@ export abstract class DesignItem extends vscode.TreeItem {
             if (this.waveforms.length === 1) { // Set active if it's the only waveform
                 this.setActiveWaveform(waveform);
                 waveform.checkboxState = vscode.TreeItemCheckboxState.Checked;
+                return waveform;
             }
         } else {
-            // Do nothing. Maybe reveal the waveform?
+            return this.waveforms[index]; // Already exists, return existing waveform
         }
+        return undefined;
     }
 
     public getWaveforms(): WaveformItem[] {
@@ -767,7 +769,7 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
         }
     }
 
-    public async openWaveform(element: DesignItem): Promise<boolean> {
+    public async openWaveform(element: DesignItem): Promise<WaveformItem | undefined> {
         const options: vscode.OpenDialogOptions = {
             canSelectFiles: true,
             canSelectFolders: false,
@@ -778,18 +780,18 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
         };
 
         const uris = await vscode.window.showOpenDialog(options);
-        if (!uris || uris.length === 0) { return false; }
+        if (!uris || uris.length === 0) { return undefined; }
         const selectedFile = uris[0]; // Get the first (and only) selected file
         try {
             await vscode.commands.executeCommand("vaporview.openFile", { uri: selectedFile });
         } catch (error) {
             vscode.window.showErrorMessage('Failed to open waveform: ' + error);
-            return false;
+            return undefined;
         }
-        element.addWaveform(selectedFile);
+        const wavefrom = element.addWaveform(selectedFile);
         element.collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
         this.refresh();
-        return true;
+        return wavefrom;
     }
 
     public async revealWaveform(element: WaveformItem) {

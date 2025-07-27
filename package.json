@@ -221,7 +221,7 @@
       },
       {
         "command": "sv-pathfinder.revealWaveform",
-        "title": "Open Waveform"
+        "title": "Reveal Waveform"
       },
       {
         "command": "sv-pathfinder.selectDesign",
