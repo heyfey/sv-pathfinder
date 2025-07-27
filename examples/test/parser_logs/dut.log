@@ -1,0 +1,2332 @@
+[0]Node type: source_file, text: // Function for use in expressions or defaults
+function [3:0] offset_data;
+  input [3:0] in;
+  begin
+    offset_data = in + 1;  // Simple offset
+  end
+endfunction
+
+function [3:0] double_offset;
+  input [3:0] in;
+  begin
+    double_offset = offset_data(in) + 1;  // Chained function call
+  end
+endfunction
+
+// Basic Verilog-style module (core DUT)
+module counter (
+  input wire clk,
+  input wire rst,
+  input wire load,
+  input wire [3:0] data,
+  output reg [3:0] count
+);
+
+  // Always block
+  always @(posedge clk) begin
+    if (rst)
+      count <= 4'b0;  // Reset
+    else if (load)
+      count <= data;  // Load
+    else
+      count <= count + 1;  // Increment
+  end
+
+  // Immediate assertion (using $warning for compatibility, though not standard Verilog; simulators often support)
+  always @( * ) if (!(count <= 4'hF)) $warning("Count overflow");
+
+endmodule
+
+// Additional layer: Counter cell with `celldefine` for cell definition
+`celldefine
+module counter_cell (
+  input wire clk,
+  input wire rst,
+  input wire load,
+  input wire [3:0] data,
+  output wire [3:0] count
+);
+
+  // Instantiate with all named connections, including function call
+  counter dut (
+    .clk(clk),
+    .rst(rst),
+    .load(load),
+    .data(double_offset(data)),  // Function call in port connection
+    .count(count)
+  );
+
+endmodule
+`endcelldefine
+
+// Additional layer: Wrapper module around counter_cell
+module counter_wrapper (
+  input wire clk,
+  input wire rst,
+  input wire load,
+  input wire [3:0] data,
+  output wire [3:0] count
+);
+
+  // Instantiate counter_cell with named connections
+  counter_cell ccell (
+    .clk(clk),
+    .rst(rst),
+    .load(load),
+    .data(data),
+    .count(count)
+  );
+
+endmodule
+
+// Middle layer: Multi-counter with generate for loop
+module multi_counter #(
+  parameter NUM_COUNTERS = 2
+) (
+  input wire clk,
+  input wire rst,
+  input wire load,
+  input wire [3:0] data,
+  output wire [3:0] count
+);
+
+  // Internal buses
+  wire [NUM_COUNTERS-1:0] internal_load;
+  wire [3:0] internal_data [NUM_COUNTERS-1:0];
+  wire [3:0] internal_count [NUM_COUNTERS-1:0];
+
+  assign internal_load = { { (NUM_COUNTERS-1) {1'b0} } , load };  // Fan out for demo
+
+  generate
+    for (genvar k = 0; k < NUM_COUNTERS; k = k + 1) begin : gen_assigns
+      assign internal_data[k] = (k == 0) ? data : '0;
+    end
+  endgenerate
+
+  assign count = internal_count[0];
+
+  // Generate with for loop for instantiating modules
+  generate
+    for (genvar i = 0; i < NUM_COUNTERS; i = i + 1) begin : gen_wrappers
+      counter_wrapper wrp (
+        .clk(clk),
+        .rst(rst),
+        .load(internal_load[i]),
+        .data(offset_data(internal_data[i])),  // Function call
+        .count(internal_count[i])
+      );
+    end
+  endgenerate
+
+endmodule
+
+// Top DUT layer: Super multi-counter with generate for loop instead of module array
+module super_multi_counter #(
+  parameter NUM_SUPER = 2
+) (
+  input wire clk,
+  input wire rst,
+  input wire load,
+  input wire [3:0] data,
+  output wire [3:0] count
+);
+
+  // Internal buses
+  wire [3:0] internal_count [NUM_SUPER-1:0];
+
+  // Generate for loop instantiation for multiple multi_counters
+  generate
+    for (genvar i = 0; i < NUM_SUPER; i = i + 1) begin : gen_mc
+      multi_counter #(.NUM_COUNTERS(1)) mc_inst (
+        .clk(clk),
+        .rst(rst),
+        .load(load),
+        .data(data),
+        .count(internal_count[i])
+      );
+    end
+  endgenerate
+
+  // Connect only the first instance's count to avoid multiple drivers
+  assign count = internal_count[0];
+
+  // Additional generate demo: generate if
+  generate
+    if (NUM_SUPER > 1) begin : gen_extra
+      // Could instantiate more, but for demo a dummy wire
+      wire dummy = load || internal_count[1][0];  // Connect to internal count
+    end
+  endgenerate
+
+  // Generate case for variety
+  generate
+    case (NUM_SUPER)
+      2: begin : gen_case
+        // For loop inside case
+        for (genvar j = 0; j < NUM_SUPER; j = j + 1) begin : loop_in_case
+          // Dummy always (no assertion in pure Verilog; use display for demo)
+          always @(*) if (!(internal_count[j] >= 0)) $display("Dummy check failed");
+        end
+      end
+      default: ;  // Empty
+    endcase
+  endgenerate
+
+endmodule
+
+// Top module
+module top;
+  logic clk = 0;
+  always #5 clk = ~clk;
+
+  counter_if cif(clk);
+
+  // Instantiate super_multi_counter with discrete ports
+  super_multi_counter #(.NUM_SUPER(2)) smc_inst (
+    .clk(cif.clk),
+    .rst(cif.rst),
+    .load(cif.load),
+    .data(cif.data),
+    .count(cif.count)
+  );
+
+endmodule, start: 0:0, end: 192:9
+[1]  Node type: comment, text: // Function for use in expressions or defaults, start: 0:0, end: 0:46
+[1]  Node type: package_or_generate_item_declaration, text: function [3:0] offset_data;
+  input [3:0] in;
+  begin
+    offset_data = in + 1;  // Simple offset
+  end
+endfunction, start: 1:0, end: 6:11
+[2]    Node type: function_declaration, text: function [3:0] offset_data;
+  input [3:0] in;
+  begin
+    offset_data = in + 1;  // Simple offset
+  end
+endfunction, start: 1:0, end: 6:11
+[3]      Node type: function_body_declaration, text: [3:0] offset_data;
+  input [3:0] in;
+  begin
+    offset_data = in + 1;  // Simple offset
+  end
+endfunction, start: 1:9, end: 6:11
+[4]        Node type: function_data_type_or_implicit1, text: [3:0], start: 1:9, end: 1:14
+[5]          Node type: implicit_data_type1, text: [3:0], start: 1:9, end: 1:14
+[6]            Node type: packed_dimension, text: [3:0], start: 1:9, end: 1:14
+[7]              Node type: constant_range, text: 3:0, start: 1:10, end: 1:13
+[8]                Node type: constant_expression, text: 3, start: 1:10, end: 1:11
+[9]                  Node type: constant_primary, text: 3, start: 1:10, end: 1:11
+[10]                    Node type: primary_literal, text: 3, start: 1:10, end: 1:11
+[11]                      Node type: integral_number, text: 3, start: 1:10, end: 1:11
+[12]                        Node type: decimal_number, text: 3, start: 1:10, end: 1:11
+[13]                          Node type: unsigned_number, text: 3, start: 1:10, end: 1:11
+[8]                Node type: constant_expression, text: 0, start: 1:12, end: 1:13
+[9]                  Node type: constant_primary, text: 0, start: 1:12, end: 1:13
+[10]                    Node type: primary_literal, text: 0, start: 1:12, end: 1:13
+[11]                      Node type: integral_number, text: 0, start: 1:12, end: 1:13
+[12]                        Node type: decimal_number, text: 0, start: 1:12, end: 1:13
+[13]                          Node type: unsigned_number, text: 0, start: 1:12, end: 1:13
+[4]        Node type: function_identifier, text: offset_data, start: 1:15, end: 1:26
+[5]          Node type: function_identifier, text: offset_data, start: 1:15, end: 1:26
+[6]            Node type: simple_identifier, text: offset_data, start: 1:15, end: 1:26
+[4]        Node type: tf_item_declaration, text: input [3:0] in;, start: 2:2, end: 2:17
+[5]          Node type: tf_port_declaration, text: input [3:0] in;, start: 2:2, end: 2:17
+[6]            Node type: tf_port_direction, text: input, start: 2:2, end: 2:7
+[7]              Node type: port_direction, text: input, start: 2:2, end: 2:7
+[6]            Node type: data_type_or_implicit1, text: [3:0], start: 2:8, end: 2:13
+[7]              Node type: implicit_data_type1, text: [3:0], start: 2:8, end: 2:13
+[8]                Node type: packed_dimension, text: [3:0], start: 2:8, end: 2:13
+[9]                  Node type: constant_range, text: 3:0, start: 2:9, end: 2:12
+[10]                    Node type: constant_expression, text: 3, start: 2:9, end: 2:10
+[11]                      Node type: constant_primary, text: 3, start: 2:9, end: 2:10
+[12]                        Node type: primary_literal, text: 3, start: 2:9, end: 2:10
+[13]                          Node type: integral_number, text: 3, start: 2:9, end: 2:10
+[14]                            Node type: decimal_number, text: 3, start: 2:9, end: 2:10
+[15]                              Node type: unsigned_number, text: 3, start: 2:9, end: 2:10
+[10]                    Node type: constant_expression, text: 0, start: 2:11, end: 2:12
+[11]                      Node type: constant_primary, text: 0, start: 2:11, end: 2:12
+[12]                        Node type: primary_literal, text: 0, start: 2:11, end: 2:12
+[13]                          Node type: integral_number, text: 0, start: 2:11, end: 2:12
+[14]                            Node type: decimal_number, text: 0, start: 2:11, end: 2:12
+[15]                              Node type: unsigned_number, text: 0, start: 2:11, end: 2:12
+[6]            Node type: list_of_tf_variable_identifiers, text: in, start: 2:14, end: 2:16
+[7]              Node type: port_identifier, text: in, start: 2:14, end: 2:16
+[8]                Node type: simple_identifier, text: in, start: 2:14, end: 2:16
+[4]        Node type: function_statement_or_null, text: begin
+    offset_data = in + 1;  // Simple offset
+  end, start: 3:2, end: 5:5
+[5]          Node type: function_statement, text: begin
+    offset_data = in + 1;  // Simple offset
+  end, start: 3:2, end: 5:5
+[6]            Node type: statement, text: begin
+    offset_data = in + 1;  // Simple offset
+  end, start: 3:2, end: 5:5
+[7]              Node type: statement_item, text: begin
+    offset_data = in + 1;  // Simple offset
+  end, start: 3:2, end: 5:5
+[8]                Node type: seq_block, text: begin
+    offset_data = in + 1;  // Simple offset
+  end, start: 3:2, end: 5:5
+[9]                  Node type: statement_or_null, text: offset_data = in + 1;, start: 4:4, end: 4:25
+[10]                    Node type: statement, text: offset_data = in + 1;, start: 4:4, end: 4:25
+[11]                      Node type: statement_item, text: offset_data = in + 1;, start: 4:4, end: 4:25
+[12]                        Node type: blocking_assignment, text: offset_data = in + 1, start: 4:4, end: 4:24
+[13]                          Node type: operator_assignment, text: offset_data = in + 1, start: 4:4, end: 4:24
+[14]                            Node type: variable_lvalue, text: offset_data, start: 4:4, end: 4:15
+[15]                              Node type: simple_identifier, text: offset_data, start: 4:4, end: 4:15
+[14]                            Node type: assignment_operator, text: =, start: 4:16, end: 4:17
+[14]                            Node type: expression, text: in + 1, start: 4:18, end: 4:24
+[15]                              Node type: expression, text: in, start: 4:18, end: 4:20
+[16]                                Node type: primary, text: in, start: 4:18, end: 4:20
+[17]                                  Node type: simple_identifier, text: in, start: 4:18, end: 4:20
+[15]                              Node type: expression, text: 1, start: 4:23, end: 4:24
+[16]                                Node type: primary, text: 1, start: 4:23, end: 4:24
+[17]                                  Node type: primary_literal, text: 1, start: 4:23, end: 4:24
+[18]                                    Node type: integral_number, text: 1, start: 4:23, end: 4:24
+[19]                                      Node type: decimal_number, text: 1, start: 4:23, end: 4:24
+[20]                                        Node type: unsigned_number, text: 1, start: 4:23, end: 4:24
+[9]                  Node type: comment, text: // Simple offset, start: 4:27, end: 4:43
+[1]  Node type: package_or_generate_item_declaration, text: function [3:0] double_offset;
+  input [3:0] in;
+  begin
+    double_offset = offset_data(in) + 1;  // Chained function call
+  end
+endfunction, start: 8:0, end: 13:11
+[2]    Node type: function_declaration, text: function [3:0] double_offset;
+  input [3:0] in;
+  begin
+    double_offset = offset_data(in) + 1;  // Chained function call
+  end
+endfunction, start: 8:0, end: 13:11
+[3]      Node type: function_body_declaration, text: [3:0] double_offset;
+  input [3:0] in;
+  begin
+    double_offset = offset_data(in) + 1;  // Chained function call
+  end
+endfunction, start: 8:9, end: 13:11
+[4]        Node type: function_data_type_or_implicit1, text: [3:0], start: 8:9, end: 8:14
+[5]          Node type: implicit_data_type1, text: [3:0], start: 8:9, end: 8:14
+[6]            Node type: packed_dimension, text: [3:0], start: 8:9, end: 8:14
+[7]              Node type: constant_range, text: 3:0, start: 8:10, end: 8:13
+[8]                Node type: constant_expression, text: 3, start: 8:10, end: 8:11
+[9]                  Node type: constant_primary, text: 3, start: 8:10, end: 8:11
+[10]                    Node type: primary_literal, text: 3, start: 8:10, end: 8:11
+[11]                      Node type: integral_number, text: 3, start: 8:10, end: 8:11
+[12]                        Node type: decimal_number, text: 3, start: 8:10, end: 8:11
+[13]                          Node type: unsigned_number, text: 3, start: 8:10, end: 8:11
+[8]                Node type: constant_expression, text: 0, start: 8:12, end: 8:13
+[9]                  Node type: constant_primary, text: 0, start: 8:12, end: 8:13
+[10]                    Node type: primary_literal, text: 0, start: 8:12, end: 8:13
+[11]                      Node type: integral_number, text: 0, start: 8:12, end: 8:13
+[12]                        Node type: decimal_number, text: 0, start: 8:12, end: 8:13
+[13]                          Node type: unsigned_number, text: 0, start: 8:12, end: 8:13
+[4]        Node type: function_identifier, text: double_offset, start: 8:15, end: 8:28
+[5]          Node type: function_identifier, text: double_offset, start: 8:15, end: 8:28
+[6]            Node type: simple_identifier, text: double_offset, start: 8:15, end: 8:28
+[4]        Node type: tf_item_declaration, text: input [3:0] in;, start: 9:2, end: 9:17
+[5]          Node type: tf_port_declaration, text: input [3:0] in;, start: 9:2, end: 9:17
+[6]            Node type: tf_port_direction, text: input, start: 9:2, end: 9:7
+[7]              Node type: port_direction, text: input, start: 9:2, end: 9:7
+[6]            Node type: data_type_or_implicit1, text: [3:0], start: 9:8, end: 9:13
+[7]              Node type: implicit_data_type1, text: [3:0], start: 9:8, end: 9:13
+[8]                Node type: packed_dimension, text: [3:0], start: 9:8, end: 9:13
+[9]                  Node type: constant_range, text: 3:0, start: 9:9, end: 9:12
+[10]                    Node type: constant_expression, text: 3, start: 9:9, end: 9:10
+[11]                      Node type: constant_primary, text: 3, start: 9:9, end: 9:10
+[12]                        Node type: primary_literal, text: 3, start: 9:9, end: 9:10
+[13]                          Node type: integral_number, text: 3, start: 9:9, end: 9:10
+[14]                            Node type: decimal_number, text: 3, start: 9:9, end: 9:10
+[15]                              Node type: unsigned_number, text: 3, start: 9:9, end: 9:10
+[10]                    Node type: constant_expression, text: 0, start: 9:11, end: 9:12
+[11]                      Node type: constant_primary, text: 0, start: 9:11, end: 9:12
+[12]                        Node type: primary_literal, text: 0, start: 9:11, end: 9:12
+[13]                          Node type: integral_number, text: 0, start: 9:11, end: 9:12
+[14]                            Node type: decimal_number, text: 0, start: 9:11, end: 9:12
+[15]                              Node type: unsigned_number, text: 0, start: 9:11, end: 9:12
+[6]            Node type: list_of_tf_variable_identifiers, text: in, start: 9:14, end: 9:16
+[7]              Node type: port_identifier, text: in, start: 9:14, end: 9:16
+[8]                Node type: simple_identifier, text: in, start: 9:14, end: 9:16
+[4]        Node type: function_statement_or_null, text: begin
+    double_offset = offset_data(in) + 1;  // Chained function call
+  end, start: 10:2, end: 12:5
+[5]          Node type: function_statement, text: begin
+    double_offset = offset_data(in) + 1;  // Chained function call
+  end, start: 10:2, end: 12:5
+[6]            Node type: statement, text: begin
+    double_offset = offset_data(in) + 1;  // Chained function call
+  end, start: 10:2, end: 12:5
+[7]              Node type: statement_item, text: begin
+    double_offset = offset_data(in) + 1;  // Chained function call
+  end, start: 10:2, end: 12:5
+[8]                Node type: seq_block, text: begin
+    double_offset = offset_data(in) + 1;  // Chained function call
+  end, start: 10:2, end: 12:5
+[9]                  Node type: statement_or_null, text: double_offset = offset_data(in) + 1;, start: 11:4, end: 11:40
+[10]                    Node type: statement, text: double_offset = offset_data(in) + 1;, start: 11:4, end: 11:40
+[11]                      Node type: statement_item, text: double_offset = offset_data(in) + 1;, start: 11:4, end: 11:40
+[12]                        Node type: blocking_assignment, text: double_offset = offset_data(in) + 1, start: 11:4, end: 11:39
+[13]                          Node type: operator_assignment, text: double_offset = offset_data(in) + 1, start: 11:4, end: 11:39
+[14]                            Node type: variable_lvalue, text: double_offset, start: 11:4, end: 11:17
+[15]                              Node type: simple_identifier, text: double_offset, start: 11:4, end: 11:17
+[14]                            Node type: assignment_operator, text: =, start: 11:18, end: 11:19
+[14]                            Node type: expression, text: offset_data(in) + 1, start: 11:20, end: 11:39
+[15]                              Node type: expression, text: offset_data(in), start: 11:20, end: 11:35
+[16]                                Node type: primary, text: offset_data(in), start: 11:20, end: 11:35
+[17]                                  Node type: function_subroutine_call, text: offset_data(in), start: 11:20, end: 11:35
+[18]                                    Node type: subroutine_call, text: offset_data(in), start: 11:20, end: 11:35
+[19]                                      Node type: tf_call, text: offset_data(in), start: 11:20, end: 11:35
+[20]                                        Node type: simple_identifier, text: offset_data, start: 11:20, end: 11:31
+[20]                                        Node type: list_of_arguments_parent, text: (in), start: 11:31, end: 11:35
+[21]                                          Node type: expression, text: in, start: 11:32, end: 11:34
+[22]                                            Node type: primary, text: in, start: 11:32, end: 11:34
+[23]                                              Node type: simple_identifier, text: in, start: 11:32, end: 11:34
+[15]                              Node type: expression, text: 1, start: 11:38, end: 11:39
+[16]                                Node type: primary, text: 1, start: 11:38, end: 11:39
+[17]                                  Node type: primary_literal, text: 1, start: 11:38, end: 11:39
+[18]                                    Node type: integral_number, text: 1, start: 11:38, end: 11:39
+[19]                                      Node type: decimal_number, text: 1, start: 11:38, end: 11:39
+[20]                                        Node type: unsigned_number, text: 1, start: 11:38, end: 11:39
+[9]                  Node type: comment, text: // Chained function call, start: 11:42, end: 11:66
+[1]  Node type: comment, text: // Basic Verilog-style module (core DUT), start: 15:0, end: 15:40
+[1]  Node type: module_declaration, text: module counter (
+  input wire clk,
+  input wire rst,
+  input wire load,
+  input wire [3:0] data,
+  output reg [3:0] count
+);
+
+  // Always block
+  always @(posedge clk) begin
+    if (rst)
+      count <= 4'b0;  // Reset
+    else if (load)
+      count <= data;  // Load
+    else
+      count <= count + 1;  // Increment
+  end
+
+  // Immediate assertion (using $warning for compatibility, though not standard Verilog; simulators often support)
+  always @( * ) if (!(count <= 4'hF)) $warning("Count overflow");
+
+endmodule, start: 16:0, end: 37:9
+[2]    Node type: module_header, text: module counter, start: 16:0, end: 16:14
+[3]      Node type: module_keyword, text: module, start: 16:0, end: 16:6
+[3]      Node type: simple_identifier, text: counter, start: 16:7, end: 16:14
+[2]    Node type: module_ansi_header, text: (
+  input wire clk,
+  input wire rst,
+  input wire load,
+  input wire [3:0] data,
+  output reg [3:0] count
+), start: 16:15, end: 22:1
+[3]      Node type: list_of_port_declarations, text: (
+  input wire clk,
+  input wire rst,
+  input wire load,
+  input wire [3:0] data,
+  output reg [3:0] count
+), start: 16:15, end: 22:1
+[4]        Node type: ansi_port_declaration, text: input wire clk, start: 17:2, end: 17:16
+[5]          Node type: net_port_header1, text: input wire, start: 17:2, end: 17:12
+[6]            Node type: port_direction, text: input, start: 17:2, end: 17:7
+[6]            Node type: net_port_type1, text: wire, start: 17:8, end: 17:12
+[7]              Node type: net_type, text: wire, start: 17:8, end: 17:12
+[5]          Node type: port_identifier, text: clk, start: 17:13, end: 17:16
+[6]            Node type: simple_identifier, text: clk, start: 17:13, end: 17:16
+[4]        Node type: ansi_port_declaration, text: input wire rst, start: 18:2, end: 18:16
+[5]          Node type: net_port_header1, text: input wire, start: 18:2, end: 18:12
+[6]            Node type: port_direction, text: input, start: 18:2, end: 18:7
+[6]            Node type: net_port_type1, text: wire, start: 18:8, end: 18:12
+[7]              Node type: net_type, text: wire, start: 18:8, end: 18:12
+[5]          Node type: port_identifier, text: rst, start: 18:13, end: 18:16
+[6]            Node type: simple_identifier, text: rst, start: 18:13, end: 18:16
+[4]        Node type: ansi_port_declaration, text: input wire load, start: 19:2, end: 19:17
+[5]          Node type: net_port_header1, text: input wire, start: 19:2, end: 19:12
+[6]            Node type: port_direction, text: input, start: 19:2, end: 19:7
+[6]            Node type: net_port_type1, text: wire, start: 19:8, end: 19:12
+[7]              Node type: net_type, text: wire, start: 19:8, end: 19:12
+[5]          Node type: port_identifier, text: load, start: 19:13, end: 19:17
+[6]            Node type: simple_identifier, text: load, start: 19:13, end: 19:17
+[4]        Node type: ansi_port_declaration, text: input wire [3:0] data, start: 20:2, end: 20:23
+[5]          Node type: net_port_header1, text: input wire [3:0], start: 20:2, end: 20:18
+[6]            Node type: port_direction, text: input, start: 20:2, end: 20:7
+[6]            Node type: net_port_type1, text: wire [3:0], start: 20:8, end: 20:18
+[7]              Node type: net_type, text: wire, start: 20:8, end: 20:12
+[7]              Node type: data_type_or_implicit1, text: [3:0], start: 20:13, end: 20:18
+[8]                Node type: implicit_data_type1, text: [3:0], start: 20:13, end: 20:18
+[9]                  Node type: packed_dimension, text: [3:0], start: 20:13, end: 20:18
+[10]                    Node type: constant_range, text: 3:0, start: 20:14, end: 20:17
+[11]                      Node type: constant_expression, text: 3, start: 20:14, end: 20:15
+[12]                        Node type: constant_primary, text: 3, start: 20:14, end: 20:15
+[13]                          Node type: primary_literal, text: 3, start: 20:14, end: 20:15
+[14]                            Node type: integral_number, text: 3, start: 20:14, end: 20:15
+[15]                              Node type: decimal_number, text: 3, start: 20:14, end: 20:15
+[16]                                Node type: unsigned_number, text: 3, start: 20:14, end: 20:15
+[11]                      Node type: constant_expression, text: 0, start: 20:16, end: 20:17
+[12]                        Node type: constant_primary, text: 0, start: 20:16, end: 20:17
+[13]                          Node type: primary_literal, text: 0, start: 20:16, end: 20:17
+[14]                            Node type: integral_number, text: 0, start: 20:16, end: 20:17
+[15]                              Node type: decimal_number, text: 0, start: 20:16, end: 20:17
+[16]                                Node type: unsigned_number, text: 0, start: 20:16, end: 20:17
+[5]          Node type: port_identifier, text: data, start: 20:19, end: 20:23
+[6]            Node type: simple_identifier, text: data, start: 20:19, end: 20:23
+[4]        Node type: ansi_port_declaration, text: output reg [3:0] count, start: 21:2, end: 21:24
+[5]          Node type: variable_port_header, text: output reg [3:0], start: 21:2, end: 21:18
+[6]            Node type: port_direction, text: output, start: 21:2, end: 21:8
+[6]            Node type: data_type, text: reg [3:0], start: 21:9, end: 21:18
+[7]              Node type: integer_vector_type, text: reg, start: 21:9, end: 21:12
+[7]              Node type: packed_dimension, text: [3:0], start: 21:13, end: 21:18
+[8]                Node type: constant_range, text: 3:0, start: 21:14, end: 21:17
+[9]                  Node type: constant_expression, text: 3, start: 21:14, end: 21:15
+[10]                    Node type: constant_primary, text: 3, start: 21:14, end: 21:15
+[11]                      Node type: primary_literal, text: 3, start: 21:14, end: 21:15
+[12]                        Node type: integral_number, text: 3, start: 21:14, end: 21:15
+[13]                          Node type: decimal_number, text: 3, start: 21:14, end: 21:15
+[14]                            Node type: unsigned_number, text: 3, start: 21:14, end: 21:15
+[9]                  Node type: constant_expression, text: 0, start: 21:16, end: 21:17
+[10]                    Node type: constant_primary, text: 0, start: 21:16, end: 21:17
+[11]                      Node type: primary_literal, text: 0, start: 21:16, end: 21:17
+[12]                        Node type: integral_number, text: 0, start: 21:16, end: 21:17
+[13]                          Node type: decimal_number, text: 0, start: 21:16, end: 21:17
+[14]                            Node type: unsigned_number, text: 0, start: 21:16, end: 21:17
+[5]          Node type: port_identifier, text: count, start: 21:19, end: 21:24
+[6]            Node type: simple_identifier, text: count, start: 21:19, end: 21:24
+[2]    Node type: comment, text: // Always block, start: 24:2, end: 24:17
+[2]    Node type: module_or_generate_item, text: always @(posedge clk) begin
+    if (rst)
+      count <= 4'b0;  // Reset
+    else if (load)
+      count <= data;  // Load
+    else
+      count <= count + 1;  // Increment
+  end, start: 25:2, end: 32:5
+[3]      Node type: always_construct, text: always @(posedge clk) begin
+    if (rst)
+      count <= 4'b0;  // Reset
+    else if (load)
+      count <= data;  // Load
+    else
+      count <= count + 1;  // Increment
+  end, start: 25:2, end: 32:5
+[4]        Node type: always_keyword, text: always, start: 25:2, end: 25:8
+[4]        Node type: statement, text: @(posedge clk) begin
+    if (rst)
+      count <= 4'b0;  // Reset
+    else if (load)
+      count <= data;  // Load
+    else
+      count <= count + 1;  // Increment
+  end, start: 25:9, end: 32:5
+[5]          Node type: statement_item, text: @(posedge clk) begin
+    if (rst)
+      count <= 4'b0;  // Reset
+    else if (load)
+      count <= data;  // Load
+    else
+      count <= count + 1;  // Increment
+  end, start: 25:9, end: 32:5
+[6]            Node type: procedural_timing_control_statement, text: @(posedge clk) begin
+    if (rst)
+      count <= 4'b0;  // Reset
+    else if (load)
+      count <= data;  // Load
+    else
+      count <= count + 1;  // Increment
+  end, start: 25:9, end: 32:5
+[7]              Node type: event_control, text: @(posedge clk), start: 25:9, end: 25:23
+[8]                Node type: event_expression, text: posedge clk, start: 25:11, end: 25:22
+[9]                  Node type: edge_identifier, text: posedge, start: 25:11, end: 25:18
+[9]                  Node type: expression, text: clk, start: 25:19, end: 25:22
+[10]                    Node type: primary, text: clk, start: 25:19, end: 25:22
+[11]                      Node type: simple_identifier, text: clk, start: 25:19, end: 25:22
+[7]              Node type: statement_or_null, text: begin
+    if (rst)
+      count <= 4'b0;  // Reset
+    else if (load)
+      count <= data;  // Load
+    else
+      count <= count + 1;  // Increment
+  end, start: 25:24, end: 32:5
+[8]                Node type: statement, text: begin
+    if (rst)
+      count <= 4'b0;  // Reset
+    else if (load)
+      count <= data;  // Load
+    else
+      count <= count + 1;  // Increment
+  end, start: 25:24, end: 32:5
+[9]                  Node type: statement_item, text: begin
+    if (rst)
+      count <= 4'b0;  // Reset
+    else if (load)
+      count <= data;  // Load
+    else
+      count <= count + 1;  // Increment
+  end, start: 25:24, end: 32:5
+[10]                    Node type: seq_block, text: begin
+    if (rst)
+      count <= 4'b0;  // Reset
+    else if (load)
+      count <= data;  // Load
+    else
+      count <= count + 1;  // Increment
+  end, start: 25:24, end: 32:5
+[11]                      Node type: statement_or_null, text: if (rst)
+      count <= 4'b0;  // Reset
+    else if (load)
+      count <= data;  // Load
+    else
+      count <= count + 1;, start: 26:4, end: 31:25
+[12]                        Node type: statement, text: if (rst)
+      count <= 4'b0;  // Reset
+    else if (load)
+      count <= data;  // Load
+    else
+      count <= count + 1;, start: 26:4, end: 31:25
+[13]                          Node type: statement_item, text: if (rst)
+      count <= 4'b0;  // Reset
+    else if (load)
+      count <= data;  // Load
+    else
+      count <= count + 1;, start: 26:4, end: 31:25
+[14]                            Node type: conditional_statement, text: if (rst)
+      count <= 4'b0;  // Reset
+    else if (load)
+      count <= data;  // Load
+    else
+      count <= count + 1;, start: 26:4, end: 31:25
+[15]                              Node type: cond_predicate, text: rst, start: 26:8, end: 26:11
+[16]                                Node type: expression, text: rst, start: 26:8, end: 26:11
+[17]                                  Node type: primary, text: rst, start: 26:8, end: 26:11
+[18]                                    Node type: simple_identifier, text: rst, start: 26:8, end: 26:11
+[15]                              Node type: statement_or_null, text: count <= 4'b0;, start: 27:6, end: 27:20
+[16]                                Node type: statement, text: count <= 4'b0;, start: 27:6, end: 27:20
+[17]                                  Node type: statement_item, text: count <= 4'b0;, start: 27:6, end: 27:20
+[18]                                    Node type: nonblocking_assignment, text: count <= 4'b0, start: 27:6, end: 27:19
+[19]                                      Node type: variable_lvalue, text: count, start: 27:6, end: 27:11
+[20]                                        Node type: simple_identifier, text: count, start: 27:6, end: 27:11
+[19]                                      Node type: expression, text: 4'b0, start: 27:15, end: 27:19
+[20]                                        Node type: primary, text: 4'b0, start: 27:15, end: 27:19
+[21]                                          Node type: primary_literal, text: 4'b0, start: 27:15, end: 27:19
+[22]                                            Node type: integral_number, text: 4'b0, start: 27:15, end: 27:19
+[23]                                              Node type: binary_number, text: 4'b0, start: 27:15, end: 27:19
+[15]                              Node type: comment, text: // Reset, start: 27:22, end: 27:30
+[15]                              Node type: statement_or_null, text: if (load)
+      count <= data;  // Load
+    else
+      count <= count + 1;, start: 28:9, end: 31:25
+[16]                                Node type: statement, text: if (load)
+      count <= data;  // Load
+    else
+      count <= count + 1;, start: 28:9, end: 31:25
+[17]                                  Node type: statement_item, text: if (load)
+      count <= data;  // Load
+    else
+      count <= count + 1;, start: 28:9, end: 31:25
+[18]                                    Node type: conditional_statement, text: if (load)
+      count <= data;  // Load
+    else
+      count <= count + 1;, start: 28:9, end: 31:25
+[19]                                      Node type: cond_predicate, text: load, start: 28:13, end: 28:17
+[20]                                        Node type: expression, text: load, start: 28:13, end: 28:17
+[21]                                          Node type: primary, text: load, start: 28:13, end: 28:17
+[22]                                            Node type: simple_identifier, text: load, start: 28:13, end: 28:17
+[19]                                      Node type: statement_or_null, text: count <= data;, start: 29:6, end: 29:20
+[20]                                        Node type: statement, text: count <= data;, start: 29:6, end: 29:20
+[21]                                          Node type: statement_item, text: count <= data;, start: 29:6, end: 29:20
+[22]                                            Node type: nonblocking_assignment, text: count <= data, start: 29:6, end: 29:19
+[23]                                              Node type: variable_lvalue, text: count, start: 29:6, end: 29:11
+[24]                                                Node type: simple_identifier, text: count, start: 29:6, end: 29:11
+[23]                                              Node type: expression, text: data, start: 29:15, end: 29:19
+[24]                                                Node type: primary, text: data, start: 29:15, end: 29:19
+[25]                                                  Node type: simple_identifier, text: data, start: 29:15, end: 29:19
+[19]                                      Node type: comment, text: // Load, start: 29:22, end: 29:29
+[19]                                      Node type: statement_or_null, text: count <= count + 1;, start: 31:6, end: 31:25
+[20]                                        Node type: statement, text: count <= count + 1;, start: 31:6, end: 31:25
+[21]                                          Node type: statement_item, text: count <= count + 1;, start: 31:6, end: 31:25
+[22]                                            Node type: nonblocking_assignment, text: count <= count + 1, start: 31:6, end: 31:24
+[23]                                              Node type: variable_lvalue, text: count, start: 31:6, end: 31:11
+[24]                                                Node type: simple_identifier, text: count, start: 31:6, end: 31:11
+[23]                                              Node type: expression, text: count + 1, start: 31:15, end: 31:24
+[24]                                                Node type: expression, text: count, start: 31:15, end: 31:20
+[25]                                                  Node type: primary, text: count, start: 31:15, end: 31:20
+[26]                                                    Node type: simple_identifier, text: count, start: 31:15, end: 31:20
+[24]                                                Node type: expression, text: 1, start: 31:23, end: 31:24
+[25]                                                  Node type: primary, text: 1, start: 31:23, end: 31:24
+[26]                                                    Node type: primary_literal, text: 1, start: 31:23, end: 31:24
+[27]                                                      Node type: integral_number, text: 1, start: 31:23, end: 31:24
+[28]                                                        Node type: decimal_number, text: 1, start: 31:23, end: 31:24
+[29]                                                          Node type: unsigned_number, text: 1, start: 31:23, end: 31:24
+[11]                      Node type: comment, text: // Increment, start: 31:27, end: 31:39
+[2]    Node type: comment, text: // Immediate assertion (using $warning for compatibility, though not standard Verilog; simulators often support), start: 34:2, end: 34:114
+[2]    Node type: module_or_generate_item, text: always @( * ) if (!(count <= 4'hF)) $warning("Count overflow");, start: 35:2, end: 35:65
+[3]      Node type: always_construct, text: always @( * ) if (!(count <= 4'hF)) $warning("Count overflow");, start: 35:2, end: 35:65
+[4]        Node type: always_keyword, text: always, start: 35:2, end: 35:8
+[4]        Node type: statement, text: @( * ) if (!(count <= 4'hF)) $warning("Count overflow");, start: 35:9, end: 35:65
+[5]          Node type: statement_item, text: @( * ) if (!(count <= 4'hF)) $warning("Count overflow");, start: 35:9, end: 35:65
+[6]            Node type: procedural_timing_control_statement, text: @( * ) if (!(count <= 4'hF)) $warning("Count overflow");, start: 35:9, end: 35:65
+[7]              Node type: event_control, text: @( * ), start: 35:9, end: 35:15
+[7]              Node type: statement_or_null, text: if (!(count <= 4'hF)) $warning("Count overflow");, start: 35:16, end: 35:65
+[8]                Node type: statement, text: if (!(count <= 4'hF)) $warning("Count overflow");, start: 35:16, end: 35:65
+[9]                  Node type: statement_item, text: if (!(count <= 4'hF)) $warning("Count overflow");, start: 35:16, end: 35:65
+[10]                    Node type: conditional_statement, text: if (!(count <= 4'hF)) $warning("Count overflow");, start: 35:16, end: 35:65
+[11]                      Node type: cond_predicate, text: !(count <= 4'hF), start: 35:20, end: 35:36
+[12]                        Node type: expression, text: !(count <= 4'hF), start: 35:20, end: 35:36
+[13]                          Node type: unary_operator, text: !, start: 35:20, end: 35:21
+[13]                          Node type: primary, text: (count <= 4'hF), start: 35:21, end: 35:36
+[14]                            Node type: mintypmax_expression, text: count <= 4'hF, start: 35:22, end: 35:35
+[15]                              Node type: expression, text: count <= 4'hF, start: 35:22, end: 35:35
+[16]                                Node type: expression, text: count, start: 35:22, end: 35:27
+[17]                                  Node type: primary, text: count, start: 35:22, end: 35:27
+[18]                                    Node type: simple_identifier, text: count, start: 35:22, end: 35:27
+[16]                                Node type: expression, text: 4'hF, start: 35:31, end: 35:35
+[17]                                  Node type: primary, text: 4'hF, start: 35:31, end: 35:35
+[18]                                    Node type: primary_literal, text: 4'hF, start: 35:31, end: 35:35
+[19]                                      Node type: integral_number, text: 4'hF, start: 35:31, end: 35:35
+[20]                                        Node type: hex_number, text: 4'hF, start: 35:31, end: 35:35
+[11]                      Node type: statement_or_null, text: $warning("Count overflow");, start: 35:38, end: 35:65
+[12]                        Node type: statement, text: $warning("Count overflow");, start: 35:38, end: 35:65
+[13]                          Node type: statement_item, text: $warning("Count overflow");, start: 35:38, end: 35:65
+[14]                            Node type: system_tf_call, text: $warning("Count overflow"), start: 35:38, end: 35:64
+[15]                              Node type: system_tf_identifier, text: $warning, start: 35:38, end: 35:46
+[15]                              Node type: list_of_arguments_parent, text: ("Count overflow"), start: 35:46, end: 35:64
+[16]                                Node type: expression, text: "Count overflow", start: 35:47, end: 35:63
+[17]                                  Node type: primary, text: "Count overflow", start: 35:47, end: 35:63
+[18]                                    Node type: primary_literal, text: "Count overflow", start: 35:47, end: 35:63
+[19]                                      Node type: string_literal, text: "Count overflow", start: 35:47, end: 35:63
+[1]  Node type: comment, text: // Additional layer: Counter cell with `celldefine` for cell definition, start: 39:0, end: 39:71
+[1]  Node type: zero_directive, text: `celldefine, start: 40:0, end: 40:11
+[1]  Node type: module_declaration, text: module counter_cell (
+  input wire clk,
+  input wire rst,
+  input wire load,
+  input wire [3:0] data,
+  output wire [3:0] count
+);
+
+  // Instantiate with all named connections, including function call
+  counter dut (
+    .clk(clk),
+    .rst(rst),
+    .load(load),
+    .data(double_offset(data)),  // Function call in port connection
+    .count(count)
+  );
+
+endmodule, start: 41:0, end: 58:9
+[2]    Node type: module_header, text: module counter_cell, start: 41:0, end: 41:19
+[3]      Node type: module_keyword, text: module, start: 41:0, end: 41:6
+[3]      Node type: simple_identifier, text: counter_cell, start: 41:7, end: 41:19
+[2]    Node type: module_ansi_header, text: (
+  input wire clk,
+  input wire rst,
+  input wire load,
+  input wire [3:0] data,
+  output wire [3:0] count
+), start: 41:20, end: 47:1
+[3]      Node type: list_of_port_declarations, text: (
+  input wire clk,
+  input wire rst,
+  input wire load,
+  input wire [3:0] data,
+  output wire [3:0] count
+), start: 41:20, end: 47:1
+[4]        Node type: ansi_port_declaration, text: input wire clk, start: 42:2, end: 42:16
+[5]          Node type: net_port_header1, text: input wire, start: 42:2, end: 42:12
+[6]            Node type: port_direction, text: input, start: 42:2, end: 42:7
+[6]            Node type: net_port_type1, text: wire, start: 42:8, end: 42:12
+[7]              Node type: net_type, text: wire, start: 42:8, end: 42:12
+[5]          Node type: port_identifier, text: clk, start: 42:13, end: 42:16
+[6]            Node type: simple_identifier, text: clk, start: 42:13, end: 42:16
+[4]        Node type: ansi_port_declaration, text: input wire rst, start: 43:2, end: 43:16
+[5]          Node type: net_port_header1, text: input wire, start: 43:2, end: 43:12
+[6]            Node type: port_direction, text: input, start: 43:2, end: 43:7
+[6]            Node type: net_port_type1, text: wire, start: 43:8, end: 43:12
+[7]              Node type: net_type, text: wire, start: 43:8, end: 43:12
+[5]          Node type: port_identifier, text: rst, start: 43:13, end: 43:16
+[6]            Node type: simple_identifier, text: rst, start: 43:13, end: 43:16
+[4]        Node type: ansi_port_declaration, text: input wire load, start: 44:2, end: 44:17
+[5]          Node type: net_port_header1, text: input wire, start: 44:2, end: 44:12
+[6]            Node type: port_direction, text: input, start: 44:2, end: 44:7
+[6]            Node type: net_port_type1, text: wire, start: 44:8, end: 44:12
+[7]              Node type: net_type, text: wire, start: 44:8, end: 44:12
+[5]          Node type: port_identifier, text: load, start: 44:13, end: 44:17
+[6]            Node type: simple_identifier, text: load, start: 44:13, end: 44:17
+[4]        Node type: ansi_port_declaration, text: input wire [3:0] data, start: 45:2, end: 45:23
+[5]          Node type: net_port_header1, text: input wire [3:0], start: 45:2, end: 45:18
+[6]            Node type: port_direction, text: input, start: 45:2, end: 45:7
+[6]            Node type: net_port_type1, text: wire [3:0], start: 45:8, end: 45:18
+[7]              Node type: net_type, text: wire, start: 45:8, end: 45:12
+[7]              Node type: data_type_or_implicit1, text: [3:0], start: 45:13, end: 45:18
+[8]                Node type: implicit_data_type1, text: [3:0], start: 45:13, end: 45:18
+[9]                  Node type: packed_dimension, text: [3:0], start: 45:13, end: 45:18
+[10]                    Node type: constant_range, text: 3:0, start: 45:14, end: 45:17
+[11]                      Node type: constant_expression, text: 3, start: 45:14, end: 45:15
+[12]                        Node type: constant_primary, text: 3, start: 45:14, end: 45:15
+[13]                          Node type: primary_literal, text: 3, start: 45:14, end: 45:15
+[14]                            Node type: integral_number, text: 3, start: 45:14, end: 45:15
+[15]                              Node type: decimal_number, text: 3, start: 45:14, end: 45:15
+[16]                                Node type: unsigned_number, text: 3, start: 45:14, end: 45:15
+[11]                      Node type: constant_expression, text: 0, start: 45:16, end: 45:17
+[12]                        Node type: constant_primary, text: 0, start: 45:16, end: 45:17
+[13]                          Node type: primary_literal, text: 0, start: 45:16, end: 45:17
+[14]                            Node type: integral_number, text: 0, start: 45:16, end: 45:17
+[15]                              Node type: decimal_number, text: 0, start: 45:16, end: 45:17
+[16]                                Node type: unsigned_number, text: 0, start: 45:16, end: 45:17
+[5]          Node type: port_identifier, text: data, start: 45:19, end: 45:23
+[6]            Node type: simple_identifier, text: data, start: 45:19, end: 45:23
+[4]        Node type: ansi_port_declaration, text: output wire [3:0] count, start: 46:2, end: 46:25
+[5]          Node type: net_port_header1, text: output wire [3:0], start: 46:2, end: 46:19
+[6]            Node type: port_direction, text: output, start: 46:2, end: 46:8
+[6]            Node type: net_port_type1, text: wire [3:0], start: 46:9, end: 46:19
+[7]              Node type: net_type, text: wire, start: 46:9, end: 46:13
+[7]              Node type: data_type_or_implicit1, text: [3:0], start: 46:14, end: 46:19
+[8]                Node type: implicit_data_type1, text: [3:0], start: 46:14, end: 46:19
+[9]                  Node type: packed_dimension, text: [3:0], start: 46:14, end: 46:19
+[10]                    Node type: constant_range, text: 3:0, start: 46:15, end: 46:18
+[11]                      Node type: constant_expression, text: 3, start: 46:15, end: 46:16
+[12]                        Node type: constant_primary, text: 3, start: 46:15, end: 46:16
+[13]                          Node type: primary_literal, text: 3, start: 46:15, end: 46:16
+[14]                            Node type: integral_number, text: 3, start: 46:15, end: 46:16
+[15]                              Node type: decimal_number, text: 3, start: 46:15, end: 46:16
+[16]                                Node type: unsigned_number, text: 3, start: 46:15, end: 46:16
+[11]                      Node type: constant_expression, text: 0, start: 46:17, end: 46:18
+[12]                        Node type: constant_primary, text: 0, start: 46:17, end: 46:18
+[13]                          Node type: primary_literal, text: 0, start: 46:17, end: 46:18
+[14]                            Node type: integral_number, text: 0, start: 46:17, end: 46:18
+[15]                              Node type: decimal_number, text: 0, start: 46:17, end: 46:18
+[16]                                Node type: unsigned_number, text: 0, start: 46:17, end: 46:18
+[5]          Node type: port_identifier, text: count, start: 46:20, end: 46:25
+[6]            Node type: simple_identifier, text: count, start: 46:20, end: 46:25
+[2]    Node type: comment, text: // Instantiate with all named connections, including function call, start: 49:2, end: 49:68
+[2]    Node type: module_or_generate_item, text: counter dut (
+    .clk(clk),
+    .rst(rst),
+    .load(load),
+    .data(double_offset(data)),  // Function call in port connection
+    .count(count)
+  );, start: 50:2, end: 56:4
+[3]      Node type: module_instantiation, text: counter dut (
+    .clk(clk),
+    .rst(rst),
+    .load(load),
+    .data(double_offset(data)),  // Function call in port connection
+    .count(count)
+  );, start: 50:2, end: 56:4
+[4]        Node type: simple_identifier, text: counter, start: 50:2, end: 50:9
+[4]        Node type: hierarchical_instance, text: dut (
+    .clk(clk),
+    .rst(rst),
+    .load(load),
+    .data(double_offset(data)),  // Function call in port connection
+    .count(count)
+  ), start: 50:10, end: 56:3
+[5]          Node type: name_of_instance, text: dut, start: 50:10, end: 50:13
+[6]            Node type: instance_identifier, text: dut, start: 50:10, end: 50:13
+[7]              Node type: simple_identifier, text: dut, start: 50:10, end: 50:13
+[5]          Node type: list_of_port_connections, text: .clk(clk),
+    .rst(rst),
+    .load(load),
+    .data(double_offset(data)),  // Function call in port connection
+    .count(count), start: 51:4, end: 55:17
+[6]            Node type: named_port_connection, text: .clk(clk), start: 51:4, end: 51:13
+[7]              Node type: port_identifier, text: clk, start: 51:5, end: 51:8
+[8]                Node type: simple_identifier, text: clk, start: 51:5, end: 51:8
+[7]              Node type: expression, text: clk, start: 51:9, end: 51:12
+[8]                Node type: primary, text: clk, start: 51:9, end: 51:12
+[9]                  Node type: simple_identifier, text: clk, start: 51:9, end: 51:12
+[6]            Node type: named_port_connection, text: .rst(rst), start: 52:4, end: 52:13
+[7]              Node type: port_identifier, text: rst, start: 52:5, end: 52:8
+[8]                Node type: simple_identifier, text: rst, start: 52:5, end: 52:8
+[7]              Node type: expression, text: rst, start: 52:9, end: 52:12
+[8]                Node type: primary, text: rst, start: 52:9, end: 52:12
+[9]                  Node type: simple_identifier, text: rst, start: 52:9, end: 52:12
+[6]            Node type: named_port_connection, text: .load(load), start: 53:4, end: 53:15
+[7]              Node type: port_identifier, text: load, start: 53:5, end: 53:9
+[8]                Node type: simple_identifier, text: load, start: 53:5, end: 53:9
+[7]              Node type: expression, text: load, start: 53:10, end: 53:14
+[8]                Node type: primary, text: load, start: 53:10, end: 53:14
+[9]                  Node type: simple_identifier, text: load, start: 53:10, end: 53:14
+[6]            Node type: named_port_connection, text: .data(double_offset(data)), start: 54:4, end: 54:30
+[7]              Node type: port_identifier, text: data, start: 54:5, end: 54:9
+[8]                Node type: simple_identifier, text: data, start: 54:5, end: 54:9
+[7]              Node type: expression, text: double_offset(data), start: 54:10, end: 54:29
+[8]                Node type: primary, text: double_offset(data), start: 54:10, end: 54:29
+[9]                  Node type: function_subroutine_call, text: double_offset(data), start: 54:10, end: 54:29
+[10]                    Node type: subroutine_call, text: double_offset(data), start: 54:10, end: 54:29
+[11]                      Node type: tf_call, text: double_offset(data), start: 54:10, end: 54:29
+[12]                        Node type: simple_identifier, text: double_offset, start: 54:10, end: 54:23
+[12]                        Node type: list_of_arguments_parent, text: (data), start: 54:23, end: 54:29
+[13]                          Node type: expression, text: data, start: 54:24, end: 54:28
+[14]                            Node type: primary, text: data, start: 54:24, end: 54:28
+[15]                              Node type: simple_identifier, text: data, start: 54:24, end: 54:28
+[6]            Node type: comment, text: // Function call in port connection, start: 54:33, end: 54:68
+[6]            Node type: named_port_connection, text: .count(count), start: 55:4, end: 55:17
+[7]              Node type: port_identifier, text: count, start: 55:5, end: 55:10
+[8]                Node type: simple_identifier, text: count, start: 55:5, end: 55:10
+[7]              Node type: expression, text: count, start: 55:11, end: 55:16
+[8]                Node type: primary, text: count, start: 55:11, end: 55:16
+[9]                  Node type: simple_identifier, text: count, start: 55:11, end: 55:16
+[1]  Node type: zero_directive, text: `endcelldefine, start: 59:0, end: 59:14
+[1]  Node type: comment, text: // Additional layer: Wrapper module around counter_cell, start: 61:0, end: 61:55
+[1]  Node type: module_declaration, text: module counter_wrapper (
+  input wire clk,
+  input wire rst,
+  input wire load,
+  input wire [3:0] data,
+  output wire [3:0] count
+);
+
+  // Instantiate counter_cell with named connections
+  counter_cell ccell (
+    .clk(clk),
+    .rst(rst),
+    .load(load),
+    .data(data),
+    .count(count)
+  );
+
+endmodule, start: 62:0, end: 79:9
+[2]    Node type: module_header, text: module counter_wrapper, start: 62:0, end: 62:22
+[3]      Node type: module_keyword, text: module, start: 62:0, end: 62:6
+[3]      Node type: simple_identifier, text: counter_wrapper, start: 62:7, end: 62:22
+[2]    Node type: module_ansi_header, text: (
+  input wire clk,
+  input wire rst,
+  input wire load,
+  input wire [3:0] data,
+  output wire [3:0] count
+), start: 62:23, end: 68:1
+[3]      Node type: list_of_port_declarations, text: (
+  input wire clk,
+  input wire rst,
+  input wire load,
+  input wire [3:0] data,
+  output wire [3:0] count
+), start: 62:23, end: 68:1
+[4]        Node type: ansi_port_declaration, text: input wire clk, start: 63:2, end: 63:16
+[5]          Node type: net_port_header1, text: input wire, start: 63:2, end: 63:12
+[6]            Node type: port_direction, text: input, start: 63:2, end: 63:7
+[6]            Node type: net_port_type1, text: wire, start: 63:8, end: 63:12
+[7]              Node type: net_type, text: wire, start: 63:8, end: 63:12
+[5]          Node type: port_identifier, text: clk, start: 63:13, end: 63:16
+[6]            Node type: simple_identifier, text: clk, start: 63:13, end: 63:16
+[4]        Node type: ansi_port_declaration, text: input wire rst, start: 64:2, end: 64:16
+[5]          Node type: net_port_header1, text: input wire, start: 64:2, end: 64:12
+[6]            Node type: port_direction, text: input, start: 64:2, end: 64:7
+[6]            Node type: net_port_type1, text: wire, start: 64:8, end: 64:12
+[7]              Node type: net_type, text: wire, start: 64:8, end: 64:12
+[5]          Node type: port_identifier, text: rst, start: 64:13, end: 64:16
+[6]            Node type: simple_identifier, text: rst, start: 64:13, end: 64:16
+[4]        Node type: ansi_port_declaration, text: input wire load, start: 65:2, end: 65:17
+[5]          Node type: net_port_header1, text: input wire, start: 65:2, end: 65:12
+[6]            Node type: port_direction, text: input, start: 65:2, end: 65:7
+[6]            Node type: net_port_type1, text: wire, start: 65:8, end: 65:12
+[7]              Node type: net_type, text: wire, start: 65:8, end: 65:12
+[5]          Node type: port_identifier, text: load, start: 65:13, end: 65:17
+[6]            Node type: simple_identifier, text: load, start: 65:13, end: 65:17
+[4]        Node type: ansi_port_declaration, text: input wire [3:0] data, start: 66:2, end: 66:23
+[5]          Node type: net_port_header1, text: input wire [3:0], start: 66:2, end: 66:18
+[6]            Node type: port_direction, text: input, start: 66:2, end: 66:7
+[6]            Node type: net_port_type1, text: wire [3:0], start: 66:8, end: 66:18
+[7]              Node type: net_type, text: wire, start: 66:8, end: 66:12
+[7]              Node type: data_type_or_implicit1, text: [3:0], start: 66:13, end: 66:18
+[8]                Node type: implicit_data_type1, text: [3:0], start: 66:13, end: 66:18
+[9]                  Node type: packed_dimension, text: [3:0], start: 66:13, end: 66:18
+[10]                    Node type: constant_range, text: 3:0, start: 66:14, end: 66:17
+[11]                      Node type: constant_expression, text: 3, start: 66:14, end: 66:15
+[12]                        Node type: constant_primary, text: 3, start: 66:14, end: 66:15
+[13]                          Node type: primary_literal, text: 3, start: 66:14, end: 66:15
+[14]                            Node type: integral_number, text: 3, start: 66:14, end: 66:15
+[15]                              Node type: decimal_number, text: 3, start: 66:14, end: 66:15
+[16]                                Node type: unsigned_number, text: 3, start: 66:14, end: 66:15
+[11]                      Node type: constant_expression, text: 0, start: 66:16, end: 66:17
+[12]                        Node type: constant_primary, text: 0, start: 66:16, end: 66:17
+[13]                          Node type: primary_literal, text: 0, start: 66:16, end: 66:17
+[14]                            Node type: integral_number, text: 0, start: 66:16, end: 66:17
+[15]                              Node type: decimal_number, text: 0, start: 66:16, end: 66:17
+[16]                                Node type: unsigned_number, text: 0, start: 66:16, end: 66:17
+[5]          Node type: port_identifier, text: data, start: 66:19, end: 66:23
+[6]            Node type: simple_identifier, text: data, start: 66:19, end: 66:23
+[4]        Node type: ansi_port_declaration, text: output wire [3:0] count, start: 67:2, end: 67:25
+[5]          Node type: net_port_header1, text: output wire [3:0], start: 67:2, end: 67:19
+[6]            Node type: port_direction, text: output, start: 67:2, end: 67:8
+[6]            Node type: net_port_type1, text: wire [3:0], start: 67:9, end: 67:19
+[7]              Node type: net_type, text: wire, start: 67:9, end: 67:13
+[7]              Node type: data_type_or_implicit1, text: [3:0], start: 67:14, end: 67:19
+[8]                Node type: implicit_data_type1, text: [3:0], start: 67:14, end: 67:19
+[9]                  Node type: packed_dimension, text: [3:0], start: 67:14, end: 67:19
+[10]                    Node type: constant_range, text: 3:0, start: 67:15, end: 67:18
+[11]                      Node type: constant_expression, text: 3, start: 67:15, end: 67:16
+[12]                        Node type: constant_primary, text: 3, start: 67:15, end: 67:16
+[13]                          Node type: primary_literal, text: 3, start: 67:15, end: 67:16
+[14]                            Node type: integral_number, text: 3, start: 67:15, end: 67:16
+[15]                              Node type: decimal_number, text: 3, start: 67:15, end: 67:16
+[16]                                Node type: unsigned_number, text: 3, start: 67:15, end: 67:16
+[11]                      Node type: constant_expression, text: 0, start: 67:17, end: 67:18
+[12]                        Node type: constant_primary, text: 0, start: 67:17, end: 67:18
+[13]                          Node type: primary_literal, text: 0, start: 67:17, end: 67:18
+[14]                            Node type: integral_number, text: 0, start: 67:17, end: 67:18
+[15]                              Node type: decimal_number, text: 0, start: 67:17, end: 67:18
+[16]                                Node type: unsigned_number, text: 0, start: 67:17, end: 67:18
+[5]          Node type: port_identifier, text: count, start: 67:20, end: 67:25
+[6]            Node type: simple_identifier, text: count, start: 67:20, end: 67:25
+[2]    Node type: comment, text: // Instantiate counter_cell with named connections, start: 70:2, end: 70:52
+[2]    Node type: module_or_generate_item, text: counter_cell ccell (
+    .clk(clk),
+    .rst(rst),
+    .load(load),
+    .data(data),
+    .count(count)
+  );, start: 71:2, end: 77:4
+[3]      Node type: module_instantiation, text: counter_cell ccell (
+    .clk(clk),
+    .rst(rst),
+    .load(load),
+    .data(data),
+    .count(count)
+  );, start: 71:2, end: 77:4
+[4]        Node type: simple_identifier, text: counter_cell, start: 71:2, end: 71:14
+[4]        Node type: hierarchical_instance, text: ccell (
+    .clk(clk),
+    .rst(rst),
+    .load(load),
+    .data(data),
+    .count(count)
+  ), start: 71:15, end: 77:3
+[5]          Node type: name_of_instance, text: ccell, start: 71:15, end: 71:20
+[6]            Node type: instance_identifier, text: ccell, start: 71:15, end: 71:20
+[7]              Node type: simple_identifier, text: ccell, start: 71:15, end: 71:20
+[5]          Node type: list_of_port_connections, text: .clk(clk),
+    .rst(rst),
+    .load(load),
+    .data(data),
+    .count(count), start: 72:4, end: 76:17
+[6]            Node type: named_port_connection, text: .clk(clk), start: 72:4, end: 72:13
+[7]              Node type: port_identifier, text: clk, start: 72:5, end: 72:8
+[8]                Node type: simple_identifier, text: clk, start: 72:5, end: 72:8
+[7]              Node type: expression, text: clk, start: 72:9, end: 72:12
+[8]                Node type: primary, text: clk, start: 72:9, end: 72:12
+[9]                  Node type: simple_identifier, text: clk, start: 72:9, end: 72:12
+[6]            Node type: named_port_connection, text: .rst(rst), start: 73:4, end: 73:13
+[7]              Node type: port_identifier, text: rst, start: 73:5, end: 73:8
+[8]                Node type: simple_identifier, text: rst, start: 73:5, end: 73:8
+[7]              Node type: expression, text: rst, start: 73:9, end: 73:12
+[8]                Node type: primary, text: rst, start: 73:9, end: 73:12
+[9]                  Node type: simple_identifier, text: rst, start: 73:9, end: 73:12
+[6]            Node type: named_port_connection, text: .load(load), start: 74:4, end: 74:15
+[7]              Node type: port_identifier, text: load, start: 74:5, end: 74:9
+[8]                Node type: simple_identifier, text: load, start: 74:5, end: 74:9
+[7]              Node type: expression, text: load, start: 74:10, end: 74:14
+[8]                Node type: primary, text: load, start: 74:10, end: 74:14
+[9]                  Node type: simple_identifier, text: load, start: 74:10, end: 74:14
+[6]            Node type: named_port_connection, text: .data(data), start: 75:4, end: 75:15
+[7]              Node type: port_identifier, text: data, start: 75:5, end: 75:9
+[8]                Node type: simple_identifier, text: data, start: 75:5, end: 75:9
+[7]              Node type: expression, text: data, start: 75:10, end: 75:14
+[8]                Node type: primary, text: data, start: 75:10, end: 75:14
+[9]                  Node type: simple_identifier, text: data, start: 75:10, end: 75:14
+[6]            Node type: named_port_connection, text: .count(count), start: 76:4, end: 76:17
+[7]              Node type: port_identifier, text: count, start: 76:5, end: 76:10
+[8]                Node type: simple_identifier, text: count, start: 76:5, end: 76:10
+[7]              Node type: expression, text: count, start: 76:11, end: 76:16
+[8]                Node type: primary, text: count, start: 76:11, end: 76:16
+[9]                  Node type: simple_identifier, text: count, start: 76:11, end: 76:16
+[1]  Node type: comment, text: // Middle layer: Multi-counter with generate for loop, start: 81:0, end: 81:53
+[1]  Node type: module_declaration, text: module multi_counter #(
+  parameter NUM_COUNTERS = 2
+) (
+  input wire clk,
+  input wire rst,
+  input wire load,
+  input wire [3:0] data,
+  output wire [3:0] count
+);
+
+  // Internal buses
+  wire [NUM_COUNTERS-1:0] internal_load;
+  wire [3:0] internal_data [NUM_COUNTERS-1:0];
+  wire [3:0] internal_count [NUM_COUNTERS-1:0];
+
+  assign internal_load = { { (NUM_COUNTERS-1) {1'b0} } , load };  // Fan out for demo
+
+  generate
+    for (genvar k = 0; k < NUM_COUNTERS; k = k + 1) begin : gen_assigns
+      assign internal_data[k] = (k == 0) ? data : '0;
+    end
+  endgenerate
+
+  assign count = internal_count[0];
+
+  // Generate with for loop for instantiating modules
+  generate
+    for (genvar i = 0; i < NUM_COUNTERS; i = i + 1) begin : gen_wrappers
+      counter_wrapper wrp (
+        .clk(clk),
+        .rst(rst),
+        .load(internal_load[i]),
+        .data(offset_data(internal_data[i])),  // Function call
+        .count(internal_count[i])
+      );
+    end
+  endgenerate
+
+endmodule, start: 82:0, end: 120:9
+[2]    Node type: module_header, text: module multi_counter, start: 82:0, end: 82:20
+[3]      Node type: module_keyword, text: module, start: 82:0, end: 82:6
+[3]      Node type: simple_identifier, text: multi_counter, start: 82:7, end: 82:20
+[2]    Node type: module_ansi_header, text: #(
+  parameter NUM_COUNTERS = 2
+) (
+  input wire clk,
+  input wire rst,
+  input wire load,
+  input wire [3:0] data,
+  output wire [3:0] count
+), start: 82:21, end: 90:1
+[3]      Node type: parameter_port_list, text: #(
+  parameter NUM_COUNTERS = 2
+), start: 82:21, end: 84:1
+[4]        Node type: parameter_port_declaration, text: parameter NUM_COUNTERS = 2, start: 83:2, end: 83:28
+[5]          Node type: parameter_declaration, text: parameter NUM_COUNTERS = 2, start: 83:2, end: 83:28
+[6]            Node type: list_of_param_assignments, text: NUM_COUNTERS = 2, start: 83:12, end: 83:28
+[7]              Node type: param_assignment, text: NUM_COUNTERS = 2, start: 83:12, end: 83:28
+[8]                Node type: parameter_identifier, text: NUM_COUNTERS, start: 83:12, end: 83:24
+[9]                  Node type: simple_identifier, text: NUM_COUNTERS, start: 83:12, end: 83:24
+[8]                Node type: constant_param_expression, text: 2, start: 83:27, end: 83:28
+[9]                  Node type: constant_mintypmax_expression, text: 2, start: 83:27, end: 83:28
+[10]                    Node type: constant_expression, text: 2, start: 83:27, end: 83:28
+[11]                      Node type: constant_primary, text: 2, start: 83:27, end: 83:28
+[12]                        Node type: primary_literal, text: 2, start: 83:27, end: 83:28
+[13]                          Node type: integral_number, text: 2, start: 83:27, end: 83:28
+[14]                            Node type: decimal_number, text: 2, start: 83:27, end: 83:28
+[15]                              Node type: unsigned_number, text: 2, start: 83:27, end: 83:28
+[3]      Node type: list_of_port_declarations, text: (
+  input wire clk,
+  input wire rst,
+  input wire load,
+  input wire [3:0] data,
+  output wire [3:0] count
+), start: 84:2, end: 90:1
+[4]        Node type: ansi_port_declaration, text: input wire clk, start: 85:2, end: 85:16
+[5]          Node type: net_port_header1, text: input wire, start: 85:2, end: 85:12
+[6]            Node type: port_direction, text: input, start: 85:2, end: 85:7
+[6]            Node type: net_port_type1, text: wire, start: 85:8, end: 85:12
+[7]              Node type: net_type, text: wire, start: 85:8, end: 85:12
+[5]          Node type: port_identifier, text: clk, start: 85:13, end: 85:16
+[6]            Node type: simple_identifier, text: clk, start: 85:13, end: 85:16
+[4]        Node type: ansi_port_declaration, text: input wire rst, start: 86:2, end: 86:16
+[5]          Node type: net_port_header1, text: input wire, start: 86:2, end: 86:12
+[6]            Node type: port_direction, text: input, start: 86:2, end: 86:7
+[6]            Node type: net_port_type1, text: wire, start: 86:8, end: 86:12
+[7]              Node type: net_type, text: wire, start: 86:8, end: 86:12
+[5]          Node type: port_identifier, text: rst, start: 86:13, end: 86:16
+[6]            Node type: simple_identifier, text: rst, start: 86:13, end: 86:16
+[4]        Node type: ansi_port_declaration, text: input wire load, start: 87:2, end: 87:17
+[5]          Node type: net_port_header1, text: input wire, start: 87:2, end: 87:12
+[6]            Node type: port_direction, text: input, start: 87:2, end: 87:7
+[6]            Node type: net_port_type1, text: wire, start: 87:8, end: 87:12
+[7]              Node type: net_type, text: wire, start: 87:8, end: 87:12
+[5]          Node type: port_identifier, text: load, start: 87:13, end: 87:17
+[6]            Node type: simple_identifier, text: load, start: 87:13, end: 87:17
+[4]        Node type: ansi_port_declaration, text: input wire [3:0] data, start: 88:2, end: 88:23
+[5]          Node type: net_port_header1, text: input wire [3:0], start: 88:2, end: 88:18
+[6]            Node type: port_direction, text: input, start: 88:2, end: 88:7
+[6]            Node type: net_port_type1, text: wire [3:0], start: 88:8, end: 88:18
+[7]              Node type: net_type, text: wire, start: 88:8, end: 88:12
+[7]              Node type: data_type_or_implicit1, text: [3:0], start: 88:13, end: 88:18
+[8]                Node type: implicit_data_type1, text: [3:0], start: 88:13, end: 88:18
+[9]                  Node type: packed_dimension, text: [3:0], start: 88:13, end: 88:18
+[10]                    Node type: constant_range, text: 3:0, start: 88:14, end: 88:17
+[11]                      Node type: constant_expression, text: 3, start: 88:14, end: 88:15
+[12]                        Node type: constant_primary, text: 3, start: 88:14, end: 88:15
+[13]                          Node type: primary_literal, text: 3, start: 88:14, end: 88:15
+[14]                            Node type: integral_number, text: 3, start: 88:14, end: 88:15
+[15]                              Node type: decimal_number, text: 3, start: 88:14, end: 88:15
+[16]                                Node type: unsigned_number, text: 3, start: 88:14, end: 88:15
+[11]                      Node type: constant_expression, text: 0, start: 88:16, end: 88:17
+[12]                        Node type: constant_primary, text: 0, start: 88:16, end: 88:17
+[13]                          Node type: primary_literal, text: 0, start: 88:16, end: 88:17
+[14]                            Node type: integral_number, text: 0, start: 88:16, end: 88:17
+[15]                              Node type: decimal_number, text: 0, start: 88:16, end: 88:17
+[16]                                Node type: unsigned_number, text: 0, start: 88:16, end: 88:17
+[5]          Node type: port_identifier, text: data, start: 88:19, end: 88:23
+[6]            Node type: simple_identifier, text: data, start: 88:19, end: 88:23
+[4]        Node type: ansi_port_declaration, text: output wire [3:0] count, start: 89:2, end: 89:25
+[5]          Node type: net_port_header1, text: output wire [3:0], start: 89:2, end: 89:19
+[6]            Node type: port_direction, text: output, start: 89:2, end: 89:8
+[6]            Node type: net_port_type1, text: wire [3:0], start: 89:9, end: 89:19
+[7]              Node type: net_type, text: wire, start: 89:9, end: 89:13
+[7]              Node type: data_type_or_implicit1, text: [3:0], start: 89:14, end: 89:19
+[8]                Node type: implicit_data_type1, text: [3:0], start: 89:14, end: 89:19
+[9]                  Node type: packed_dimension, text: [3:0], start: 89:14, end: 89:19
+[10]                    Node type: constant_range, text: 3:0, start: 89:15, end: 89:18
+[11]                      Node type: constant_expression, text: 3, start: 89:15, end: 89:16
+[12]                        Node type: constant_primary, text: 3, start: 89:15, end: 89:16
+[13]                          Node type: primary_literal, text: 3, start: 89:15, end: 89:16
+[14]                            Node type: integral_number, text: 3, start: 89:15, end: 89:16
+[15]                              Node type: decimal_number, text: 3, start: 89:15, end: 89:16
+[16]                                Node type: unsigned_number, text: 3, start: 89:15, end: 89:16
+[11]                      Node type: constant_expression, text: 0, start: 89:17, end: 89:18
+[12]                        Node type: constant_primary, text: 0, start: 89:17, end: 89:18
+[13]                          Node type: primary_literal, text: 0, start: 89:17, end: 89:18
+[14]                            Node type: integral_number, text: 0, start: 89:17, end: 89:18
+[15]                              Node type: decimal_number, text: 0, start: 89:17, end: 89:18
+[16]                                Node type: unsigned_number, text: 0, start: 89:17, end: 89:18
+[5]          Node type: port_identifier, text: count, start: 89:20, end: 89:25
+[6]            Node type: simple_identifier, text: count, start: 89:20, end: 89:25
+[2]    Node type: comment, text: // Internal buses, start: 92:2, end: 92:19
+[2]    Node type: module_or_generate_item, text: wire [NUM_COUNTERS-1:0] internal_load;, start: 93:2, end: 93:40
+[3]      Node type: package_or_generate_item_declaration, text: wire [NUM_COUNTERS-1:0] internal_load;, start: 93:2, end: 93:40
+[4]        Node type: net_declaration, text: wire [NUM_COUNTERS-1:0] internal_load;, start: 93:2, end: 93:40
+[5]          Node type: net_type, text: wire, start: 93:2, end: 93:6
+[5]          Node type: data_type_or_implicit1, text: [NUM_COUNTERS-1:0], start: 93:7, end: 93:25
+[6]            Node type: implicit_data_type1, text: [NUM_COUNTERS-1:0], start: 93:7, end: 93:25
+[7]              Node type: packed_dimension, text: [NUM_COUNTERS-1:0], start: 93:7, end: 93:25
+[8]                Node type: constant_range, text: NUM_COUNTERS-1:0, start: 93:8, end: 93:24
+[9]                  Node type: constant_expression, text: NUM_COUNTERS-1, start: 93:8, end: 93:22
+[10]                    Node type: constant_expression, text: NUM_COUNTERS, start: 93:8, end: 93:20
+[11]                      Node type: constant_primary, text: NUM_COUNTERS, start: 93:8, end: 93:20
+[12]                        Node type: parameter_identifier, text: NUM_COUNTERS, start: 93:8, end: 93:20
+[13]                          Node type: simple_identifier, text: NUM_COUNTERS, start: 93:8, end: 93:20
+[10]                    Node type: constant_expression, text: 1, start: 93:21, end: 93:22
+[11]                      Node type: constant_primary, text: 1, start: 93:21, end: 93:22
+[12]                        Node type: primary_literal, text: 1, start: 93:21, end: 93:22
+[13]                          Node type: integral_number, text: 1, start: 93:21, end: 93:22
+[14]                            Node type: decimal_number, text: 1, start: 93:21, end: 93:22
+[15]                              Node type: unsigned_number, text: 1, start: 93:21, end: 93:22
+[9]                  Node type: constant_expression, text: 0, start: 93:23, end: 93:24
+[10]                    Node type: constant_primary, text: 0, start: 93:23, end: 93:24
+[11]                      Node type: primary_literal, text: 0, start: 93:23, end: 93:24
+[12]                        Node type: integral_number, text: 0, start: 93:23, end: 93:24
+[13]                          Node type: decimal_number, text: 0, start: 93:23, end: 93:24
+[14]                            Node type: unsigned_number, text: 0, start: 93:23, end: 93:24
+[5]          Node type: list_of_net_decl_assignments, text: internal_load, start: 93:26, end: 93:39
+[6]            Node type: net_decl_assignment, text: internal_load, start: 93:26, end: 93:39
+[7]              Node type: simple_identifier, text: internal_load, start: 93:26, end: 93:39
+[2]    Node type: module_or_generate_item, text: wire [3:0] internal_data [NUM_COUNTERS-1:0];, start: 94:2, end: 94:46
+[3]      Node type: package_or_generate_item_declaration, text: wire [3:0] internal_data [NUM_COUNTERS-1:0];, start: 94:2, end: 94:46
+[4]        Node type: net_declaration, text: wire [3:0] internal_data [NUM_COUNTERS-1:0];, start: 94:2, end: 94:46
+[5]          Node type: net_type, text: wire, start: 94:2, end: 94:6
+[5]          Node type: data_type_or_implicit1, text: [3:0], start: 94:7, end: 94:12
+[6]            Node type: implicit_data_type1, text: [3:0], start: 94:7, end: 94:12
+[7]              Node type: packed_dimension, text: [3:0], start: 94:7, end: 94:12
+[8]                Node type: constant_range, text: 3:0, start: 94:8, end: 94:11
+[9]                  Node type: constant_expression, text: 3, start: 94:8, end: 94:9
+[10]                    Node type: constant_primary, text: 3, start: 94:8, end: 94:9
+[11]                      Node type: primary_literal, text: 3, start: 94:8, end: 94:9
+[12]                        Node type: integral_number, text: 3, start: 94:8, end: 94:9
+[13]                          Node type: decimal_number, text: 3, start: 94:8, end: 94:9
+[14]                            Node type: unsigned_number, text: 3, start: 94:8, end: 94:9
+[9]                  Node type: constant_expression, text: 0, start: 94:10, end: 94:11
+[10]                    Node type: constant_primary, text: 0, start: 94:10, end: 94:11
+[11]                      Node type: primary_literal, text: 0, start: 94:10, end: 94:11
+[12]                        Node type: integral_number, text: 0, start: 94:10, end: 94:11
+[13]                          Node type: decimal_number, text: 0, start: 94:10, end: 94:11
+[14]                            Node type: unsigned_number, text: 0, start: 94:10, end: 94:11
+[5]          Node type: list_of_net_decl_assignments, text: internal_data [NUM_COUNTERS-1:0], start: 94:13, end: 94:45
+[6]            Node type: net_decl_assignment, text: internal_data [NUM_COUNTERS-1:0], start: 94:13, end: 94:45
+[7]              Node type: simple_identifier, text: internal_data, start: 94:13, end: 94:26
+[7]              Node type: unpacked_dimension, text: [NUM_COUNTERS-1:0], start: 94:27, end: 94:45
+[8]                Node type: constant_range, text: NUM_COUNTERS-1:0, start: 94:28, end: 94:44
+[9]                  Node type: constant_expression, text: NUM_COUNTERS-1, start: 94:28, end: 94:42
+[10]                    Node type: constant_expression, text: NUM_COUNTERS, start: 94:28, end: 94:40
+[11]                      Node type: constant_primary, text: NUM_COUNTERS, start: 94:28, end: 94:40
+[12]                        Node type: parameter_identifier, text: NUM_COUNTERS, start: 94:28, end: 94:40
+[13]                          Node type: simple_identifier, text: NUM_COUNTERS, start: 94:28, end: 94:40
+[10]                    Node type: constant_expression, text: 1, start: 94:41, end: 94:42
+[11]                      Node type: constant_primary, text: 1, start: 94:41, end: 94:42
+[12]                        Node type: primary_literal, text: 1, start: 94:41, end: 94:42
+[13]                          Node type: integral_number, text: 1, start: 94:41, end: 94:42
+[14]                            Node type: decimal_number, text: 1, start: 94:41, end: 94:42
+[15]                              Node type: unsigned_number, text: 1, start: 94:41, end: 94:42
+[9]                  Node type: constant_expression, text: 0, start: 94:43, end: 94:44
+[10]                    Node type: constant_primary, text: 0, start: 94:43, end: 94:44
+[11]                      Node type: primary_literal, text: 0, start: 94:43, end: 94:44
+[12]                        Node type: integral_number, text: 0, start: 94:43, end: 94:44
+[13]                          Node type: decimal_number, text: 0, start: 94:43, end: 94:44
+[14]                            Node type: unsigned_number, text: 0, start: 94:43, end: 94:44
+[2]    Node type: module_or_generate_item, text: wire [3:0] internal_count [NUM_COUNTERS-1:0];, start: 95:2, end: 95:47
+[3]      Node type: package_or_generate_item_declaration, text: wire [3:0] internal_count [NUM_COUNTERS-1:0];, start: 95:2, end: 95:47
+[4]        Node type: net_declaration, text: wire [3:0] internal_count [NUM_COUNTERS-1:0];, start: 95:2, end: 95:47
+[5]          Node type: net_type, text: wire, start: 95:2, end: 95:6
+[5]          Node type: data_type_or_implicit1, text: [3:0], start: 95:7, end: 95:12
+[6]            Node type: implicit_data_type1, text: [3:0], start: 95:7, end: 95:12
+[7]              Node type: packed_dimension, text: [3:0], start: 95:7, end: 95:12
+[8]                Node type: constant_range, text: 3:0, start: 95:8, end: 95:11
+[9]                  Node type: constant_expression, text: 3, start: 95:8, end: 95:9
+[10]                    Node type: constant_primary, text: 3, start: 95:8, end: 95:9
+[11]                      Node type: primary_literal, text: 3, start: 95:8, end: 95:9
+[12]                        Node type: integral_number, text: 3, start: 95:8, end: 95:9
+[13]                          Node type: decimal_number, text: 3, start: 95:8, end: 95:9
+[14]                            Node type: unsigned_number, text: 3, start: 95:8, end: 95:9
+[9]                  Node type: constant_expression, text: 0, start: 95:10, end: 95:11
+[10]                    Node type: constant_primary, text: 0, start: 95:10, end: 95:11
+[11]                      Node type: primary_literal, text: 0, start: 95:10, end: 95:11
+[12]                        Node type: integral_number, text: 0, start: 95:10, end: 95:11
+[13]                          Node type: decimal_number, text: 0, start: 95:10, end: 95:11
+[14]                            Node type: unsigned_number, text: 0, start: 95:10, end: 95:11
+[5]          Node type: list_of_net_decl_assignments, text: internal_count [NUM_COUNTERS-1:0], start: 95:13, end: 95:46
+[6]            Node type: net_decl_assignment, text: internal_count [NUM_COUNTERS-1:0], start: 95:13, end: 95:46
+[7]              Node type: simple_identifier, text: internal_count, start: 95:13, end: 95:27
+[7]              Node type: unpacked_dimension, text: [NUM_COUNTERS-1:0], start: 95:28, end: 95:46
+[8]                Node type: constant_range, text: NUM_COUNTERS-1:0, start: 95:29, end: 95:45
+[9]                  Node type: constant_expression, text: NUM_COUNTERS-1, start: 95:29, end: 95:43
+[10]                    Node type: constant_expression, text: NUM_COUNTERS, start: 95:29, end: 95:41
+[11]                      Node type: constant_primary, text: NUM_COUNTERS, start: 95:29, end: 95:41
+[12]                        Node type: parameter_identifier, text: NUM_COUNTERS, start: 95:29, end: 95:41
+[13]                          Node type: simple_identifier, text: NUM_COUNTERS, start: 95:29, end: 95:41
+[10]                    Node type: constant_expression, text: 1, start: 95:42, end: 95:43
+[11]                      Node type: constant_primary, text: 1, start: 95:42, end: 95:43
+[12]                        Node type: primary_literal, text: 1, start: 95:42, end: 95:43
+[13]                          Node type: integral_number, text: 1, start: 95:42, end: 95:43
+[14]                            Node type: decimal_number, text: 1, start: 95:42, end: 95:43
+[15]                              Node type: unsigned_number, text: 1, start: 95:42, end: 95:43
+[9]                  Node type: constant_expression, text: 0, start: 95:44, end: 95:45
+[10]                    Node type: constant_primary, text: 0, start: 95:44, end: 95:45
+[11]                      Node type: primary_literal, text: 0, start: 95:44, end: 95:45
+[12]                        Node type: integral_number, text: 0, start: 95:44, end: 95:45
+[13]                          Node type: decimal_number, text: 0, start: 95:44, end: 95:45
+[14]                            Node type: unsigned_number, text: 0, start: 95:44, end: 95:45
+[2]    Node type: module_or_generate_item, text: assign internal_load = { { (NUM_COUNTERS-1) {1'b0} } , load };, start: 97:2, end: 97:64
+[3]      Node type: continuous_assign, text: assign internal_load = { { (NUM_COUNTERS-1) {1'b0} } , load };, start: 97:2, end: 97:64
+[4]        Node type: list_of_net_assignments, text: internal_load = { { (NUM_COUNTERS-1) {1'b0} } , load }, start: 97:9, end: 97:63
+[5]          Node type: net_assignment, text: internal_load = { { (NUM_COUNTERS-1) {1'b0} } , load }, start: 97:9, end: 97:63
+[6]            Node type: net_lvalue, text: internal_load, start: 97:9, end: 97:22
+[7]              Node type: simple_identifier, text: internal_load, start: 97:9, end: 97:22
+[6]            Node type: expression, text: { { (NUM_COUNTERS-1) {1'b0} } , load }, start: 97:25, end: 97:63
+[7]              Node type: primary, text: { { (NUM_COUNTERS-1) {1'b0} } , load }, start: 97:25, end: 97:63
+[8]                Node type: concatenation, text: { { (NUM_COUNTERS-1) {1'b0} } , load }, start: 97:25, end: 97:63
+[9]                  Node type: expression, text: { (NUM_COUNTERS-1) {1'b0} }, start: 97:27, end: 97:54
+[10]                    Node type: primary, text: { (NUM_COUNTERS-1) {1'b0} }, start: 97:27, end: 97:54
+[11]                      Node type: multiple_concatenation, text: { (NUM_COUNTERS-1) {1'b0} }, start: 97:27, end: 97:54
+[12]                        Node type: expression, text: (NUM_COUNTERS-1), start: 97:29, end: 97:45
+[13]                          Node type: primary, text: (NUM_COUNTERS-1), start: 97:29, end: 97:45
+[14]                            Node type: mintypmax_expression, text: NUM_COUNTERS-1, start: 97:30, end: 97:44
+[15]                              Node type: expression, text: NUM_COUNTERS-1, start: 97:30, end: 97:44
+[16]                                Node type: expression, text: NUM_COUNTERS, start: 97:30, end: 97:42
+[17]                                  Node type: primary, text: NUM_COUNTERS, start: 97:30, end: 97:42
+[18]                                    Node type: simple_identifier, text: NUM_COUNTERS, start: 97:30, end: 97:42
+[16]                                Node type: expression, text: 1, start: 97:43, end: 97:44
+[17]                                  Node type: primary, text: 1, start: 97:43, end: 97:44
+[18]                                    Node type: primary_literal, text: 1, start: 97:43, end: 97:44
+[19]                                      Node type: integral_number, text: 1, start: 97:43, end: 97:44
+[20]                                        Node type: decimal_number, text: 1, start: 97:43, end: 97:44
+[21]                                          Node type: unsigned_number, text: 1, start: 97:43, end: 97:44
+[12]                        Node type: concatenation, text: {1'b0}, start: 97:46, end: 97:52
+[13]                          Node type: expression, text: 1'b0, start: 97:47, end: 97:51
+[14]                            Node type: primary, text: 1'b0, start: 97:47, end: 97:51
+[15]                              Node type: primary_literal, text: 1'b0, start: 97:47, end: 97:51
+[16]                                Node type: integral_number, text: 1'b0, start: 97:47, end: 97:51
+[17]                                  Node type: binary_number, text: 1'b0, start: 97:47, end: 97:51
+[9]                  Node type: expression, text: load, start: 97:57, end: 97:61
+[10]                    Node type: primary, text: load, start: 97:57, end: 97:61
+[11]                      Node type: simple_identifier, text: load, start: 97:57, end: 97:61
+[2]    Node type: comment, text: // Fan out for demo, start: 97:66, end: 97:85
+[2]    Node type: generate_region, text: generate
+    for (genvar k = 0; k < NUM_COUNTERS; k = k + 1) begin : gen_assigns
+      assign internal_data[k] = (k == 0) ? data : '0;
+    end
+  endgenerate, start: 99:2, end: 103:13
+[3]      Node type: module_or_generate_item, text: for (genvar k = 0; k < NUM_COUNTERS; k = k + 1) begin : gen_assigns
+      assign internal_data[k] = (k == 0) ? data : '0;
+    end, start: 100:4, end: 102:7
+[4]        Node type: loop_generate_construct, text: for (genvar k = 0; k < NUM_COUNTERS; k = k + 1) begin : gen_assigns
+      assign internal_data[k] = (k == 0) ? data : '0;
+    end, start: 100:4, end: 102:7
+[5]          Node type: genvar_initialization, text: genvar k = 0, start: 100:9, end: 100:21
+[6]            Node type: genvar_identifier, text: k, start: 100:16, end: 100:17
+[7]              Node type: simple_identifier, text: k, start: 100:16, end: 100:17
+[6]            Node type: constant_expression, text: 0, start: 100:20, end: 100:21
+[7]              Node type: constant_primary, text: 0, start: 100:20, end: 100:21
+[8]                Node type: primary_literal, text: 0, start: 100:20, end: 100:21
+[9]                  Node type: integral_number, text: 0, start: 100:20, end: 100:21
+[10]                    Node type: decimal_number, text: 0, start: 100:20, end: 100:21
+[11]                      Node type: unsigned_number, text: 0, start: 100:20, end: 100:21
+[5]          Node type: constant_expression, text: k < NUM_COUNTERS, start: 100:23, end: 100:39
+[6]            Node type: constant_expression, text: k, start: 100:23, end: 100:24
+[7]              Node type: constant_primary, text: k, start: 100:23, end: 100:24
+[8]                Node type: parameter_identifier, text: k, start: 100:23, end: 100:24
+[9]                  Node type: simple_identifier, text: k, start: 100:23, end: 100:24
+[6]            Node type: constant_expression, text: NUM_COUNTERS, start: 100:27, end: 100:39
+[7]              Node type: constant_primary, text: NUM_COUNTERS, start: 100:27, end: 100:39
+[8]                Node type: parameter_identifier, text: NUM_COUNTERS, start: 100:27, end: 100:39
+[9]                  Node type: simple_identifier, text: NUM_COUNTERS, start: 100:27, end: 100:39
+[5]          Node type: genvar_iteration, text: k = k + 1, start: 100:41, end: 100:50
+[6]            Node type: genvar_identifier, text: k, start: 100:41, end: 100:42
+[7]              Node type: simple_identifier, text: k, start: 100:41, end: 100:42
+[6]            Node type: assignment_operator, text: =, start: 100:43, end: 100:44
+[6]            Node type: constant_expression, text: k + 1, start: 100:45, end: 100:50
+[7]              Node type: constant_expression, text: k, start: 100:45, end: 100:46
+[8]                Node type: constant_primary, text: k, start: 100:45, end: 100:46
+[9]                  Node type: parameter_identifier, text: k, start: 100:45, end: 100:46
+[10]                    Node type: simple_identifier, text: k, start: 100:45, end: 100:46
+[7]              Node type: constant_expression, text: 1, start: 100:49, end: 100:50
+[8]                Node type: constant_primary, text: 1, start: 100:49, end: 100:50
+[9]                  Node type: primary_literal, text: 1, start: 100:49, end: 100:50
+[10]                    Node type: integral_number, text: 1, start: 100:49, end: 100:50
+[11]                      Node type: decimal_number, text: 1, start: 100:49, end: 100:50
+[12]                        Node type: unsigned_number, text: 1, start: 100:49, end: 100:50
+[5]          Node type: generate_block, text: begin : gen_assigns
+      assign internal_data[k] = (k == 0) ? data : '0;
+    end, start: 100:52, end: 102:7
+[6]            Node type: generate_block_identifier, text: gen_assigns, start: 100:60, end: 100:71
+[7]              Node type: generate_block_identifier, text: gen_assigns, start: 100:60, end: 100:71
+[8]                Node type: simple_identifier, text: gen_assigns, start: 100:60, end: 100:71
+[6]            Node type: module_or_generate_item, text: assign internal_data[k] = (k == 0) ? data : '0;, start: 101:6, end: 101:53
+[7]              Node type: continuous_assign, text: assign internal_data[k] = (k == 0) ? data : '0;, start: 101:6, end: 101:53
+[8]                Node type: list_of_net_assignments, text: internal_data[k] = (k == 0) ? data : '0, start: 101:13, end: 101:52
+[9]                  Node type: net_assignment, text: internal_data[k] = (k == 0) ? data : '0, start: 101:13, end: 101:52
+[10]                    Node type: net_lvalue, text: internal_data[k], start: 101:13, end: 101:29
+[11]                      Node type: simple_identifier, text: internal_data, start: 101:13, end: 101:26
+[11]                      Node type: constant_select1, text: [k], start: 101:26, end: 101:29
+[12]                        Node type: constant_expression, text: k, start: 101:27, end: 101:28
+[13]                          Node type: constant_primary, text: k, start: 101:27, end: 101:28
+[14]                            Node type: parameter_identifier, text: k, start: 101:27, end: 101:28
+[15]                              Node type: simple_identifier, text: k, start: 101:27, end: 101:28
+[10]                    Node type: expression, text: (k == 0) ? data : '0, start: 101:32, end: 101:52
+[11]                      Node type: conditional_expression, text: (k == 0) ? data : '0, start: 101:32, end: 101:52
+[12]                        Node type: cond_predicate, text: (k == 0), start: 101:32, end: 101:40
+[13]                          Node type: expression, text: (k == 0), start: 101:32, end: 101:40
+[14]                            Node type: primary, text: (k == 0), start: 101:32, end: 101:40
+[15]                              Node type: mintypmax_expression, text: k == 0, start: 101:33, end: 101:39
+[16]                                Node type: expression, text: k == 0, start: 101:33, end: 101:39
+[17]                                  Node type: expression, text: k, start: 101:33, end: 101:34
+[18]                                    Node type: primary, text: k, start: 101:33, end: 101:34
+[19]                                      Node type: simple_identifier, text: k, start: 101:33, end: 101:34
+[17]                                  Node type: expression, text: 0, start: 101:38, end: 101:39
+[18]                                    Node type: primary, text: 0, start: 101:38, end: 101:39
+[19]                                      Node type: primary_literal, text: 0, start: 101:38, end: 101:39
+[20]                                        Node type: integral_number, text: 0, start: 101:38, end: 101:39
+[21]                                          Node type: decimal_number, text: 0, start: 101:38, end: 101:39
+[22]                                            Node type: unsigned_number, text: 0, start: 101:38, end: 101:39
+[12]                        Node type: expression, text: data, start: 101:43, end: 101:47
+[13]                          Node type: primary, text: data, start: 101:43, end: 101:47
+[14]                            Node type: simple_identifier, text: data, start: 101:43, end: 101:47
+[12]                        Node type: expression, text: '0, start: 101:50, end: 101:52
+[13]                          Node type: primary, text: '0, start: 101:50, end: 101:52
+[14]                            Node type: primary_literal, text: '0, start: 101:50, end: 101:52
+[15]                              Node type: unbased_unsized_literal, text: '0, start: 101:50, end: 101:52
+[2]    Node type: module_or_generate_item, text: assign count = internal_count[0];, start: 105:2, end: 105:35
+[3]      Node type: continuous_assign, text: assign count = internal_count[0];, start: 105:2, end: 105:35
+[4]        Node type: list_of_net_assignments, text: count = internal_count[0], start: 105:9, end: 105:34
+[5]          Node type: net_assignment, text: count = internal_count[0], start: 105:9, end: 105:34
+[6]            Node type: net_lvalue, text: count, start: 105:9, end: 105:14
+[7]              Node type: simple_identifier, text: count, start: 105:9, end: 105:14
+[6]            Node type: expression, text: internal_count[0], start: 105:17, end: 105:34
+[7]              Node type: primary, text: internal_count[0], start: 105:17, end: 105:34
+[8]                Node type: simple_identifier, text: internal_count, start: 105:17, end: 105:31
+[8]                Node type: select1, text: [0], start: 105:31, end: 105:34
+[9]                  Node type: bit_select1, text: [0], start: 105:31, end: 105:34
+[10]                    Node type: expression, text: 0, start: 105:32, end: 105:33
+[11]                      Node type: primary, text: 0, start: 105:32, end: 105:33
+[12]                        Node type: primary_literal, text: 0, start: 105:32, end: 105:33
+[13]                          Node type: integral_number, text: 0, start: 105:32, end: 105:33
+[14]                            Node type: decimal_number, text: 0, start: 105:32, end: 105:33
+[15]                              Node type: unsigned_number, text: 0, start: 105:32, end: 105:33
+[2]    Node type: comment, text: // Generate with for loop for instantiating modules, start: 107:2, end: 107:53
+[2]    Node type: generate_region, text: generate
+    for (genvar i = 0; i < NUM_COUNTERS; i = i + 1) begin : gen_wrappers
+      counter_wrapper wrp (
+        .clk(clk),
+        .rst(rst),
+        .load(internal_load[i]),
+        .data(offset_data(internal_data[i])),  // Function call
+        .count(internal_count[i])
+      );
+    end
+  endgenerate, start: 108:2, end: 118:13
+[3]      Node type: module_or_generate_item, text: for (genvar i = 0; i < NUM_COUNTERS; i = i + 1) begin : gen_wrappers
+      counter_wrapper wrp (
+        .clk(clk),
+        .rst(rst),
+        .load(internal_load[i]),
+        .data(offset_data(internal_data[i])),  // Function call
+        .count(internal_count[i])
+      );
+    end, start: 109:4, end: 117:7
+[4]        Node type: loop_generate_construct, text: for (genvar i = 0; i < NUM_COUNTERS; i = i + 1) begin : gen_wrappers
+      counter_wrapper wrp (
+        .clk(clk),
+        .rst(rst),
+        .load(internal_load[i]),
+        .data(offset_data(internal_data[i])),  // Function call
+        .count(internal_count[i])
+      );
+    end, start: 109:4, end: 117:7
+[5]          Node type: genvar_initialization, text: genvar i = 0, start: 109:9, end: 109:21
+[6]            Node type: genvar_identifier, text: i, start: 109:16, end: 109:17
+[7]              Node type: simple_identifier, text: i, start: 109:16, end: 109:17
+[6]            Node type: constant_expression, text: 0, start: 109:20, end: 109:21
+[7]              Node type: constant_primary, text: 0, start: 109:20, end: 109:21
+[8]                Node type: primary_literal, text: 0, start: 109:20, end: 109:21
+[9]                  Node type: integral_number, text: 0, start: 109:20, end: 109:21
+[10]                    Node type: decimal_number, text: 0, start: 109:20, end: 109:21
+[11]                      Node type: unsigned_number, text: 0, start: 109:20, end: 109:21
+[5]          Node type: constant_expression, text: i < NUM_COUNTERS, start: 109:23, end: 109:39
+[6]            Node type: constant_expression, text: i, start: 109:23, end: 109:24
+[7]              Node type: constant_primary, text: i, start: 109:23, end: 109:24
+[8]                Node type: parameter_identifier, text: i, start: 109:23, end: 109:24
+[9]                  Node type: simple_identifier, text: i, start: 109:23, end: 109:24
+[6]            Node type: constant_expression, text: NUM_COUNTERS, start: 109:27, end: 109:39
+[7]              Node type: constant_primary, text: NUM_COUNTERS, start: 109:27, end: 109:39
+[8]                Node type: parameter_identifier, text: NUM_COUNTERS, start: 109:27, end: 109:39
+[9]                  Node type: simple_identifier, text: NUM_COUNTERS, start: 109:27, end: 109:39
+[5]          Node type: genvar_iteration, text: i = i + 1, start: 109:41, end: 109:50
+[6]            Node type: genvar_identifier, text: i, start: 109:41, end: 109:42
+[7]              Node type: simple_identifier, text: i, start: 109:41, end: 109:42
+[6]            Node type: assignment_operator, text: =, start: 109:43, end: 109:44
+[6]            Node type: constant_expression, text: i + 1, start: 109:45, end: 109:50
+[7]              Node type: constant_expression, text: i, start: 109:45, end: 109:46
+[8]                Node type: constant_primary, text: i, start: 109:45, end: 109:46
+[9]                  Node type: parameter_identifier, text: i, start: 109:45, end: 109:46
+[10]                    Node type: simple_identifier, text: i, start: 109:45, end: 109:46
+[7]              Node type: constant_expression, text: 1, start: 109:49, end: 109:50
+[8]                Node type: constant_primary, text: 1, start: 109:49, end: 109:50
+[9]                  Node type: primary_literal, text: 1, start: 109:49, end: 109:50
+[10]                    Node type: integral_number, text: 1, start: 109:49, end: 109:50
+[11]                      Node type: decimal_number, text: 1, start: 109:49, end: 109:50
+[12]                        Node type: unsigned_number, text: 1, start: 109:49, end: 109:50
+[5]          Node type: generate_block, text: begin : gen_wrappers
+      counter_wrapper wrp (
+        .clk(clk),
+        .rst(rst),
+        .load(internal_load[i]),
+        .data(offset_data(internal_data[i])),  // Function call
+        .count(internal_count[i])
+      );
+    end, start: 109:52, end: 117:7
+[6]            Node type: generate_block_identifier, text: gen_wrappers, start: 109:60, end: 109:72
+[7]              Node type: generate_block_identifier, text: gen_wrappers, start: 109:60, end: 109:72
+[8]                Node type: simple_identifier, text: gen_wrappers, start: 109:60, end: 109:72
+[6]            Node type: module_or_generate_item, text: counter_wrapper wrp (
+        .clk(clk),
+        .rst(rst),
+        .load(internal_load[i]),
+        .data(offset_data(internal_data[i])),  // Function call
+        .count(internal_count[i])
+      );, start: 110:6, end: 116:8
+[7]              Node type: interface_instantiation, text: counter_wrapper wrp (
+        .clk(clk),
+        .rst(rst),
+        .load(internal_load[i]),
+        .data(offset_data(internal_data[i])),  // Function call
+        .count(internal_count[i])
+      );, start: 110:6, end: 116:8
+[8]                Node type: interface_identifier, text: counter_wrapper, start: 110:6, end: 110:21
+[9]                  Node type: simple_identifier, text: counter_wrapper, start: 110:6, end: 110:21
+[8]                Node type: hierarchical_instance, text: wrp (
+        .clk(clk),
+        .rst(rst),
+        .load(internal_load[i]),
+        .data(offset_data(internal_data[i])),  // Function call
+        .count(internal_count[i])
+      ), start: 110:22, end: 116:7
+[9]                  Node type: name_of_instance, text: wrp, start: 110:22, end: 110:25
+[10]                    Node type: instance_identifier, text: wrp, start: 110:22, end: 110:25
+[11]                      Node type: simple_identifier, text: wrp, start: 110:22, end: 110:25
+[9]                  Node type: list_of_port_connections, text: .clk(clk),
+        .rst(rst),
+        .load(internal_load[i]),
+        .data(offset_data(internal_data[i])),  // Function call
+        .count(internal_count[i]), start: 111:8, end: 115:33
+[10]                    Node type: named_port_connection, text: .clk(clk), start: 111:8, end: 111:17
+[11]                      Node type: port_identifier, text: clk, start: 111:9, end: 111:12
+[12]                        Node type: simple_identifier, text: clk, start: 111:9, end: 111:12
+[11]                      Node type: expression, text: clk, start: 111:13, end: 111:16
+[12]                        Node type: primary, text: clk, start: 111:13, end: 111:16
+[13]                          Node type: simple_identifier, text: clk, start: 111:13, end: 111:16
+[10]                    Node type: named_port_connection, text: .rst(rst), start: 112:8, end: 112:17
+[11]                      Node type: port_identifier, text: rst, start: 112:9, end: 112:12
+[12]                        Node type: simple_identifier, text: rst, start: 112:9, end: 112:12
+[11]                      Node type: expression, text: rst, start: 112:13, end: 112:16
+[12]                        Node type: primary, text: rst, start: 112:13, end: 112:16
+[13]                          Node type: simple_identifier, text: rst, start: 112:13, end: 112:16
+[10]                    Node type: named_port_connection, text: .load(internal_load[i]), start: 113:8, end: 113:31
+[11]                      Node type: port_identifier, text: load, start: 113:9, end: 113:13
+[12]                        Node type: simple_identifier, text: load, start: 113:9, end: 113:13
+[11]                      Node type: expression, text: internal_load[i], start: 113:14, end: 113:30
+[12]                        Node type: primary, text: internal_load[i], start: 113:14, end: 113:30
+[13]                          Node type: simple_identifier, text: internal_load, start: 113:14, end: 113:27
+[13]                          Node type: select1, text: [i], start: 113:27, end: 113:30
+[14]                            Node type: bit_select1, text: [i], start: 113:27, end: 113:30
+[15]                              Node type: expression, text: i, start: 113:28, end: 113:29
+[16]                                Node type: primary, text: i, start: 113:28, end: 113:29
+[17]                                  Node type: simple_identifier, text: i, start: 113:28, end: 113:29
+[10]                    Node type: named_port_connection, text: .data(offset_data(internal_data[i])), start: 114:8, end: 114:44
+[11]                      Node type: port_identifier, text: data, start: 114:9, end: 114:13
+[12]                        Node type: simple_identifier, text: data, start: 114:9, end: 114:13
+[11]                      Node type: expression, text: offset_data(internal_data[i]), start: 114:14, end: 114:43
+[12]                        Node type: primary, text: offset_data(internal_data[i]), start: 114:14, end: 114:43
+[13]                          Node type: function_subroutine_call, text: offset_data(internal_data[i]), start: 114:14, end: 114:43
+[14]                            Node type: subroutine_call, text: offset_data(internal_data[i]), start: 114:14, end: 114:43
+[15]                              Node type: tf_call, text: offset_data(internal_data[i]), start: 114:14, end: 114:43
+[16]                                Node type: simple_identifier, text: offset_data, start: 114:14, end: 114:25
+[16]                                Node type: list_of_arguments_parent, text: (internal_data[i]), start: 114:25, end: 114:43
+[17]                                  Node type: expression, text: internal_data[i], start: 114:26, end: 114:42
+[18]                                    Node type: primary, text: internal_data[i], start: 114:26, end: 114:42
+[19]                                      Node type: simple_identifier, text: internal_data, start: 114:26, end: 114:39
+[19]                                      Node type: select1, text: [i], start: 114:39, end: 114:42
+[20]                                        Node type: bit_select1, text: [i], start: 114:39, end: 114:42
+[21]                                          Node type: expression, text: i, start: 114:40, end: 114:41
+[22]                                            Node type: primary, text: i, start: 114:40, end: 114:41
+[23]                                              Node type: simple_identifier, text: i, start: 114:40, end: 114:41
+[10]                    Node type: comment, text: // Function call, start: 114:47, end: 114:63
+[10]                    Node type: named_port_connection, text: .count(internal_count[i]), start: 115:8, end: 115:33
+[11]                      Node type: port_identifier, text: count, start: 115:9, end: 115:14
+[12]                        Node type: simple_identifier, text: count, start: 115:9, end: 115:14
+[11]                      Node type: expression, text: internal_count[i], start: 115:15, end: 115:32
+[12]                        Node type: primary, text: internal_count[i], start: 115:15, end: 115:32
+[13]                          Node type: simple_identifier, text: internal_count, start: 115:15, end: 115:29
+[13]                          Node type: select1, text: [i], start: 115:29, end: 115:32
+[14]                            Node type: bit_select1, text: [i], start: 115:29, end: 115:32
+[15]                              Node type: expression, text: i, start: 115:30, end: 115:31
+[16]                                Node type: primary, text: i, start: 115:30, end: 115:31
+[17]                                  Node type: simple_identifier, text: i, start: 115:30, end: 115:31
+[1]  Node type: comment, text: // Top DUT layer: Super multi-counter with generate for loop instead of module array, start: 122:0, end: 122:84
+[1]  Node type: module_declaration, text: module super_multi_counter #(
+  parameter NUM_SUPER = 2
+) (
+  input wire clk,
+  input wire rst,
+  input wire load,
+  input wire [3:0] data,
+  output wire [3:0] count
+);
+
+  // Internal buses
+  wire [3:0] internal_count [NUM_SUPER-1:0];
+
+  // Generate for loop instantiation for multiple multi_counters
+  generate
+    for (genvar i = 0; i < NUM_SUPER; i = i + 1) begin : gen_mc
+      multi_counter #(.NUM_COUNTERS(1)) mc_inst (
+        .clk(clk),
+        .rst(rst),
+        .load(load),
+        .data(data),
+        .count(internal_count[i])
+      );
+    end
+  endgenerate
+
+  // Connect only the first instance's count to avoid multiple drivers
+  assign count = internal_count[0];
+
+  // Additional generate demo: generate if
+  generate
+    if (NUM_SUPER > 1) begin : gen_extra
+      // Could instantiate more, but for demo a dummy wire
+      wire dummy = load || internal_count[1][0];  // Connect to internal count
+    end
+  endgenerate
+
+  // Generate case for variety
+  generate
+    case (NUM_SUPER)
+      2: begin : gen_case
+        // For loop inside case
+        for (genvar j = 0; j < NUM_SUPER; j = j + 1) begin : loop_in_case
+          // Dummy always (no assertion in pure Verilog; use display for demo)
+          always @(*) if (!(internal_count[j] >= 0)) $display("Dummy check failed");
+        end
+      end
+      default: ;  // Empty
+    endcase
+  endgenerate
+
+endmodule, start: 123:0, end: 174:9
+[2]    Node type: module_header, text: module super_multi_counter, start: 123:0, end: 123:26
+[3]      Node type: module_keyword, text: module, start: 123:0, end: 123:6
+[3]      Node type: simple_identifier, text: super_multi_counter, start: 123:7, end: 123:26
+[2]    Node type: module_ansi_header, text: #(
+  parameter NUM_SUPER = 2
+) (
+  input wire clk,
+  input wire rst,
+  input wire load,
+  input wire [3:0] data,
+  output wire [3:0] count
+), start: 123:27, end: 131:1
+[3]      Node type: parameter_port_list, text: #(
+  parameter NUM_SUPER = 2
+), start: 123:27, end: 125:1
+[4]        Node type: parameter_port_declaration, text: parameter NUM_SUPER = 2, start: 124:2, end: 124:25
+[5]          Node type: parameter_declaration, text: parameter NUM_SUPER = 2, start: 124:2, end: 124:25
+[6]            Node type: list_of_param_assignments, text: NUM_SUPER = 2, start: 124:12, end: 124:25
+[7]              Node type: param_assignment, text: NUM_SUPER = 2, start: 124:12, end: 124:25
+[8]                Node type: parameter_identifier, text: NUM_SUPER, start: 124:12, end: 124:21
+[9]                  Node type: simple_identifier, text: NUM_SUPER, start: 124:12, end: 124:21
+[8]                Node type: constant_param_expression, text: 2, start: 124:24, end: 124:25
+[9]                  Node type: constant_mintypmax_expression, text: 2, start: 124:24, end: 124:25
+[10]                    Node type: constant_expression, text: 2, start: 124:24, end: 124:25
+[11]                      Node type: constant_primary, text: 2, start: 124:24, end: 124:25
+[12]                        Node type: primary_literal, text: 2, start: 124:24, end: 124:25
+[13]                          Node type: integral_number, text: 2, start: 124:24, end: 124:25
+[14]                            Node type: decimal_number, text: 2, start: 124:24, end: 124:25
+[15]                              Node type: unsigned_number, text: 2, start: 124:24, end: 124:25
+[3]      Node type: list_of_port_declarations, text: (
+  input wire clk,
+  input wire rst,
+  input wire load,
+  input wire [3:0] data,
+  output wire [3:0] count
+), start: 125:2, end: 131:1
+[4]        Node type: ansi_port_declaration, text: input wire clk, start: 126:2, end: 126:16
+[5]          Node type: net_port_header1, text: input wire, start: 126:2, end: 126:12
+[6]            Node type: port_direction, text: input, start: 126:2, end: 126:7
+[6]            Node type: net_port_type1, text: wire, start: 126:8, end: 126:12
+[7]              Node type: net_type, text: wire, start: 126:8, end: 126:12
+[5]          Node type: port_identifier, text: clk, start: 126:13, end: 126:16
+[6]            Node type: simple_identifier, text: clk, start: 126:13, end: 126:16
+[4]        Node type: ansi_port_declaration, text: input wire rst, start: 127:2, end: 127:16
+[5]          Node type: net_port_header1, text: input wire, start: 127:2, end: 127:12
+[6]            Node type: port_direction, text: input, start: 127:2, end: 127:7
+[6]            Node type: net_port_type1, text: wire, start: 127:8, end: 127:12
+[7]              Node type: net_type, text: wire, start: 127:8, end: 127:12
+[5]          Node type: port_identifier, text: rst, start: 127:13, end: 127:16
+[6]            Node type: simple_identifier, text: rst, start: 127:13, end: 127:16
+[4]        Node type: ansi_port_declaration, text: input wire load, start: 128:2, end: 128:17
+[5]          Node type: net_port_header1, text: input wire, start: 128:2, end: 128:12
+[6]            Node type: port_direction, text: input, start: 128:2, end: 128:7
+[6]            Node type: net_port_type1, text: wire, start: 128:8, end: 128:12
+[7]              Node type: net_type, text: wire, start: 128:8, end: 128:12
+[5]          Node type: port_identifier, text: load, start: 128:13, end: 128:17
+[6]            Node type: simple_identifier, text: load, start: 128:13, end: 128:17
+[4]        Node type: ansi_port_declaration, text: input wire [3:0] data, start: 129:2, end: 129:23
+[5]          Node type: net_port_header1, text: input wire [3:0], start: 129:2, end: 129:18
+[6]            Node type: port_direction, text: input, start: 129:2, end: 129:7
+[6]            Node type: net_port_type1, text: wire [3:0], start: 129:8, end: 129:18
+[7]              Node type: net_type, text: wire, start: 129:8, end: 129:12
+[7]              Node type: data_type_or_implicit1, text: [3:0], start: 129:13, end: 129:18
+[8]                Node type: implicit_data_type1, text: [3:0], start: 129:13, end: 129:18
+[9]                  Node type: packed_dimension, text: [3:0], start: 129:13, end: 129:18
+[10]                    Node type: constant_range, text: 3:0, start: 129:14, end: 129:17
+[11]                      Node type: constant_expression, text: 3, start: 129:14, end: 129:15
+[12]                        Node type: constant_primary, text: 3, start: 129:14, end: 129:15
+[13]                          Node type: primary_literal, text: 3, start: 129:14, end: 129:15
+[14]                            Node type: integral_number, text: 3, start: 129:14, end: 129:15
+[15]                              Node type: decimal_number, text: 3, start: 129:14, end: 129:15
+[16]                                Node type: unsigned_number, text: 3, start: 129:14, end: 129:15
+[11]                      Node type: constant_expression, text: 0, start: 129:16, end: 129:17
+[12]                        Node type: constant_primary, text: 0, start: 129:16, end: 129:17
+[13]                          Node type: primary_literal, text: 0, start: 129:16, end: 129:17
+[14]                            Node type: integral_number, text: 0, start: 129:16, end: 129:17
+[15]                              Node type: decimal_number, text: 0, start: 129:16, end: 129:17
+[16]                                Node type: unsigned_number, text: 0, start: 129:16, end: 129:17
+[5]          Node type: port_identifier, text: data, start: 129:19, end: 129:23
+[6]            Node type: simple_identifier, text: data, start: 129:19, end: 129:23
+[4]        Node type: ansi_port_declaration, text: output wire [3:0] count, start: 130:2, end: 130:25
+[5]          Node type: net_port_header1, text: output wire [3:0], start: 130:2, end: 130:19
+[6]            Node type: port_direction, text: output, start: 130:2, end: 130:8
+[6]            Node type: net_port_type1, text: wire [3:0], start: 130:9, end: 130:19
+[7]              Node type: net_type, text: wire, start: 130:9, end: 130:13
+[7]              Node type: data_type_or_implicit1, text: [3:0], start: 130:14, end: 130:19
+[8]                Node type: implicit_data_type1, text: [3:0], start: 130:14, end: 130:19
+[9]                  Node type: packed_dimension, text: [3:0], start: 130:14, end: 130:19
+[10]                    Node type: constant_range, text: 3:0, start: 130:15, end: 130:18
+[11]                      Node type: constant_expression, text: 3, start: 130:15, end: 130:16
+[12]                        Node type: constant_primary, text: 3, start: 130:15, end: 130:16
+[13]                          Node type: primary_literal, text: 3, start: 130:15, end: 130:16
+[14]                            Node type: integral_number, text: 3, start: 130:15, end: 130:16
+[15]                              Node type: decimal_number, text: 3, start: 130:15, end: 130:16
+[16]                                Node type: unsigned_number, text: 3, start: 130:15, end: 130:16
+[11]                      Node type: constant_expression, text: 0, start: 130:17, end: 130:18
+[12]                        Node type: constant_primary, text: 0, start: 130:17, end: 130:18
+[13]                          Node type: primary_literal, text: 0, start: 130:17, end: 130:18
+[14]                            Node type: integral_number, text: 0, start: 130:17, end: 130:18
+[15]                              Node type: decimal_number, text: 0, start: 130:17, end: 130:18
+[16]                                Node type: unsigned_number, text: 0, start: 130:17, end: 130:18
+[5]          Node type: port_identifier, text: count, start: 130:20, end: 130:25
+[6]            Node type: simple_identifier, text: count, start: 130:20, end: 130:25
+[2]    Node type: comment, text: // Internal buses, start: 133:2, end: 133:19
+[2]    Node type: module_or_generate_item, text: wire [3:0] internal_count [NUM_SUPER-1:0];, start: 134:2, end: 134:44
+[3]      Node type: package_or_generate_item_declaration, text: wire [3:0] internal_count [NUM_SUPER-1:0];, start: 134:2, end: 134:44
+[4]        Node type: net_declaration, text: wire [3:0] internal_count [NUM_SUPER-1:0];, start: 134:2, end: 134:44
+[5]          Node type: net_type, text: wire, start: 134:2, end: 134:6
+[5]          Node type: data_type_or_implicit1, text: [3:0], start: 134:7, end: 134:12
+[6]            Node type: implicit_data_type1, text: [3:0], start: 134:7, end: 134:12
+[7]              Node type: packed_dimension, text: [3:0], start: 134:7, end: 134:12
+[8]                Node type: constant_range, text: 3:0, start: 134:8, end: 134:11
+[9]                  Node type: constant_expression, text: 3, start: 134:8, end: 134:9
+[10]                    Node type: constant_primary, text: 3, start: 134:8, end: 134:9
+[11]                      Node type: primary_literal, text: 3, start: 134:8, end: 134:9
+[12]                        Node type: integral_number, text: 3, start: 134:8, end: 134:9
+[13]                          Node type: decimal_number, text: 3, start: 134:8, end: 134:9
+[14]                            Node type: unsigned_number, text: 3, start: 134:8, end: 134:9
+[9]                  Node type: constant_expression, text: 0, start: 134:10, end: 134:11
+[10]                    Node type: constant_primary, text: 0, start: 134:10, end: 134:11
+[11]                      Node type: primary_literal, text: 0, start: 134:10, end: 134:11
+[12]                        Node type: integral_number, text: 0, start: 134:10, end: 134:11
+[13]                          Node type: decimal_number, text: 0, start: 134:10, end: 134:11
+[14]                            Node type: unsigned_number, text: 0, start: 134:10, end: 134:11
+[5]          Node type: list_of_net_decl_assignments, text: internal_count [NUM_SUPER-1:0], start: 134:13, end: 134:43
+[6]            Node type: net_decl_assignment, text: internal_count [NUM_SUPER-1:0], start: 134:13, end: 134:43
+[7]              Node type: simple_identifier, text: internal_count, start: 134:13, end: 134:27
+[7]              Node type: unpacked_dimension, text: [NUM_SUPER-1:0], start: 134:28, end: 134:43
+[8]                Node type: constant_range, text: NUM_SUPER-1:0, start: 134:29, end: 134:42
+[9]                  Node type: constant_expression, text: NUM_SUPER-1, start: 134:29, end: 134:40
+[10]                    Node type: constant_expression, text: NUM_SUPER, start: 134:29, end: 134:38
+[11]                      Node type: constant_primary, text: NUM_SUPER, start: 134:29, end: 134:38
+[12]                        Node type: parameter_identifier, text: NUM_SUPER, start: 134:29, end: 134:38
+[13]                          Node type: simple_identifier, text: NUM_SUPER, start: 134:29, end: 134:38
+[10]                    Node type: constant_expression, text: 1, start: 134:39, end: 134:40
+[11]                      Node type: constant_primary, text: 1, start: 134:39, end: 134:40
+[12]                        Node type: primary_literal, text: 1, start: 134:39, end: 134:40
+[13]                          Node type: integral_number, text: 1, start: 134:39, end: 134:40
+[14]                            Node type: decimal_number, text: 1, start: 134:39, end: 134:40
+[15]                              Node type: unsigned_number, text: 1, start: 134:39, end: 134:40
+[9]                  Node type: constant_expression, text: 0, start: 134:41, end: 134:42
+[10]                    Node type: constant_primary, text: 0, start: 134:41, end: 134:42
+[11]                      Node type: primary_literal, text: 0, start: 134:41, end: 134:42
+[12]                        Node type: integral_number, text: 0, start: 134:41, end: 134:42
+[13]                          Node type: decimal_number, text: 0, start: 134:41, end: 134:42
+[14]                            Node type: unsigned_number, text: 0, start: 134:41, end: 134:42
+[2]    Node type: comment, text: // Generate for loop instantiation for multiple multi_counters, start: 136:2, end: 136:64
+[2]    Node type: generate_region, text: generate
+    for (genvar i = 0; i < NUM_SUPER; i = i + 1) begin : gen_mc
+      multi_counter #(.NUM_COUNTERS(1)) mc_inst (
+        .clk(clk),
+        .rst(rst),
+        .load(load),
+        .data(data),
+        .count(internal_count[i])
+      );
+    end
+  endgenerate, start: 137:2, end: 147:13
+[3]      Node type: module_or_generate_item, text: for (genvar i = 0; i < NUM_SUPER; i = i + 1) begin : gen_mc
+      multi_counter #(.NUM_COUNTERS(1)) mc_inst (
+        .clk(clk),
+        .rst(rst),
+        .load(load),
+        .data(data),
+        .count(internal_count[i])
+      );
+    end, start: 138:4, end: 146:7
+[4]        Node type: loop_generate_construct, text: for (genvar i = 0; i < NUM_SUPER; i = i + 1) begin : gen_mc
+      multi_counter #(.NUM_COUNTERS(1)) mc_inst (
+        .clk(clk),
+        .rst(rst),
+        .load(load),
+        .data(data),
+        .count(internal_count[i])
+      );
+    end, start: 138:4, end: 146:7
+[5]          Node type: genvar_initialization, text: genvar i = 0, start: 138:9, end: 138:21
+[6]            Node type: genvar_identifier, text: i, start: 138:16, end: 138:17
+[7]              Node type: simple_identifier, text: i, start: 138:16, end: 138:17
+[6]            Node type: constant_expression, text: 0, start: 138:20, end: 138:21
+[7]              Node type: constant_primary, text: 0, start: 138:20, end: 138:21
+[8]                Node type: primary_literal, text: 0, start: 138:20, end: 138:21
+[9]                  Node type: integral_number, text: 0, start: 138:20, end: 138:21
+[10]                    Node type: decimal_number, text: 0, start: 138:20, end: 138:21
+[11]                      Node type: unsigned_number, text: 0, start: 138:20, end: 138:21
+[5]          Node type: constant_expression, text: i < NUM_SUPER, start: 138:23, end: 138:36
+[6]            Node type: constant_expression, text: i, start: 138:23, end: 138:24
+[7]              Node type: constant_primary, text: i, start: 138:23, end: 138:24
+[8]                Node type: parameter_identifier, text: i, start: 138:23, end: 138:24
+[9]                  Node type: simple_identifier, text: i, start: 138:23, end: 138:24
+[6]            Node type: constant_expression, text: NUM_SUPER, start: 138:27, end: 138:36
+[7]              Node type: constant_primary, text: NUM_SUPER, start: 138:27, end: 138:36
+[8]                Node type: parameter_identifier, text: NUM_SUPER, start: 138:27, end: 138:36
+[9]                  Node type: simple_identifier, text: NUM_SUPER, start: 138:27, end: 138:36
+[5]          Node type: genvar_iteration, text: i = i + 1, start: 138:38, end: 138:47
+[6]            Node type: genvar_identifier, text: i, start: 138:38, end: 138:39
+[7]              Node type: simple_identifier, text: i, start: 138:38, end: 138:39
+[6]            Node type: assignment_operator, text: =, start: 138:40, end: 138:41
+[6]            Node type: constant_expression, text: i + 1, start: 138:42, end: 138:47
+[7]              Node type: constant_expression, text: i, start: 138:42, end: 138:43
+[8]                Node type: constant_primary, text: i, start: 138:42, end: 138:43
+[9]                  Node type: parameter_identifier, text: i, start: 138:42, end: 138:43
+[10]                    Node type: simple_identifier, text: i, start: 138:42, end: 138:43
+[7]              Node type: constant_expression, text: 1, start: 138:46, end: 138:47
+[8]                Node type: constant_primary, text: 1, start: 138:46, end: 138:47
+[9]                  Node type: primary_literal, text: 1, start: 138:46, end: 138:47
+[10]                    Node type: integral_number, text: 1, start: 138:46, end: 138:47
+[11]                      Node type: decimal_number, text: 1, start: 138:46, end: 138:47
+[12]                        Node type: unsigned_number, text: 1, start: 138:46, end: 138:47
+[5]          Node type: generate_block, text: begin : gen_mc
+      multi_counter #(.NUM_COUNTERS(1)) mc_inst (
+        .clk(clk),
+        .rst(rst),
+        .load(load),
+        .data(data),
+        .count(internal_count[i])
+      );
+    end, start: 138:49, end: 146:7
+[6]            Node type: generate_block_identifier, text: gen_mc, start: 138:57, end: 138:63
+[7]              Node type: generate_block_identifier, text: gen_mc, start: 138:57, end: 138:63
+[8]                Node type: simple_identifier, text: gen_mc, start: 138:57, end: 138:63
+[6]            Node type: module_or_generate_item, text: multi_counter #(.NUM_COUNTERS(1)) mc_inst (
+        .clk(clk),
+        .rst(rst),
+        .load(load),
+        .data(data),
+        .count(internal_count[i])
+      );, start: 139:6, end: 145:8
+[7]              Node type: interface_instantiation, text: multi_counter #(.NUM_COUNTERS(1)) mc_inst (
+        .clk(clk),
+        .rst(rst),
+        .load(load),
+        .data(data),
+        .count(internal_count[i])
+      );, start: 139:6, end: 145:8
+[8]                Node type: interface_identifier, text: multi_counter, start: 139:6, end: 139:19
+[9]                  Node type: simple_identifier, text: multi_counter, start: 139:6, end: 139:19
+[8]                Node type: parameter_value_assignment, text: #(.NUM_COUNTERS(1)), start: 139:20, end: 139:39
+[9]                  Node type: list_of_parameter_assignments, text: .NUM_COUNTERS(1), start: 139:22, end: 139:38
+[10]                    Node type: named_parameter_assignment, text: .NUM_COUNTERS(1), start: 139:22, end: 139:38
+[11]                      Node type: parameter_identifier, text: NUM_COUNTERS, start: 139:23, end: 139:35
+[12]                        Node type: simple_identifier, text: NUM_COUNTERS, start: 139:23, end: 139:35
+[11]                      Node type: param_expression, text: 1, start: 139:36, end: 139:37
+[12]                        Node type: mintypmax_expression, text: 1, start: 139:36, end: 139:37
+[13]                          Node type: expression, text: 1, start: 139:36, end: 139:37
+[14]                            Node type: primary, text: 1, start: 139:36, end: 139:37
+[15]                              Node type: primary_literal, text: 1, start: 139:36, end: 139:37
+[16]                                Node type: integral_number, text: 1, start: 139:36, end: 139:37
+[17]                                  Node type: decimal_number, text: 1, start: 139:36, end: 139:37
+[18]                                    Node type: unsigned_number, text: 1, start: 139:36, end: 139:37
+[8]                Node type: hierarchical_instance, text: mc_inst (
+        .clk(clk),
+        .rst(rst),
+        .load(load),
+        .data(data),
+        .count(internal_count[i])
+      ), start: 139:40, end: 145:7
+[9]                  Node type: name_of_instance, text: mc_inst, start: 139:40, end: 139:47
+[10]                    Node type: instance_identifier, text: mc_inst, start: 139:40, end: 139:47
+[11]                      Node type: simple_identifier, text: mc_inst, start: 139:40, end: 139:47
+[9]                  Node type: list_of_port_connections, text: .clk(clk),
+        .rst(rst),
+        .load(load),
+        .data(data),
+        .count(internal_count[i]), start: 140:8, end: 144:33
+[10]                    Node type: named_port_connection, text: .clk(clk), start: 140:8, end: 140:17
+[11]                      Node type: port_identifier, text: clk, start: 140:9, end: 140:12
+[12]                        Node type: simple_identifier, text: clk, start: 140:9, end: 140:12
+[11]                      Node type: expression, text: clk, start: 140:13, end: 140:16
+[12]                        Node type: primary, text: clk, start: 140:13, end: 140:16
+[13]                          Node type: simple_identifier, text: clk, start: 140:13, end: 140:16
+[10]                    Node type: named_port_connection, text: .rst(rst), start: 141:8, end: 141:17
+[11]                      Node type: port_identifier, text: rst, start: 141:9, end: 141:12
+[12]                        Node type: simple_identifier, text: rst, start: 141:9, end: 141:12
+[11]                      Node type: expression, text: rst, start: 141:13, end: 141:16
+[12]                        Node type: primary, text: rst, start: 141:13, end: 141:16
+[13]                          Node type: simple_identifier, text: rst, start: 141:13, end: 141:16
+[10]                    Node type: named_port_connection, text: .load(load), start: 142:8, end: 142:19
+[11]                      Node type: port_identifier, text: load, start: 142:9, end: 142:13
+[12]                        Node type: simple_identifier, text: load, start: 142:9, end: 142:13
+[11]                      Node type: expression, text: load, start: 142:14, end: 142:18
+[12]                        Node type: primary, text: load, start: 142:14, end: 142:18
+[13]                          Node type: simple_identifier, text: load, start: 142:14, end: 142:18
+[10]                    Node type: named_port_connection, text: .data(data), start: 143:8, end: 143:19
+[11]                      Node type: port_identifier, text: data, start: 143:9, end: 143:13
+[12]                        Node type: simple_identifier, text: data, start: 143:9, end: 143:13
+[11]                      Node type: expression, text: data, start: 143:14, end: 143:18
+[12]                        Node type: primary, text: data, start: 143:14, end: 143:18
+[13]                          Node type: simple_identifier, text: data, start: 143:14, end: 143:18
+[10]                    Node type: named_port_connection, text: .count(internal_count[i]), start: 144:8, end: 144:33
+[11]                      Node type: port_identifier, text: count, start: 144:9, end: 144:14
+[12]                        Node type: simple_identifier, text: count, start: 144:9, end: 144:14
+[11]                      Node type: expression, text: internal_count[i], start: 144:15, end: 144:32
+[12]                        Node type: primary, text: internal_count[i], start: 144:15, end: 144:32
+[13]                          Node type: simple_identifier, text: internal_count, start: 144:15, end: 144:29
+[13]                          Node type: select1, text: [i], start: 144:29, end: 144:32
+[14]                            Node type: bit_select1, text: [i], start: 144:29, end: 144:32
+[15]                              Node type: expression, text: i, start: 144:30, end: 144:31
+[16]                                Node type: primary, text: i, start: 144:30, end: 144:31
+[17]                                  Node type: simple_identifier, text: i, start: 144:30, end: 144:31
+[2]    Node type: comment, text: // Connect only the first instance's count to avoid multiple drivers, start: 149:2, end: 149:70
+[2]    Node type: module_or_generate_item, text: assign count = internal_count[0];, start: 150:2, end: 150:35
+[3]      Node type: continuous_assign, text: assign count = internal_count[0];, start: 150:2, end: 150:35
+[4]        Node type: list_of_net_assignments, text: count = internal_count[0], start: 150:9, end: 150:34
+[5]          Node type: net_assignment, text: count = internal_count[0], start: 150:9, end: 150:34
+[6]            Node type: net_lvalue, text: count, start: 150:9, end: 150:14
+[7]              Node type: simple_identifier, text: count, start: 150:9, end: 150:14
+[6]            Node type: expression, text: internal_count[0], start: 150:17, end: 150:34
+[7]              Node type: primary, text: internal_count[0], start: 150:17, end: 150:34
+[8]                Node type: simple_identifier, text: internal_count, start: 150:17, end: 150:31
+[8]                Node type: select1, text: [0], start: 150:31, end: 150:34
+[9]                  Node type: bit_select1, text: [0], start: 150:31, end: 150:34
+[10]                    Node type: expression, text: 0, start: 150:32, end: 150:33
+[11]                      Node type: primary, text: 0, start: 150:32, end: 150:33
+[12]                        Node type: primary_literal, text: 0, start: 150:32, end: 150:33
+[13]                          Node type: integral_number, text: 0, start: 150:32, end: 150:33
+[14]                            Node type: decimal_number, text: 0, start: 150:32, end: 150:33
+[15]                              Node type: unsigned_number, text: 0, start: 150:32, end: 150:33
+[2]    Node type: comment, text: // Additional generate demo: generate if, start: 152:2, end: 152:42
+[2]    Node type: generate_region, text: generate
+    if (NUM_SUPER > 1) begin : gen_extra
+      // Could instantiate more, but for demo a dummy wire
+      wire dummy = load || internal_count[1][0];  // Connect to internal count
+    end
+  endgenerate, start: 153:2, end: 158:13
+[3]      Node type: interface_or_generate_item, text: if (NUM_SUPER > 1) begin : gen_extra
+      // Could instantiate more, but for demo a dummy wire
+      wire dummy = load || internal_count[1][0];  // Connect to internal count
+    end, start: 154:4, end: 157:7
+[4]        Node type: if_generate_construct, text: if (NUM_SUPER > 1) begin : gen_extra
+      // Could instantiate more, but for demo a dummy wire
+      wire dummy = load || internal_count[1][0];  // Connect to internal count
+    end, start: 154:4, end: 157:7
+[5]          Node type: constant_expression, text: NUM_SUPER > 1, start: 154:8, end: 154:21
+[6]            Node type: constant_expression, text: NUM_SUPER, start: 154:8, end: 154:17
+[7]              Node type: constant_primary, text: NUM_SUPER, start: 154:8, end: 154:17
+[8]                Node type: parameter_identifier, text: NUM_SUPER, start: 154:8, end: 154:17
+[9]                  Node type: simple_identifier, text: NUM_SUPER, start: 154:8, end: 154:17
+[6]            Node type: constant_expression, text: 1, start: 154:20, end: 154:21
+[7]              Node type: constant_primary, text: 1, start: 154:20, end: 154:21
+[8]                Node type: primary_literal, text: 1, start: 154:20, end: 154:21
+[9]                  Node type: integral_number, text: 1, start: 154:20, end: 154:21
+[10]                    Node type: decimal_number, text: 1, start: 154:20, end: 154:21
+[11]                      Node type: unsigned_number, text: 1, start: 154:20, end: 154:21
+[5]          Node type: generate_block, text: begin : gen_extra
+      // Could instantiate more, but for demo a dummy wire
+      wire dummy = load || internal_count[1][0];  // Connect to internal count
+    end, start: 154:23, end: 157:7
+[6]            Node type: generate_block_identifier, text: gen_extra, start: 154:31, end: 154:40
+[7]              Node type: generate_block_identifier, text: gen_extra, start: 154:31, end: 154:40
+[8]                Node type: simple_identifier, text: gen_extra, start: 154:31, end: 154:40
+[6]            Node type: comment, text: // Could instantiate more, but for demo a dummy wire, start: 155:6, end: 155:58
+[6]            Node type: interface_or_generate_item, text: wire dummy = load || internal_count[1][0];, start: 156:6, end: 156:48
+[7]              Node type: package_or_generate_item_declaration, text: wire dummy = load || internal_count[1][0];, start: 156:6, end: 156:48
+[8]                Node type: net_declaration, text: wire dummy = load || internal_count[1][0];, start: 156:6, end: 156:48
+[9]                  Node type: net_type, text: wire, start: 156:6, end: 156:10
+[9]                  Node type: list_of_net_decl_assignments, text: dummy = load || internal_count, start: 156:11, end: 156:41
+[10]                    Node type: net_decl_assignment, text: dummy = load || internal_count, start: 156:11, end: 156:41
+[11]                      Node type: simple_identifier, text: dummy, start: 156:11, end: 156:16
+[11]                      Node type: expression, text: load || internal_count, start: 156:19, end: 156:41
+[12]                        Node type: expression, text: load, start: 156:19, end: 156:23
+[13]                          Node type: primary, text: load, start: 156:19, end: 156:23
+[14]                            Node type: simple_identifier, text: load, start: 156:19, end: 156:23
+[12]                        Node type: expression, text: internal_count, start: 156:27, end: 156:41
+[13]                          Node type: primary, text: internal_count, start: 156:27, end: 156:41
+[14]                            Node type: simple_identifier, text: internal_count, start: 156:27, end: 156:41
+[9]                  Node type: ERROR, text: [1][0], start: 156:41, end: 156:47
+[10]                    Node type: constant_expression, text: 1, start: 156:42, end: 156:43
+[11]                      Node type: constant_primary, text: 1, start: 156:42, end: 156:43
+[12]                        Node type: primary_literal, text: 1, start: 156:42, end: 156:43
+[13]                          Node type: integral_number, text: 1, start: 156:42, end: 156:43
+[14]                            Node type: decimal_number, text: 1, start: 156:42, end: 156:43
+[15]                              Node type: unsigned_number, text: 1, start: 156:42, end: 156:43
+[10]                    Node type: constant_expression, text: 0, start: 156:45, end: 156:46
+[11]                      Node type: constant_primary, text: 0, start: 156:45, end: 156:46
+[12]                        Node type: primary_literal, text: 0, start: 156:45, end: 156:46
+[13]                          Node type: integral_number, text: 0, start: 156:45, end: 156:46
+[14]                            Node type: decimal_number, text: 0, start: 156:45, end: 156:46
+[15]                              Node type: unsigned_number, text: 0, start: 156:45, end: 156:46
+[6]            Node type: comment, text: // Connect to internal count, start: 156:50, end: 156:78
+[2]    Node type: comment, text: // Generate case for variety, start: 160:2, end: 160:30
+[2]    Node type: generate_region, text: generate
+    case (NUM_SUPER)
+      2: begin : gen_case
+        // For loop inside case
+        for (genvar j = 0; j < NUM_SUPER; j = j + 1) begin : loop_in_case
+          // Dummy always (no assertion in pure Verilog; use display for demo)
+          always @(*) if (!(internal_count[j] >= 0)) $display("Dummy check failed");
+        end
+      end
+      default: ;  // Empty
+    endcase
+  endgenerate, start: 161:2, end: 172:13
+[3]      Node type: module_or_generate_item, text: case (NUM_SUPER)
+      2: begin : gen_case
+        // For loop inside case
+        for (genvar j = 0; j < NUM_SUPER; j = j + 1) begin : loop_in_case
+          // Dummy always (no assertion in pure Verilog; use display for demo)
+          always @(*) if (!(internal_count[j] >= 0)) $display("Dummy check failed");
+        end
+      end
+      default: ;  // Empty
+    endcase, start: 162:4, end: 171:11
+[4]        Node type: case_generate_construct, text: case (NUM_SUPER)
+      2: begin : gen_case
+        // For loop inside case
+        for (genvar j = 0; j < NUM_SUPER; j = j + 1) begin : loop_in_case
+          // Dummy always (no assertion in pure Verilog; use display for demo)
+          always @(*) if (!(internal_count[j] >= 0)) $display("Dummy check failed");
+        end
+      end
+      default: ;  // Empty
+    endcase, start: 162:4, end: 171:11
+[5]          Node type: constant_expression, text: NUM_SUPER, start: 162:10, end: 162:19
+[6]            Node type: constant_primary, text: NUM_SUPER, start: 162:10, end: 162:19
+[7]              Node type: parameter_identifier, text: NUM_SUPER, start: 162:10, end: 162:19
+[8]                Node type: simple_identifier, text: NUM_SUPER, start: 162:10, end: 162:19
+[5]          Node type: case_generate_item, text: 2: begin : gen_case
+        // For loop inside case
+        for (genvar j = 0; j < NUM_SUPER; j = j + 1) begin : loop_in_case
+          // Dummy always (no assertion in pure Verilog; use display for demo)
+          always @(*) if (!(internal_count[j] >= 0)) $display("Dummy check failed");
+        end
+      end, start: 163:6, end: 169:9
+[6]            Node type: constant_expression, text: 2, start: 163:6, end: 163:7
+[7]              Node type: constant_primary, text: 2, start: 163:6, end: 163:7
+[8]                Node type: primary_literal, text: 2, start: 163:6, end: 163:7
+[9]                  Node type: integral_number, text: 2, start: 163:6, end: 163:7
+[10]                    Node type: decimal_number, text: 2, start: 163:6, end: 163:7
+[11]                      Node type: unsigned_number, text: 2, start: 163:6, end: 163:7
+[6]            Node type: generate_block, text: begin : gen_case
+        // For loop inside case
+        for (genvar j = 0; j < NUM_SUPER; j = j + 1) begin : loop_in_case
+          // Dummy always (no assertion in pure Verilog; use display for demo)
+          always @(*) if (!(internal_count[j] >= 0)) $display("Dummy check failed");
+        end
+      end, start: 163:9, end: 169:9
+[7]              Node type: generate_block_identifier, text: gen_case, start: 163:17, end: 163:25
+[8]                Node type: generate_block_identifier, text: gen_case, start: 163:17, end: 163:25
+[9]                  Node type: simple_identifier, text: gen_case, start: 163:17, end: 163:25
+[7]              Node type: comment, text: // For loop inside case, start: 164:8, end: 164:31
+[7]              Node type: module_or_generate_item, text: for (genvar j = 0; j < NUM_SUPER; j = j + 1) begin : loop_in_case
+          // Dummy always (no assertion in pure Verilog; use display for demo)
+          always @(*) if (!(internal_count[j] >= 0)) $display("Dummy check failed");
+        end, start: 165:8, end: 168:11
+[8]                Node type: loop_generate_construct, text: for (genvar j = 0; j < NUM_SUPER; j = j + 1) begin : loop_in_case
+          // Dummy always (no assertion in pure Verilog; use display for demo)
+          always @(*) if (!(internal_count[j] >= 0)) $display("Dummy check failed");
+        end, start: 165:8, end: 168:11
+[9]                  Node type: genvar_initialization, text: genvar j = 0, start: 165:13, end: 165:25
+[10]                    Node type: genvar_identifier, text: j, start: 165:20, end: 165:21
+[11]                      Node type: simple_identifier, text: j, start: 165:20, end: 165:21
+[10]                    Node type: constant_expression, text: 0, start: 165:24, end: 165:25
+[11]                      Node type: constant_primary, text: 0, start: 165:24, end: 165:25
+[12]                        Node type: primary_literal, text: 0, start: 165:24, end: 165:25
+[13]                          Node type: integral_number, text: 0, start: 165:24, end: 165:25
+[14]                            Node type: decimal_number, text: 0, start: 165:24, end: 165:25
+[15]                              Node type: unsigned_number, text: 0, start: 165:24, end: 165:25
+[9]                  Node type: constant_expression, text: j < NUM_SUPER, start: 165:27, end: 165:40
+[10]                    Node type: constant_expression, text: j, start: 165:27, end: 165:28
+[11]                      Node type: constant_primary, text: j, start: 165:27, end: 165:28
+[12]                        Node type: parameter_identifier, text: j, start: 165:27, end: 165:28
+[13]                          Node type: simple_identifier, text: j, start: 165:27, end: 165:28
+[10]                    Node type: constant_expression, text: NUM_SUPER, start: 165:31, end: 165:40
+[11]                      Node type: constant_primary, text: NUM_SUPER, start: 165:31, end: 165:40
+[12]                        Node type: parameter_identifier, text: NUM_SUPER, start: 165:31, end: 165:40
+[13]                          Node type: simple_identifier, text: NUM_SUPER, start: 165:31, end: 165:40
+[9]                  Node type: genvar_iteration, text: j = j + 1, start: 165:42, end: 165:51
+[10]                    Node type: genvar_identifier, text: j, start: 165:42, end: 165:43
+[11]                      Node type: simple_identifier, text: j, start: 165:42, end: 165:43
+[10]                    Node type: assignment_operator, text: =, start: 165:44, end: 165:45
+[10]                    Node type: constant_expression, text: j + 1, start: 165:46, end: 165:51
+[11]                      Node type: constant_expression, text: j, start: 165:46, end: 165:47
+[12]                        Node type: constant_primary, text: j, start: 165:46, end: 165:47
+[13]                          Node type: parameter_identifier, text: j, start: 165:46, end: 165:47
+[14]                            Node type: simple_identifier, text: j, start: 165:46, end: 165:47
+[11]                      Node type: constant_expression, text: 1, start: 165:50, end: 165:51
+[12]                        Node type: constant_primary, text: 1, start: 165:50, end: 165:51
+[13]                          Node type: primary_literal, text: 1, start: 165:50, end: 165:51
+[14]                            Node type: integral_number, text: 1, start: 165:50, end: 165:51
+[15]                              Node type: decimal_number, text: 1, start: 165:50, end: 165:51
+[16]                                Node type: unsigned_number, text: 1, start: 165:50, end: 165:51
+[9]                  Node type: generate_block, text: begin : loop_in_case
+          // Dummy always (no assertion in pure Verilog; use display for demo)
+          always @(*) if (!(internal_count[j] >= 0)) $display("Dummy check failed");
+        end, start: 165:53, end: 168:11
+[10]                    Node type: generate_block_identifier, text: loop_in_case, start: 165:61, end: 165:73
+[11]                      Node type: generate_block_identifier, text: loop_in_case, start: 165:61, end: 165:73
+[12]                        Node type: simple_identifier, text: loop_in_case, start: 165:61, end: 165:73
+[10]                    Node type: comment, text: // Dummy always (no assertion in pure Verilog; use display for demo), start: 166:10, end: 166:78
+[10]                    Node type: module_or_generate_item, text: always @(*) if (!(internal_count[j] >= 0)) $display("Dummy check failed");, start: 167:10, end: 167:84
+[11]                      Node type: always_construct, text: always @(*) if (!(internal_count[j] >= 0)) $display("Dummy check failed");, start: 167:10, end: 167:84
+[12]                        Node type: always_keyword, text: always, start: 167:10, end: 167:16
+[12]                        Node type: statement, text: @(*) if (!(internal_count[j] >= 0)) $display("Dummy check failed");, start: 167:17, end: 167:84
+[13]                          Node type: statement_item, text: @(*) if (!(internal_count[j] >= 0)) $display("Dummy check failed");, start: 167:17, end: 167:84
+[14]                            Node type: procedural_timing_control_statement, text: @(*) if (!(internal_count[j] >= 0)) $display("Dummy check failed");, start: 167:17, end: 167:84
+[15]                              Node type: event_control, text: @(*), start: 167:17, end: 167:21
+[15]                              Node type: statement_or_null, text: if (!(internal_count[j] >= 0)) $display("Dummy check failed");, start: 167:22, end: 167:84
+[16]                                Node type: statement, text: if (!(internal_count[j] >= 0)) $display("Dummy check failed");, start: 167:22, end: 167:84
+[17]                                  Node type: statement_item, text: if (!(internal_count[j] >= 0)) $display("Dummy check failed");, start: 167:22, end: 167:84
+[18]                                    Node type: conditional_statement, text: if (!(internal_count[j] >= 0)) $display("Dummy check failed");, start: 167:22, end: 167:84
+[19]                                      Node type: cond_predicate, text: !(internal_count[j] >= 0), start: 167:26, end: 167:51
+[20]                                        Node type: expression, text: !(internal_count[j] >= 0), start: 167:26, end: 167:51
+[21]                                          Node type: unary_operator, text: !, start: 167:26, end: 167:27
+[21]                                          Node type: primary, text: (internal_count[j] >= 0), start: 167:27, end: 167:51
+[22]                                            Node type: mintypmax_expression, text: internal_count[j] >= 0, start: 167:28, end: 167:50
+[23]                                              Node type: expression, text: internal_count[j] >= 0, start: 167:28, end: 167:50
+[24]                                                Node type: expression, text: internal_count[j], start: 167:28, end: 167:45
+[25]                                                  Node type: primary, text: internal_count[j], start: 167:28, end: 167:45
+[26]                                                    Node type: simple_identifier, text: internal_count, start: 167:28, end: 167:42
+[26]                                                    Node type: select1, text: [j], start: 167:42, end: 167:45
+[27]                                                      Node type: bit_select1, text: [j], start: 167:42, end: 167:45
+[28]                                                        Node type: expression, text: j, start: 167:43, end: 167:44
+[29]                                                          Node type: primary, text: j, start: 167:43, end: 167:44
+[30]                                                            Node type: simple_identifier, text: j, start: 167:43, end: 167:44
+[24]                                                Node type: expression, text: 0, start: 167:49, end: 167:50
+[25]                                                  Node type: primary, text: 0, start: 167:49, end: 167:50
+[26]                                                    Node type: primary_literal, text: 0, start: 167:49, end: 167:50
+[27]                                                      Node type: integral_number, text: 0, start: 167:49, end: 167:50
+[28]                                                        Node type: decimal_number, text: 0, start: 167:49, end: 167:50
+[29]                                                          Node type: unsigned_number, text: 0, start: 167:49, end: 167:50
+[19]                                      Node type: statement_or_null, text: $display("Dummy check failed");, start: 167:53, end: 167:84
+[20]                                        Node type: statement, text: $display("Dummy check failed");, start: 167:53, end: 167:84
+[21]                                          Node type: statement_item, text: $display("Dummy check failed");, start: 167:53, end: 167:84
+[22]                                            Node type: system_tf_call, text: $display("Dummy check failed"), start: 167:53, end: 167:83
+[23]                                              Node type: system_tf_identifier, text: $display, start: 167:53, end: 167:61
+[23]                                              Node type: list_of_arguments_parent, text: ("Dummy check failed"), start: 167:61, end: 167:83
+[24]                                                Node type: expression, text: "Dummy check failed", start: 167:62, end: 167:82
+[25]                                                  Node type: primary, text: "Dummy check failed", start: 167:62, end: 167:82
+[26]                                                    Node type: primary_literal, text: "Dummy check failed", start: 167:62, end: 167:82
+[27]                                                      Node type: string_literal, text: "Dummy check failed", start: 167:62, end: 167:82
+[5]          Node type: case_generate_item, text: default: ;, start: 170:6, end: 170:16
+[6]            Node type: generate_block, text: ;, start: 170:15, end: 170:16
+[7]              Node type: module_or_generate_item, text: ;, start: 170:15, end: 170:16
+[8]                Node type: package_or_generate_item_declaration, text: ;, start: 170:15, end: 170:16
+[5]          Node type: comment, text: // Empty, start: 170:18, end: 170:26
+[1]  Node type: comment, text: // Top module, start: 176:0, end: 176:13
+[1]  Node type: module_declaration, text: module top;
+  logic clk = 0;
+  always #5 clk = ~clk;
+
+  counter_if cif(clk);
+
+  // Instantiate super_multi_counter with discrete ports
+  super_multi_counter #(.NUM_SUPER(2)) smc_inst (
+    .clk(cif.clk),
+    .rst(cif.rst),
+    .load(cif.load),
+    .data(cif.data),
+    .count(cif.count)
+  );
+
+endmodule, start: 177:0, end: 192:9
+[2]    Node type: module_header, text: module top, start: 177:0, end: 177:10
+[3]      Node type: module_keyword, text: module, start: 177:0, end: 177:6
+[3]      Node type: simple_identifier, text: top, start: 177:7, end: 177:10
+[2]    Node type: module_or_generate_item, text: logic clk = 0;, start: 178:2, end: 178:16
+[3]      Node type: package_or_generate_item_declaration, text: logic clk = 0;, start: 178:2, end: 178:16
+[4]        Node type: data_declaration, text: logic clk = 0;, start: 178:2, end: 178:16
+[5]          Node type: data_type_or_implicit1, text: logic, start: 178:2, end: 178:7
+[6]            Node type: data_type, text: logic, start: 178:2, end: 178:7
+[7]              Node type: integer_vector_type, text: logic, start: 178:2, end: 178:7
+[5]          Node type: list_of_variable_decl_assignments, text: clk = 0, start: 178:8, end: 178:15
+[6]            Node type: variable_decl_assignment, text: clk = 0, start: 178:8, end: 178:15
+[7]              Node type: simple_identifier, text: clk, start: 178:8, end: 178:11
+[7]              Node type: expression, text: 0, start: 178:14, end: 178:15
+[8]                Node type: primary, text: 0, start: 178:14, end: 178:15
+[9]                  Node type: primary_literal, text: 0, start: 178:14, end: 178:15
+[10]                    Node type: integral_number, text: 0, start: 178:14, end: 178:15
+[11]                      Node type: decimal_number, text: 0, start: 178:14, end: 178:15
+[12]                        Node type: unsigned_number, text: 0, start: 178:14, end: 178:15
+[2]    Node type: module_or_generate_item, text: always #5 clk = ~clk;, start: 179:2, end: 179:23
+[3]      Node type: always_construct, text: always #5 clk = ~clk;, start: 179:2, end: 179:23
+[4]        Node type: always_keyword, text: always, start: 179:2, end: 179:8
+[4]        Node type: statement, text: #5 clk = ~clk;, start: 179:9, end: 179:23
+[5]          Node type: statement_item, text: #5 clk = ~clk;, start: 179:9, end: 179:23
+[6]            Node type: procedural_timing_control_statement, text: #5 clk = ~clk;, start: 179:9, end: 179:23
+[7]              Node type: delay_control, text: #5, start: 179:9, end: 179:11
+[8]                Node type: delay_value, text: 5, start: 179:10, end: 179:11
+[9]                  Node type: unsigned_number, text: 5, start: 179:10, end: 179:11
+[7]              Node type: statement_or_null, text: clk = ~clk;, start: 179:12, end: 179:23
+[8]                Node type: statement, text: clk = ~clk;, start: 179:12, end: 179:23
+[9]                  Node type: statement_item, text: clk = ~clk;, start: 179:12, end: 179:23
+[10]                    Node type: blocking_assignment, text: clk = ~clk, start: 179:12, end: 179:22
+[11]                      Node type: operator_assignment, text: clk = ~clk, start: 179:12, end: 179:22
+[12]                        Node type: variable_lvalue, text: clk, start: 179:12, end: 179:15
+[13]                          Node type: simple_identifier, text: clk, start: 179:12, end: 179:15
+[12]                        Node type: assignment_operator, text: =, start: 179:16, end: 179:17
+[12]                        Node type: expression, text: ~clk, start: 179:18, end: 179:22
+[13]                          Node type: unary_operator, text: ~, start: 179:18, end: 179:19
+[13]                          Node type: primary, text: clk, start: 179:19, end: 179:22
+[14]                            Node type: simple_identifier, text: clk, start: 179:19, end: 179:22
+[2]    Node type: module_or_generate_item, text: counter_if cif(clk);, start: 181:2, end: 181:22
+[3]      Node type: concurrent_assertion_item, text: counter_if cif(clk);, start: 181:2, end: 181:22
+[4]        Node type: checker_instantiation, text: counter_if cif(clk);, start: 181:2, end: 181:22
+[5]          Node type: checker_identifier, text: counter_if, start: 181:2, end: 181:12
+[6]            Node type: simple_identifier, text: counter_if, start: 181:2, end: 181:12
+[5]          Node type: name_of_instance, text: cif, start: 181:13, end: 181:16
+[6]            Node type: instance_identifier, text: cif, start: 181:13, end: 181:16
+[7]              Node type: simple_identifier, text: cif, start: 181:13, end: 181:16
+[5]          Node type: property_expr, text: clk, start: 181:17, end: 181:20
+[6]            Node type: sequence_expr, text: clk, start: 181:17, end: 181:20
+[7]              Node type: sequence_instance, text: clk, start: 181:17, end: 181:20
+[8]                Node type: simple_identifier, text: clk, start: 181:17, end: 181:20
+[2]    Node type: comment, text: // Instantiate super_multi_counter with discrete ports, start: 183:2, end: 183:56
+[2]    Node type: module_or_generate_item, text: super_multi_counter #(.NUM_SUPER(2)) smc_inst (
+    .clk(cif.clk),
+    .rst(cif.rst),
+    .load(cif.load),
+    .data(cif.data),
+    .count(cif.count)
+  );, start: 184:2, end: 190:4
+[3]      Node type: module_instantiation, text: super_multi_counter #(.NUM_SUPER(2)) smc_inst (
+    .clk(cif.clk),
+    .rst(cif.rst),
+    .load(cif.load),
+    .data(cif.data),
+    .count(cif.count)
+  );, start: 184:2, end: 190:4
+[4]        Node type: simple_identifier, text: super_multi_counter, start: 184:2, end: 184:21
+[4]        Node type: parameter_value_assignment, text: #(.NUM_SUPER(2)), start: 184:22, end: 184:38
+[5]          Node type: list_of_parameter_assignments, text: .NUM_SUPER(2), start: 184:24, end: 184:37
+[6]            Node type: named_parameter_assignment, text: .NUM_SUPER(2), start: 184:24, end: 184:37
+[7]              Node type: parameter_identifier, text: NUM_SUPER, start: 184:25, end: 184:34
+[8]                Node type: simple_identifier, text: NUM_SUPER, start: 184:25, end: 184:34
+[7]              Node type: param_expression, text: 2, start: 184:35, end: 184:36
+[8]                Node type: mintypmax_expression, text: 2, start: 184:35, end: 184:36
+[9]                  Node type: expression, text: 2, start: 184:35, end: 184:36
+[10]                    Node type: primary, text: 2, start: 184:35, end: 184:36
+[11]                      Node type: primary_literal, text: 2, start: 184:35, end: 184:36
+[12]                        Node type: integral_number, text: 2, start: 184:35, end: 184:36
+[13]                          Node type: decimal_number, text: 2, start: 184:35, end: 184:36
+[14]                            Node type: unsigned_number, text: 2, start: 184:35, end: 184:36
+[4]        Node type: hierarchical_instance, text: smc_inst (
+    .clk(cif.clk),
+    .rst(cif.rst),
+    .load(cif.load),
+    .data(cif.data),
+    .count(cif.count)
+  ), start: 184:39, end: 190:3
+[5]          Node type: name_of_instance, text: smc_inst, start: 184:39, end: 184:47
+[6]            Node type: instance_identifier, text: smc_inst, start: 184:39, end: 184:47
+[7]              Node type: simple_identifier, text: smc_inst, start: 184:39, end: 184:47
+[5]          Node type: list_of_port_connections, text: .clk(cif.clk),
+    .rst(cif.rst),
+    .load(cif.load),
+    .data(cif.data),
+    .count(cif.count), start: 185:4, end: 189:21
+[6]            Node type: named_port_connection, text: .clk(cif.clk), start: 185:4, end: 185:17
+[7]              Node type: port_identifier, text: clk, start: 185:5, end: 185:8
+[8]                Node type: simple_identifier, text: clk, start: 185:5, end: 185:8
+[7]              Node type: expression, text: cif.clk, start: 185:9, end: 185:16
+[8]                Node type: primary, text: cif.clk, start: 185:9, end: 185:16
+[9]                  Node type: simple_identifier, text: cif, start: 185:9, end: 185:12
+[9]                  Node type: select1, text: .clk, start: 185:12, end: 185:16
+[10]                    Node type: member_identifier, text: clk, start: 185:13, end: 185:16
+[11]                      Node type: simple_identifier, text: clk, start: 185:13, end: 185:16
+[6]            Node type: named_port_connection, text: .rst(cif.rst), start: 186:4, end: 186:17
+[7]              Node type: port_identifier, text: rst, start: 186:5, end: 186:8
+[8]                Node type: simple_identifier, text: rst, start: 186:5, end: 186:8
+[7]              Node type: expression, text: cif.rst, start: 186:9, end: 186:16
+[8]                Node type: primary, text: cif.rst, start: 186:9, end: 186:16
+[9]                  Node type: simple_identifier, text: cif, start: 186:9, end: 186:12
+[9]                  Node type: select1, text: .rst, start: 186:12, end: 186:16
+[10]                    Node type: member_identifier, text: rst, start: 186:13, end: 186:16
+[11]                      Node type: simple_identifier, text: rst, start: 186:13, end: 186:16
+[6]            Node type: named_port_connection, text: .load(cif.load), start: 187:4, end: 187:19
+[7]              Node type: port_identifier, text: load, start: 187:5, end: 187:9
+[8]                Node type: simple_identifier, text: load, start: 187:5, end: 187:9
+[7]              Node type: expression, text: cif.load, start: 187:10, end: 187:18
+[8]                Node type: primary, text: cif.load, start: 187:10, end: 187:18
+[9]                  Node type: simple_identifier, text: cif, start: 187:10, end: 187:13
+[9]                  Node type: select1, text: .load, start: 187:13, end: 187:18
+[10]                    Node type: member_identifier, text: load, start: 187:14, end: 187:18
+[11]                      Node type: simple_identifier, text: load, start: 187:14, end: 187:18
+[6]            Node type: named_port_connection, text: .data(cif.data), start: 188:4, end: 188:19
+[7]              Node type: port_identifier, text: data, start: 188:5, end: 188:9
+[8]                Node type: simple_identifier, text: data, start: 188:5, end: 188:9
+[7]              Node type: expression, text: cif.data, start: 188:10, end: 188:18
+[8]                Node type: primary, text: cif.data, start: 188:10, end: 188:18
+[9]                  Node type: simple_identifier, text: cif, start: 188:10, end: 188:13
+[9]                  Node type: select1, text: .data, start: 188:13, end: 188:18
+[10]                    Node type: member_identifier, text: data, start: 188:14, end: 188:18
+[11]                      Node type: simple_identifier, text: data, start: 188:14, end: 188:18
+[6]            Node type: named_port_connection, text: .count(cif.count), start: 189:4, end: 189:21
+[7]              Node type: port_identifier, text: count, start: 189:5, end: 189:10
+[8]                Node type: simple_identifier, text: count, start: 189:5, end: 189:10
+[7]              Node type: expression, text: cif.count, start: 189:11, end: 189:20
+[8]                Node type: primary, text: cif.count, start: 189:11, end: 189:20
+[9]                  Node type: simple_identifier, text: cif, start: 189:11, end: 189:14
+[9]                  Node type: select1, text: .count, start: 189:14, end: 189:20
+[10]                    Node type: member_identifier, text: count, start: 189:15, end: 189:20
+[11]                      Node type: simple_identifier, text: count, start: 189:15, end: 189:20

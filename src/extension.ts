@@ -64,6 +64,10 @@ export function activate(context: vscode.ExtensionContext) {
 		designProvider.openDesign();
 	}));
 
+	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.openExampleDesign', () => {
+		designProvider.openExampleDesign();
+	}));
+
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.closeDesign', (e) => {
 		designProvider.closeDesign(e);
 	}));

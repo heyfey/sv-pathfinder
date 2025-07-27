@@ -671,6 +671,13 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
         return true;
     }
 
+    public async openExampleDesign(): Promise<boolean> {
+        // add design "../examples/test/surelog.uhdm"
+        const examplePath = path.join(__dirname, '..', 'examples', 'test', 'surelog.uhdm');
+        this.addDesign(examplePath);
+        return true;
+    }
+
     private async addDesign(designPath: string) {
         let index = this.designList.findIndex(design => design.resourceUri.fsPath === designPath);
         if (index < 0) {

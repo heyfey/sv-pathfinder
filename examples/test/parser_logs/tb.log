@@ -1,0 +1,1953 @@
+[0]Node type: ERROR, text: // Interface with modports, clocking block, assertion, and coverage
+interface counter_if (input logic clk);
+  logic rst, load;
+  logic [3:0] data, count;
+
+  clocking cb @(posedge clk);
+    default input #1ns output #1ns;
+    output rst, load, data;
+    input count;
+  endclocking
+
+  // Concurrent assertion
+  assert property (@(posedge clk) disable iff (rst) (!load |-> $stable(count)))
+    else $error("Assertion failed: count not stable when not loading");
+
+  // Functional coverage
+  covergroup cg;
+    coverpoint count { bins low[4] = {[0:3]}; bins high[4] = {[12:15]}; }
+    coverpoint load;
+    cross count, load;
+    option.per_instance = 1;
+  endgroup
+  cg cov_inst = new();  // Coverage instance
+
+  modport dut (input clk, rst, load, data, output count);
+  modport wrapper (input clk, rst, load, data, output count);  // Additional modport for hierarchy
+  modport tb (input clk, count, output rst, load, data, clocking cb);
+
+endinterface
+
+// Transaction class
+class Trans;
+  rand bit load;
+  rand bit [3:0] data;
+  bit [3:0] expected;
+  typedef enum logic [1:0] {IDLE, LOAD, INC, RESET} state_t;  // Enum for states
+  state_t state;
+  bit [3:0] history[5];
+
+  constraint data_c { data inside {[0:10]}; }
+
+  virtual function void calculate_expected(bit [3:0] prev_count);
+    if (load)
+      expected = data;
+    else
+      expected = prev_count + 1;
+  endfunction
+
+  function void post_randomize();
+    state = load ? LOAD : INC;
+    for (int j = 0; j < 5; j++) history[j] = data + j;
+  endfunction
+
+  function void print(string prefix = "");
+    $display("%s: load=%b, data=%0d, expected=%0d, state=%s", prefix, load, data, expected, state);
+    foreach (history[k]) $display("History[%0d] = %0d", k, history[k]);
+  endfunction
+endclass
+
+// Driver class
+class Driver;
+  virtual counter_if vif;
+  mailbox #(Trans) mbx;
+  semaphore sem = new(1);
+
+  task run();
+    Trans t;
+    $display("Driver starting...");
+    forever begin
+      sem.get(1);
+      mbx.get(t);
+      t.print("Driver");
+      @(vif.cb);
+      vif.cb.load <= t.load;
+      vif.cb.data <= t.data;
+      sem.put(1);
+    end
+  endtask
+endclass
+
+// Monitor class
+class Monitor;
+  virtual counter_if vif;
+  mailbox #(bit [3:0]) mbx;
+
+  task run();
+    $display("Monitor starting...");
+    forever begin
+      @(vif.cb);
+      mbx.put(vif.cb.count);
+      $display("Monitor observed count = %0d", vif.cb.count);
+    end
+  endtask
+endclass
+
+// Scoreboard class
+class Scoreboard;
+  mailbox #(bit [3:0]) mbx;
+  bit [3:0] expected_count = 0;
+
+  task run();
+    bit [3:0] observed;
+    forever begin
+      mbx.get(observed);
+      if (observed != expected_count)
+        $error("Scoreboard mismatch: expected %0d, got %0d", expected_count, observed);
+      else
+        $display("Scoreboard match: %0d", observed);
+      expected_count = expected_count + 1;
+    end
+  endtask
+endclass
+
+// Environment class
+class Env;
+  Driver drv;
+  Monitor mon;
+  Scoreboard sb;
+  mailbox #(Trans) drv_mbx = new();
+  mailbox #(bit [3:0]) mon_mbx = new();
+  virtual counter_if vif;
+
+  function new(virtual counter_if v);
+    vif = v;
+    drv = new();
+    drv.vif = vif;
+    drv.mbx = drv_mbx;
+    mon = new();
+    mon.vif = vif;
+    mon.mbx = mon_mbx;
+    sb = new();
+    sb.mbx = mon_mbx;
+  endfunction
+
+  task run();
+    fork
+      drv.run();
+      mon.run();
+      sb.run();
+    join_none
+  endtask
+endclass
+
+// Test program block
+program test;
+  Env env = new(top.cif);
+
+  initial begin
+    Trans t;
+    bit [3:0] queue[$];   // Queue
+    string assoc_array[bit [3:0]];  // Associative array
+    int dynamic_array[];  // Dynamic array
+
+    // Reset
+    top.cif.rst = 1;
+    @(posedge top.cif.clk);
+    top.cif.rst = 0;
+
+    // Start environment
+    env.run();
+
+    // Transactions
+    for (int i = 0; i < 10; i++) begin
+      t = new();
+      assert(t.randomize()) else $fatal("Randomization failed");
+      t.calculate_expected(i[3:0]);
+      env.drv_mbx.put(t);
+      @(posedge top.cif.clk);
+      top.cif.cov_inst.sample();  // Sample coverage in testbench
+    end
+
+    // Additional features demo
+    queue.push_back(1);
+    queue.push_front(0);
+    queue.pop_back();
+    $display("Queue size: %0d", queue.size());
+
+    assoc_array[4'hA] = "KeyA";
+    if (assoc_array.exists(4'hA)) $display("Assoc value: %s", assoc_array[4'hA]);
+
+    dynamic_array = new[5];
+    foreach (dynamic_array[i]) dynamic_array[i] = i * 2;
+
+    // Finish
+    #100;
+    $display("Coverage: %0.2f%%", top.cif.cov_inst.get_coverage());
+    $finish;
+  end
+endprogram
+, start: 0:0, end: 189:0
+[1]  Node type: comment, text: // Interface with modports, clocking block, assertion, and coverage, start: 0:0, end: 0:67
+[1]  Node type: interface_ansi_header, text: interface counter_if (input logic clk);, start: 1:0, end: 1:39
+[2]    Node type: interface_identifier, text: counter_if, start: 1:10, end: 1:20
+[3]      Node type: simple_identifier, text: counter_if, start: 1:10, end: 1:20
+[2]    Node type: list_of_port_declarations, text: (input logic clk), start: 1:21, end: 1:38
+[3]      Node type: ansi_port_declaration, text: input logic clk, start: 1:22, end: 1:37
+[4]        Node type: variable_port_header, text: input logic, start: 1:22, end: 1:33
+[5]          Node type: port_direction, text: input, start: 1:22, end: 1:27
+[5]          Node type: data_type, text: logic, start: 1:28, end: 1:33
+[6]            Node type: integer_vector_type, text: logic, start: 1:28, end: 1:33
+[4]        Node type: port_identifier, text: clk, start: 1:34, end: 1:37
+[5]          Node type: simple_identifier, text: clk, start: 1:34, end: 1:37
+[1]  Node type: interface_or_generate_item, text: logic rst, load;, start: 2:2, end: 2:18
+[2]    Node type: package_or_generate_item_declaration, text: logic rst, load;, start: 2:2, end: 2:18
+[3]      Node type: data_declaration, text: logic rst, load;, start: 2:2, end: 2:18
+[4]        Node type: data_type_or_implicit1, text: logic, start: 2:2, end: 2:7
+[5]          Node type: data_type, text: logic, start: 2:2, end: 2:7
+[6]            Node type: integer_vector_type, text: logic, start: 2:2, end: 2:7
+[4]        Node type: list_of_variable_decl_assignments, text: rst, load, start: 2:8, end: 2:17
+[5]          Node type: variable_decl_assignment, text: rst, start: 2:8, end: 2:11
+[6]            Node type: simple_identifier, text: rst, start: 2:8, end: 2:11
+[5]          Node type: variable_decl_assignment, text: load, start: 2:13, end: 2:17
+[6]            Node type: simple_identifier, text: load, start: 2:13, end: 2:17
+[1]  Node type: interface_or_generate_item, text: logic [3:0] data, count;, start: 3:2, end: 3:26
+[2]    Node type: package_or_generate_item_declaration, text: logic [3:0] data, count;, start: 3:2, end: 3:26
+[3]      Node type: data_declaration, text: logic [3:0] data, count;, start: 3:2, end: 3:26
+[4]        Node type: data_type_or_implicit1, text: logic [3:0], start: 3:2, end: 3:13
+[5]          Node type: data_type, text: logic [3:0], start: 3:2, end: 3:13
+[6]            Node type: integer_vector_type, text: logic, start: 3:2, end: 3:7
+[6]            Node type: packed_dimension, text: [3:0], start: 3:8, end: 3:13
+[7]              Node type: constant_range, text: 3:0, start: 3:9, end: 3:12
+[8]                Node type: constant_expression, text: 3, start: 3:9, end: 3:10
+[9]                  Node type: constant_primary, text: 3, start: 3:9, end: 3:10
+[10]                    Node type: primary_literal, text: 3, start: 3:9, end: 3:10
+[11]                      Node type: integral_number, text: 3, start: 3:9, end: 3:10
+[12]                        Node type: decimal_number, text: 3, start: 3:9, end: 3:10
+[13]                          Node type: unsigned_number, text: 3, start: 3:9, end: 3:10
+[8]                Node type: constant_expression, text: 0, start: 3:11, end: 3:12
+[9]                  Node type: constant_primary, text: 0, start: 3:11, end: 3:12
+[10]                    Node type: primary_literal, text: 0, start: 3:11, end: 3:12
+[11]                      Node type: integral_number, text: 0, start: 3:11, end: 3:12
+[12]                        Node type: decimal_number, text: 0, start: 3:11, end: 3:12
+[13]                          Node type: unsigned_number, text: 0, start: 3:11, end: 3:12
+[4]        Node type: list_of_variable_decl_assignments, text: data, count, start: 3:14, end: 3:25
+[5]          Node type: variable_decl_assignment, text: data, start: 3:14, end: 3:18
+[6]            Node type: simple_identifier, text: data, start: 3:14, end: 3:18
+[5]          Node type: variable_decl_assignment, text: count, start: 3:20, end: 3:25
+[6]            Node type: simple_identifier, text: count, start: 3:20, end: 3:25
+[1]  Node type: interface_or_generate_item, text: clocking cb @(posedge clk);
+    default input #1ns output #1ns;
+    output rst, load, data;
+    input count;
+  endclocking, start: 5:2, end: 9:13
+[2]    Node type: clocking_declaration, text: clocking cb @(posedge clk);
+    default input #1ns output #1ns;
+    output rst, load, data;
+    input count;
+  endclocking, start: 5:2, end: 9:13
+[3]      Node type: clocking_identifier, text: cb, start: 5:11, end: 5:13
+[4]        Node type: clocking_identifier, text: cb, start: 5:11, end: 5:13
+[5]          Node type: simple_identifier, text: cb, start: 5:11, end: 5:13
+[3]      Node type: clocking_event, text: @(posedge clk), start: 5:14, end: 5:28
+[4]        Node type: event_expression, text: posedge clk, start: 5:16, end: 5:27
+[5]          Node type: edge_identifier, text: posedge, start: 5:16, end: 5:23
+[5]          Node type: expression, text: clk, start: 5:24, end: 5:27
+[6]            Node type: primary, text: clk, start: 5:24, end: 5:27
+[7]              Node type: simple_identifier, text: clk, start: 5:24, end: 5:27
+[3]      Node type: clocking_item, text: default input #1ns output #1ns;, start: 6:4, end: 6:35
+[4]        Node type: default_skew, text: input #1ns output #1ns, start: 6:12, end: 6:34
+[5]          Node type: clocking_skew, text: #1ns, start: 6:18, end: 6:22
+[6]            Node type: delay_control, text: #1ns, start: 6:18, end: 6:22
+[7]              Node type: delay_value, text: 1ns, start: 6:19, end: 6:22
+[8]                Node type: time_literal, text: 1ns, start: 6:19, end: 6:22
+[9]                  Node type: unsigned_number, text: 1, start: 6:19, end: 6:20
+[9]                  Node type: time_unit, text: ns, start: 6:20, end: 6:22
+[5]          Node type: clocking_skew, text: #1ns, start: 6:30, end: 6:34
+[6]            Node type: delay_control, text: #1ns, start: 6:30, end: 6:34
+[7]              Node type: delay_value, text: 1ns, start: 6:31, end: 6:34
+[8]                Node type: time_literal, text: 1ns, start: 6:31, end: 6:34
+[9]                  Node type: unsigned_number, text: 1, start: 6:31, end: 6:32
+[9]                  Node type: time_unit, text: ns, start: 6:32, end: 6:34
+[3]      Node type: clocking_item, text: output rst, load, data;, start: 7:4, end: 7:27
+[4]        Node type: clocking_direction, text: output, start: 7:4, end: 7:10
+[4]        Node type: list_of_clocking_decl_assign, text: rst, load, data, start: 7:11, end: 7:26
+[5]          Node type: clocking_decl_assign, text: rst, start: 7:11, end: 7:14
+[6]            Node type: simple_identifier, text: rst, start: 7:11, end: 7:14
+[5]          Node type: clocking_decl_assign, text: load, start: 7:16, end: 7:20
+[6]            Node type: simple_identifier, text: load, start: 7:16, end: 7:20
+[5]          Node type: clocking_decl_assign, text: data, start: 7:22, end: 7:26
+[6]            Node type: simple_identifier, text: data, start: 7:22, end: 7:26
+[3]      Node type: clocking_item, text: input count;, start: 8:4, end: 8:16
+[4]        Node type: clocking_direction, text: input, start: 8:4, end: 8:9
+[4]        Node type: list_of_clocking_decl_assign, text: count, start: 8:10, end: 8:15
+[5]          Node type: clocking_decl_assign, text: count, start: 8:10, end: 8:15
+[6]            Node type: simple_identifier, text: count, start: 8:10, end: 8:15
+[1]  Node type: comment, text: // Concurrent assertion, start: 11:2, end: 11:25
+[1]  Node type: interface_or_generate_item, text: assert property (@(posedge clk) disable iff (rst) (!load |-> $stable(count)))
+    else $error("Assertion failed: count not stable when not loading");, start: 12:2, end: 13:71
+[2]    Node type: concurrent_assertion_item, text: assert property (@(posedge clk) disable iff (rst) (!load |-> $stable(count)))
+    else $error("Assertion failed: count not stable when not loading");, start: 12:2, end: 13:71
+[3]      Node type: assert_property_statement, text: assert property (@(posedge clk) disable iff (rst) (!load |-> $stable(count)))
+    else $error("Assertion failed: count not stable when not loading");, start: 12:2, end: 13:71
+[4]        Node type: property_spec, text: @(posedge clk) disable iff (rst) (!load |-> $stable(count)), start: 12:19, end: 12:78
+[5]          Node type: clocking_event, text: @(posedge clk), start: 12:19, end: 12:33
+[6]            Node type: event_expression, text: posedge clk, start: 12:21, end: 12:32
+[7]              Node type: edge_identifier, text: posedge, start: 12:21, end: 12:28
+[7]              Node type: expression, text: clk, start: 12:29, end: 12:32
+[8]                Node type: primary, text: clk, start: 12:29, end: 12:32
+[9]                  Node type: simple_identifier, text: clk, start: 12:29, end: 12:32
+[5]          Node type: expression_or_dist, text: rst, start: 12:47, end: 12:50
+[6]            Node type: expression, text: rst, start: 12:47, end: 12:50
+[7]              Node type: primary, text: rst, start: 12:47, end: 12:50
+[8]                Node type: simple_identifier, text: rst, start: 12:47, end: 12:50
+[5]          Node type: property_expr, text: (!load |-> $stable(count)), start: 12:52, end: 12:78
+[6]            Node type: property_expr, text: !load |-> $stable(count), start: 12:53, end: 12:77
+[7]              Node type: sequence_expr, text: !load, start: 12:53, end: 12:58
+[8]                Node type: expression_or_dist, text: !load, start: 12:53, end: 12:58
+[9]                  Node type: expression, text: !load, start: 12:53, end: 12:58
+[10]                    Node type: unary_operator, text: !, start: 12:53, end: 12:54
+[10]                    Node type: primary, text: load, start: 12:54, end: 12:58
+[11]                      Node type: simple_identifier, text: load, start: 12:54, end: 12:58
+[7]              Node type: property_expr, text: $stable(count), start: 12:63, end: 12:77
+[8]                Node type: sequence_expr, text: $stable(count), start: 12:63, end: 12:77
+[9]                  Node type: expression_or_dist, text: $stable(count), start: 12:63, end: 12:77
+[10]                    Node type: expression, text: $stable(count), start: 12:63, end: 12:77
+[11]                      Node type: primary, text: $stable(count), start: 12:63, end: 12:77
+[12]                        Node type: function_subroutine_call, text: $stable(count), start: 12:63, end: 12:77
+[13]                          Node type: subroutine_call, text: $stable(count), start: 12:63, end: 12:77
+[14]                            Node type: system_tf_call, text: $stable(count), start: 12:63, end: 12:77
+[15]                              Node type: system_tf_identifier, text: $stable, start: 12:63, end: 12:70
+[15]                              Node type: expression, text: count, start: 12:71, end: 12:76
+[16]                                Node type: primary, text: count, start: 12:71, end: 12:76
+[17]                                  Node type: simple_identifier, text: count, start: 12:71, end: 12:76
+[4]        Node type: action_block, text: else $error("Assertion failed: count not stable when not loading");, start: 13:4, end: 13:71
+[5]          Node type: statement_or_null, text: $error("Assertion failed: count not stable when not loading");, start: 13:9, end: 13:71
+[6]            Node type: statement, text: $error("Assertion failed: count not stable when not loading");, start: 13:9, end: 13:71
+[7]              Node type: statement_item, text: $error("Assertion failed: count not stable when not loading");, start: 13:9, end: 13:71
+[8]                Node type: system_tf_call, text: $error("Assertion failed: count not stable when not loading"), start: 13:9, end: 13:70
+[9]                  Node type: system_tf_identifier, text: $error, start: 13:9, end: 13:15
+[9]                  Node type: list_of_arguments_parent, text: ("Assertion failed: count not stable when not loading"), start: 13:15, end: 13:70
+[10]                    Node type: expression, text: "Assertion failed: count not stable when not loading", start: 13:16, end: 13:69
+[11]                      Node type: primary, text: "Assertion failed: count not stable when not loading", start: 13:16, end: 13:69
+[12]                        Node type: primary_literal, text: "Assertion failed: count not stable when not loading", start: 13:16, end: 13:69
+[13]                          Node type: string_literal, text: "Assertion failed: count not stable when not loading", start: 13:16, end: 13:69
+[1]  Node type: comment, text: // Functional coverage, start: 15:2, end: 15:24
+[1]  Node type: simple_identifier, text: cg, start: 16:13, end: 16:15
+[1]  Node type: expression, text: count, start: 17:15, end: 17:20
+[2]    Node type: primary, text: count, start: 17:15, end: 17:20
+[3]      Node type: simple_identifier, text: count, start: 17:15, end: 17:20
+[1]  Node type: bins_keyword, text: bins, start: 17:23, end: 17:27
+[1]  Node type: simple_identifier, text: low, start: 17:28, end: 17:31
+[1]  Node type: ERROR, text: [4] = {[0:3]}; bins high[4] = {[12:15]}; }
+    coverpoint load;
+    cross count, load;
+    option.per_instance = 1;
+  endgroup
+  cg cov_inst = new();  // Coverage instance
+
+  modport dut (input clk, rst, load, data, output count);
+  modport wrapper (input clk, rst, load, data, output count);  // Additional modport for hierarchy
+  modport tb (input clk, count, output rst, load, data, clocking cb);
+
+endinterface
+
+// Transaction class
+class Trans;
+  rand bit load;
+  rand bit [3:0] data;
+  bit [3:0] expected;
+  typedef enum logic [1:0] {IDLE, LOAD, INC, RESET} state_t;  // Enum for states
+  state_t state;
+  bit [3:0] history, start: 17:31, end: 37:19
+[2]    Node type: ERROR, text: 4] = {[0:3]}; bins high[4] = {[12:15]}; }
+    coverpoint load;
+    cross count, load;
+    option.per_instance = 1;
+  endgroup
+  cg cov_inst = new();  // Coverage instance
+
+  modport dut (input clk, rst, load, data, output count);
+  modport wrapper (input clk, rst, load, data, output count);  // Additional modport for hierarchy
+  modport tb (input clk, count, output rst, load, data, clocking cb);
+
+endinterface
+
+// Transaction class
+class Trans;
+  rand bit load;
+  rand, start: 17:32, end: 33:6
+[3]      Node type: expression, text: 4, start: 17:32, end: 17:33
+[4]        Node type: primary, text: 4, start: 17:32, end: 17:33
+[5]          Node type: primary_literal, text: 4, start: 17:32, end: 17:33
+[6]            Node type: integral_number, text: 4, start: 17:32, end: 17:33
+[7]              Node type: decimal_number, text: 4, start: 17:32, end: 17:33
+[8]                Node type: unsigned_number, text: 4, start: 17:32, end: 17:33
+[3]      Node type: ERROR, text: ] = {[0:3, start: 17:33, end: 17:42
+[4]        Node type: ERROR, text: 3, start: 17:41, end: 17:42
+[3]      Node type: expression, text: high[4] = {[12:15], start: 17:51, end: 17:69
+[4]        Node type: primary, text: high[4] = {[12:15], start: 17:51, end: 17:69
+[5]          Node type: simple_identifier, text: high, start: 17:51, end: 17:55
+[5]          Node type: select1, text: [4] = {[12:15], start: 17:55, end: 17:69
+[6]            Node type: bit_select1, text: [4], start: 17:55, end: 17:58
+[7]              Node type: expression, text: 4, start: 17:56, end: 17:57
+[8]                Node type: primary, text: 4, start: 17:56, end: 17:57
+[9]                  Node type: primary_literal, text: 4, start: 17:56, end: 17:57
+[10]                    Node type: integral_number, text: 4, start: 17:56, end: 17:57
+[11]                      Node type: decimal_number, text: 4, start: 17:56, end: 17:57
+[12]                        Node type: unsigned_number, text: 4, start: 17:56, end: 17:57
+[6]            Node type: ERROR, text: = {, start: 17:59, end: 17:62
+[6]            Node type: constant_range, text: 12:15, start: 17:63, end: 17:68
+[7]              Node type: constant_expression, text: 12, start: 17:63, end: 17:65
+[8]                Node type: constant_primary, text: 12, start: 17:63, end: 17:65
+[9]                  Node type: primary_literal, text: 12, start: 17:63, end: 17:65
+[10]                    Node type: integral_number, text: 12, start: 17:63, end: 17:65
+[11]                      Node type: decimal_number, text: 12, start: 17:63, end: 17:65
+[12]                        Node type: unsigned_number, text: 12, start: 17:63, end: 17:65
+[7]              Node type: constant_expression, text: 15, start: 17:66, end: 17:68
+[8]                Node type: constant_primary, text: 15, start: 17:66, end: 17:68
+[9]                  Node type: primary_literal, text: 15, start: 17:66, end: 17:68
+[10]                    Node type: integral_number, text: 15, start: 17:66, end: 17:68
+[11]                      Node type: decimal_number, text: 15, start: 17:66, end: 17:68
+[12]                        Node type: unsigned_number, text: 15, start: 17:66, end: 17:68
+[3]      Node type: expression, text: load, start: 18:15, end: 18:19
+[4]        Node type: primary, text: load, start: 18:15, end: 18:19
+[5]          Node type: simple_identifier, text: load, start: 18:15, end: 18:19
+[3]      Node type: expression, text: count, start: 19:10, end: 19:15
+[4]        Node type: primary, text: count, start: 19:10, end: 19:15
+[5]          Node type: simple_identifier, text: count, start: 19:10, end: 19:15
+[3]      Node type: expression, text: load, start: 19:17, end: 19:21
+[4]        Node type: primary, text: load, start: 19:17, end: 19:21
+[5]          Node type: simple_identifier, text: load, start: 19:17, end: 19:21
+[3]      Node type: simple_identifier, text: per_instance, start: 20:11, end: 20:23
+[3]      Node type: expression, text: cg cov_inst = new(), start: 22:2, end: 22:21
+[4]        Node type: primary, text: cg cov_inst = new(), start: 22:2, end: 22:21
+[5]          Node type: let_expression, text: cg cov_inst = new(), start: 22:2, end: 22:21
+[6]            Node type: simple_identifier, text: cg, start: 22:2, end: 22:4
+[6]            Node type: ERROR, text: cov_inst = new, start: 22:5, end: 22:19
+[7]              Node type: simple_identifier, text: cov_inst, start: 22:5, end: 22:13
+[3]      Node type: comment, text: // Coverage instance, start: 22:24, end: 22:44
+[3]      Node type: expression, text: dut (input clk, rst, load, data, output count), start: 24:10, end: 24:56
+[4]        Node type: primary, text: dut (input clk, rst, load, data, output count), start: 24:10, end: 24:56
+[5]          Node type: function_subroutine_call, text: dut (input clk, rst, load, data, output count), start: 24:10, end: 24:56
+[6]            Node type: subroutine_call, text: dut (input clk, rst, load, data, output count), start: 24:10, end: 24:56
+[7]              Node type: tf_call, text: dut (input clk, rst, load, data, output count), start: 24:10, end: 24:56
+[8]                Node type: simple_identifier, text: dut, start: 24:10, end: 24:13
+[8]                Node type: list_of_arguments_parent, text: (input clk, rst, load, data, output count), start: 24:14, end: 24:56
+[9]                  Node type: expression, text: input, start: 24:15, end: 24:20
+[10]                    Node type: primary, text: input, start: 24:15, end: 24:20
+[11]                      Node type: simple_identifier, text: input, start: 24:15, end: 24:20
+[9]                  Node type: ERROR, text: clk, start: 24:21, end: 24:24
+[10]                    Node type: simple_identifier, text: clk, start: 24:21, end: 24:24
+[9]                  Node type: expression, text: rst, start: 24:26, end: 24:29
+[10]                    Node type: primary, text: rst, start: 24:26, end: 24:29
+[11]                      Node type: simple_identifier, text: rst, start: 24:26, end: 24:29
+[9]                  Node type: expression, text: load, start: 24:31, end: 24:35
+[10]                    Node type: primary, text: load, start: 24:31, end: 24:35
+[11]                      Node type: simple_identifier, text: load, start: 24:31, end: 24:35
+[9]                  Node type: expression, text: data, start: 24:37, end: 24:41
+[10]                    Node type: primary, text: data, start: 24:37, end: 24:41
+[11]                      Node type: simple_identifier, text: data, start: 24:37, end: 24:41
+[9]                  Node type: expression, text: output, start: 24:43, end: 24:49
+[10]                    Node type: primary, text: output, start: 24:43, end: 24:49
+[11]                      Node type: simple_identifier, text: output, start: 24:43, end: 24:49
+[9]                  Node type: ERROR, text: count, start: 24:50, end: 24:55
+[10]                    Node type: simple_identifier, text: count, start: 24:50, end: 24:55
+[3]      Node type: expression, text: wrapper (input clk, rst, load, data, output count), start: 25:10, end: 25:60
+[4]        Node type: primary, text: wrapper (input clk, rst, load, data, output count), start: 25:10, end: 25:60
+[5]          Node type: function_subroutine_call, text: wrapper (input clk, rst, load, data, output count), start: 25:10, end: 25:60
+[6]            Node type: subroutine_call, text: wrapper (input clk, rst, load, data, output count), start: 25:10, end: 25:60
+[7]              Node type: tf_call, text: wrapper (input clk, rst, load, data, output count), start: 25:10, end: 25:60
+[8]                Node type: simple_identifier, text: wrapper, start: 25:10, end: 25:17
+[8]                Node type: list_of_arguments_parent, text: (input clk, rst, load, data, output count), start: 25:18, end: 25:60
+[9]                  Node type: expression, text: input, start: 25:19, end: 25:24
+[10]                    Node type: primary, text: input, start: 25:19, end: 25:24
+[11]                      Node type: simple_identifier, text: input, start: 25:19, end: 25:24
+[9]                  Node type: ERROR, text: clk, start: 25:25, end: 25:28
+[10]                    Node type: simple_identifier, text: clk, start: 25:25, end: 25:28
+[9]                  Node type: expression, text: rst, start: 25:30, end: 25:33
+[10]                    Node type: primary, text: rst, start: 25:30, end: 25:33
+[11]                      Node type: simple_identifier, text: rst, start: 25:30, end: 25:33
+[9]                  Node type: expression, text: load, start: 25:35, end: 25:39
+[10]                    Node type: primary, text: load, start: 25:35, end: 25:39
+[11]                      Node type: simple_identifier, text: load, start: 25:35, end: 25:39
+[9]                  Node type: expression, text: data, start: 25:41, end: 25:45
+[10]                    Node type: primary, text: data, start: 25:41, end: 25:45
+[11]                      Node type: simple_identifier, text: data, start: 25:41, end: 25:45
+[9]                  Node type: expression, text: output, start: 25:47, end: 25:53
+[10]                    Node type: primary, text: output, start: 25:47, end: 25:53
+[11]                      Node type: simple_identifier, text: output, start: 25:47, end: 25:53
+[9]                  Node type: ERROR, text: count, start: 25:54, end: 25:59
+[10]                    Node type: simple_identifier, text: count, start: 25:54, end: 25:59
+[3]      Node type: comment, text: // Additional modport for hierarchy, start: 25:63, end: 25:98
+[3]      Node type: expression, text: tb (input clk, count, output rst, load, data, clocking cb), start: 26:10, end: 26:68
+[4]        Node type: primary, text: tb (input clk, count, output rst, load, data, clocking cb), start: 26:10, end: 26:68
+[5]          Node type: function_subroutine_call, text: tb (input clk, count, output rst, load, data, clocking cb), start: 26:10, end: 26:68
+[6]            Node type: subroutine_call, text: tb (input clk, count, output rst, load, data, clocking cb), start: 26:10, end: 26:68
+[7]              Node type: tf_call, text: tb (input clk, count, output rst, load, data, clocking cb), start: 26:10, end: 26:68
+[8]                Node type: simple_identifier, text: tb, start: 26:10, end: 26:12
+[8]                Node type: list_of_arguments_parent, text: (input clk, count, output rst, load, data, clocking cb), start: 26:13, end: 26:68
+[9]                  Node type: expression, text: input, start: 26:14, end: 26:19
+[10]                    Node type: primary, text: input, start: 26:14, end: 26:19
+[11]                      Node type: simple_identifier, text: input, start: 26:14, end: 26:19
+[9]                  Node type: ERROR, text: clk, start: 26:20, end: 26:23
+[10]                    Node type: simple_identifier, text: clk, start: 26:20, end: 26:23
+[9]                  Node type: expression, text: count, start: 26:25, end: 26:30
+[10]                    Node type: primary, text: count, start: 26:25, end: 26:30
+[11]                      Node type: simple_identifier, text: count, start: 26:25, end: 26:30
+[9]                  Node type: expression, text: output, start: 26:32, end: 26:38
+[10]                    Node type: primary, text: output, start: 26:32, end: 26:38
+[11]                      Node type: simple_identifier, text: output, start: 26:32, end: 26:38
+[9]                  Node type: ERROR, text: rst, start: 26:39, end: 26:42
+[10]                    Node type: simple_identifier, text: rst, start: 26:39, end: 26:42
+[9]                  Node type: expression, text: load, start: 26:44, end: 26:48
+[10]                    Node type: primary, text: load, start: 26:44, end: 26:48
+[11]                      Node type: simple_identifier, text: load, start: 26:44, end: 26:48
+[9]                  Node type: expression, text: data, start: 26:50, end: 26:54
+[10]                    Node type: primary, text: data, start: 26:50, end: 26:54
+[11]                      Node type: simple_identifier, text: data, start: 26:50, end: 26:54
+[9]                  Node type: expression, text: clocking, start: 26:56, end: 26:64
+[10]                    Node type: primary, text: clocking, start: 26:56, end: 26:64
+[11]                      Node type: simple_identifier, text: clocking, start: 26:56, end: 26:64
+[9]                  Node type: ERROR, text: cb, start: 26:65, end: 26:67
+[10]                    Node type: simple_identifier, text: cb, start: 26:65, end: 26:67
+[3]      Node type: comment, text: // Transaction class, start: 30:0, end: 30:20
+[3]      Node type: expression, text: Trans, start: 31:6, end: 31:11
+[4]        Node type: primary, text: Trans, start: 31:6, end: 31:11
+[5]          Node type: simple_identifier, text: Trans, start: 31:6, end: 31:11
+[3]      Node type: casting_type, text: bit, start: 32:7, end: 32:10
+[4]        Node type: integer_vector_type, text: bit, start: 32:7, end: 32:10
+[3]      Node type: simple_identifier, text: load, start: 32:11, end: 32:15
+[2]    Node type: casting_type, text: bit, start: 33:7, end: 33:10
+[3]      Node type: integer_vector_type, text: bit, start: 33:7, end: 33:10
+[2]    Node type: expression, text: 3, start: 33:12, end: 33:13
+[3]      Node type: primary, text: 3, start: 33:12, end: 33:13
+[4]        Node type: primary_literal, text: 3, start: 33:12, end: 33:13
+[5]          Node type: integral_number, text: 3, start: 33:12, end: 33:13
+[6]            Node type: decimal_number, text: 3, start: 33:12, end: 33:13
+[7]              Node type: unsigned_number, text: 3, start: 33:12, end: 33:13
+[2]    Node type: ERROR, text: :0, start: 33:13, end: 33:15
+[2]    Node type: simple_identifier, text: data, start: 33:17, end: 33:21
+[2]    Node type: expression, text: 3, start: 34:7, end: 34:8
+[3]      Node type: primary, text: 3, start: 34:7, end: 34:8
+[4]        Node type: primary_literal, text: 3, start: 34:7, end: 34:8
+[5]          Node type: integral_number, text: 3, start: 34:7, end: 34:8
+[6]            Node type: decimal_number, text: 3, start: 34:7, end: 34:8
+[7]              Node type: unsigned_number, text: 3, start: 34:7, end: 34:8
+[2]    Node type: ERROR, text: :0, start: 34:8, end: 34:10
+[2]    Node type: simple_identifier, text: expected, start: 34:12, end: 34:20
+[2]    Node type: ERROR, text: 1:0] {IDLE, LOAD, INC, RESET} state_t;, start: 35:22, end: 35:60
+[3]      Node type: expression, text: 1, start: 35:22, end: 35:23
+[4]        Node type: primary, text: 1, start: 35:22, end: 35:23
+[5]          Node type: primary_literal, text: 1, start: 35:22, end: 35:23
+[6]            Node type: integral_number, text: 1, start: 35:22, end: 35:23
+[7]              Node type: decimal_number, text: 1, start: 35:22, end: 35:23
+[8]                Node type: unsigned_number, text: 1, start: 35:22, end: 35:23
+[3]      Node type: ERROR, text: :0, start: 35:23, end: 35:25
+[3]      Node type: variable_lvalue, text: {IDLE, LOAD, INC, RESET}, start: 35:27, end: 35:51
+[4]        Node type: variable_lvalue, text: IDLE, start: 35:28, end: 35:32
+[5]          Node type: simple_identifier, text: IDLE, start: 35:28, end: 35:32
+[4]        Node type: variable_lvalue, text: LOAD, start: 35:34, end: 35:38
+[5]          Node type: simple_identifier, text: LOAD, start: 35:34, end: 35:38
+[4]        Node type: variable_lvalue, text: INC, start: 35:40, end: 35:43
+[5]          Node type: simple_identifier, text: INC, start: 35:40, end: 35:43
+[4]        Node type: variable_lvalue, text: RESET, start: 35:45, end: 35:50
+[5]          Node type: simple_identifier, text: RESET, start: 35:45, end: 35:50
+[3]      Node type: simple_identifier, text: state_t, start: 35:52, end: 35:59
+[2]    Node type: comment, text: // Enum for states, start: 35:62, end: 35:80
+[2]    Node type: ERROR, text: state_t state;, start: 36:2, end: 36:16
+[3]      Node type: simple_identifier, text: state_t, start: 36:2, end: 36:9
+[3]      Node type: simple_identifier, text: state, start: 36:10, end: 36:15
+[2]    Node type: casting_type, text: bit, start: 37:2, end: 37:5
+[3]      Node type: integer_vector_type, text: bit, start: 37:2, end: 37:5
+[2]    Node type: expression, text: 3, start: 37:7, end: 37:8
+[3]      Node type: primary, text: 3, start: 37:7, end: 37:8
+[4]        Node type: primary_literal, text: 3, start: 37:7, end: 37:8
+[5]          Node type: integral_number, text: 3, start: 37:7, end: 37:8
+[6]            Node type: decimal_number, text: 3, start: 37:7, end: 37:8
+[7]              Node type: unsigned_number, text: 3, start: 37:7, end: 37:8
+[2]    Node type: ERROR, text: :0, start: 37:8, end: 37:10
+[2]    Node type: simple_identifier, text: history, start: 37:12, end: 37:19
+[1]  Node type: ERROR, text: 5];
+
+  constraint data_c { data inside {[0:10]}; }
+
+  virtual function void calculate_expected(bit [3:0] prev_count);
+    if (load)
+      expected = data;
+    else
+      expected = prev_count + 1;
+  endfunction
+
+  function void post_randomize();
+    state = load ? LOAD : INC;
+    for (int j = 0; j < 5; j++) history[j] = data + j;
+  endfunction
+
+  function void, start: 37:20, end: 53:15
+[2]    Node type: expression, text: 5, start: 37:20, end: 37:21
+[3]      Node type: primary, text: 5, start: 37:20, end: 37:21
+[4]        Node type: primary_literal, text: 5, start: 37:20, end: 37:21
+[5]          Node type: integral_number, text: 5, start: 37:20, end: 37:21
+[6]            Node type: decimal_number, text: 5, start: 37:20, end: 37:21
+[7]              Node type: unsigned_number, text: 5, start: 37:20, end: 37:21
+[2]    Node type: simple_identifier, text: data_c, start: 39:13, end: 39:19
+[2]    Node type: expression, text: data inside {[0:10]}, start: 39:22, end: 39:42
+[3]      Node type: inside_expression, text: data inside {[0:10]}, start: 39:22, end: 39:42
+[4]        Node type: expression, text: data, start: 39:22, end: 39:26
+[5]          Node type: primary, text: data, start: 39:22, end: 39:26
+[6]            Node type: simple_identifier, text: data, start: 39:22, end: 39:26
+[4]        Node type: open_range_list, text: [0:10], start: 39:35, end: 39:41
+[5]          Node type: open_value_range, text: [0:10], start: 39:35, end: 39:41
+[6]            Node type: value_range, text: [0:10], start: 39:35, end: 39:41
+[7]              Node type: expression, text: 0, start: 39:36, end: 39:37
+[8]                Node type: primary, text: 0, start: 39:36, end: 39:37
+[9]                  Node type: primary_literal, text: 0, start: 39:36, end: 39:37
+[10]                    Node type: integral_number, text: 0, start: 39:36, end: 39:37
+[11]                      Node type: decimal_number, text: 0, start: 39:36, end: 39:37
+[12]                        Node type: unsigned_number, text: 0, start: 39:36, end: 39:37
+[7]              Node type: expression, text: 10, start: 39:38, end: 39:40
+[8]                Node type: primary, text: 10, start: 39:38, end: 39:40
+[9]                  Node type: primary_literal, text: 10, start: 39:38, end: 39:40
+[10]                    Node type: integral_number, text: 10, start: 39:38, end: 39:40
+[11]                      Node type: decimal_number, text: 10, start: 39:38, end: 39:40
+[12]                        Node type: unsigned_number, text: 10, start: 39:38, end: 39:40
+[2]    Node type: variable_lvalue, text: calculate_expected(bit [3:0], start: 41:24, end: 41:52
+[3]      Node type: simple_identifier, text: calculate_expected, start: 41:24, end: 41:42
+[3]      Node type: ERROR, text: (bit, start: 41:42, end: 41:46
+[4]        Node type: casting_type, text: bit, start: 41:43, end: 41:46
+[5]          Node type: integer_vector_type, text: bit, start: 41:43, end: 41:46
+[3]      Node type: select1, text: [3:0], start: 41:47, end: 41:52
+[4]        Node type: constant_range, text: 3:0, start: 41:48, end: 41:51
+[5]          Node type: constant_expression, text: 3, start: 41:48, end: 41:49
+[6]            Node type: constant_primary, text: 3, start: 41:48, end: 41:49
+[7]              Node type: primary_literal, text: 3, start: 41:48, end: 41:49
+[8]                Node type: integral_number, text: 3, start: 41:48, end: 41:49
+[9]                  Node type: decimal_number, text: 3, start: 41:48, end: 41:49
+[10]                    Node type: unsigned_number, text: 3, start: 41:48, end: 41:49
+[5]          Node type: constant_expression, text: 0, start: 41:50, end: 41:51
+[6]            Node type: constant_primary, text: 0, start: 41:50, end: 41:51
+[7]              Node type: primary_literal, text: 0, start: 41:50, end: 41:51
+[8]                Node type: integral_number, text: 0, start: 41:50, end: 41:51
+[9]                  Node type: decimal_number, text: 0, start: 41:50, end: 41:51
+[10]                    Node type: unsigned_number, text: 0, start: 41:50, end: 41:51
+[2]    Node type: simple_identifier, text: prev_count, start: 41:53, end: 41:63
+[2]    Node type: primary, text: (load), start: 42:7, end: 42:13
+[3]      Node type: mintypmax_expression, text: load, start: 42:8, end: 42:12
+[4]        Node type: expression, text: load, start: 42:8, end: 42:12
+[5]          Node type: primary, text: load, start: 42:8, end: 42:12
+[6]            Node type: simple_identifier, text: load, start: 42:8, end: 42:12
+[2]    Node type: simple_identifier, text: expected, start: 43:6, end: 43:14
+[2]    Node type: expression, text: data, start: 43:17, end: 43:21
+[3]      Node type: primary, text: data, start: 43:17, end: 43:21
+[4]        Node type: simple_identifier, text: data, start: 43:17, end: 43:21
+[2]    Node type: simple_identifier, text: expected, start: 45:6, end: 45:14
+[2]    Node type: expression, text: prev_count + 1, start: 45:17, end: 45:31
+[3]      Node type: expression, text: prev_count, start: 45:17, end: 45:27
+[4]        Node type: primary, text: prev_count, start: 45:17, end: 45:27
+[5]          Node type: simple_identifier, text: prev_count, start: 45:17, end: 45:27
+[3]      Node type: expression, text: 1, start: 45:30, end: 45:31
+[4]        Node type: primary, text: 1, start: 45:30, end: 45:31
+[5]          Node type: primary_literal, text: 1, start: 45:30, end: 45:31
+[6]            Node type: integral_number, text: 1, start: 45:30, end: 45:31
+[7]              Node type: decimal_number, text: 1, start: 45:30, end: 45:31
+[8]                Node type: unsigned_number, text: 1, start: 45:30, end: 45:31
+[2]    Node type: expression, text: post_randomize(), start: 48:16, end: 48:32
+[3]      Node type: primary, text: post_randomize(), start: 48:16, end: 48:32
+[4]        Node type: let_expression, text: post_randomize(), start: 48:16, end: 48:32
+[5]          Node type: simple_identifier, text: post_randomize, start: 48:16, end: 48:30
+[2]    Node type: simple_identifier, text: state, start: 49:4, end: 49:9
+[2]    Node type: expression, text: load ? LOAD : INC, start: 49:12, end: 49:29
+[3]      Node type: conditional_expression, text: load ? LOAD : INC, start: 49:12, end: 49:29
+[4]        Node type: cond_predicate, text: load, start: 49:12, end: 49:16
+[5]          Node type: expression, text: load, start: 49:12, end: 49:16
+[6]            Node type: primary, text: load, start: 49:12, end: 49:16
+[7]              Node type: simple_identifier, text: load, start: 49:12, end: 49:16
+[4]        Node type: expression, text: LOAD, start: 49:19, end: 49:23
+[5]          Node type: primary, text: LOAD, start: 49:19, end: 49:23
+[6]            Node type: simple_identifier, text: LOAD, start: 49:19, end: 49:23
+[4]        Node type: expression, text: INC, start: 49:26, end: 49:29
+[5]          Node type: primary, text: INC, start: 49:26, end: 49:29
+[6]            Node type: simple_identifier, text: INC, start: 49:26, end: 49:29
+[2]    Node type: primary, text: (int j = 0; j < 5; j++), start: 50:8, end: 50:31
+[3]      Node type: ERROR, text: int j = 0;, start: 50:9, end: 50:19
+[4]        Node type: integer_atom_type, text: int, start: 50:9, end: 50:12
+[4]        Node type: operator_assignment, text: j = 0, start: 50:13, end: 50:18
+[5]          Node type: variable_lvalue, text: j, start: 50:13, end: 50:14
+[6]            Node type: simple_identifier, text: j, start: 50:13, end: 50:14
+[5]          Node type: assignment_operator, text: =, start: 50:15, end: 50:16
+[5]          Node type: expression, text: 0, start: 50:17, end: 50:18
+[6]            Node type: primary, text: 0, start: 50:17, end: 50:18
+[7]              Node type: primary_literal, text: 0, start: 50:17, end: 50:18
+[8]                Node type: integral_number, text: 0, start: 50:17, end: 50:18
+[9]                  Node type: decimal_number, text: 0, start: 50:17, end: 50:18
+[10]                    Node type: unsigned_number, text: 0, start: 50:17, end: 50:18
+[3]      Node type: mintypmax_expression, text: j < 5; j++, start: 50:20, end: 50:30
+[4]        Node type: expression, text: j < 5; j++, start: 50:20, end: 50:30
+[5]          Node type: expression, text: j, start: 50:20, end: 50:21
+[6]            Node type: primary, text: j, start: 50:20, end: 50:21
+[7]              Node type: simple_identifier, text: j, start: 50:20, end: 50:21
+[5]          Node type: ERROR, text: 5;, start: 50:24, end: 50:26
+[6]            Node type: expression, text: 5, start: 50:24, end: 50:25
+[7]              Node type: primary, text: 5, start: 50:24, end: 50:25
+[8]                Node type: primary_literal, text: 5, start: 50:24, end: 50:25
+[9]                  Node type: integral_number, text: 5, start: 50:24, end: 50:25
+[10]                    Node type: decimal_number, text: 5, start: 50:24, end: 50:25
+[11]                      Node type: unsigned_number, text: 5, start: 50:24, end: 50:25
+[5]          Node type: expression, text: j++, start: 50:27, end: 50:30
+[6]            Node type: inc_or_dec_expression, text: j++, start: 50:27, end: 50:30
+[7]              Node type: variable_lvalue, text: j, start: 50:27, end: 50:28
+[8]                Node type: simple_identifier, text: j, start: 50:27, end: 50:28
+[7]              Node type: inc_or_dec_operator, text: ++, start: 50:28, end: 50:30
+[2]    Node type: variable_lvalue, text: history[j], start: 50:32, end: 50:42
+[3]      Node type: simple_identifier, text: history, start: 50:32, end: 50:39
+[3]      Node type: select1, text: [j], start: 50:39, end: 50:42
+[4]        Node type: bit_select1, text: [j], start: 50:39, end: 50:42
+[5]          Node type: expression, text: j, start: 50:40, end: 50:41
+[6]            Node type: primary, text: j, start: 50:40, end: 50:41
+[7]              Node type: simple_identifier, text: j, start: 50:40, end: 50:41
+[2]    Node type: expression, text: data + j, start: 50:45, end: 50:53
+[3]      Node type: expression, text: data, start: 50:45, end: 50:49
+[4]        Node type: primary, text: data, start: 50:45, end: 50:49
+[5]          Node type: simple_identifier, text: data, start: 50:45, end: 50:49
+[3]      Node type: expression, text: j, start: 50:52, end: 50:53
+[4]        Node type: primary, text: j, start: 50:52, end: 50:53
+[5]          Node type: simple_identifier, text: j, start: 50:52, end: 50:53
+[1]  Node type: simple_identifier, text: print, start: 53:16, end: 53:21
+[1]  Node type: ERROR, text: string prefix = ", start: 53:22, end: 53:39
+[2]    Node type: casting_type, text: string, start: 53:22, end: 53:28
+[2]    Node type: simple_identifier, text: prefix, start: 53:29, end: 53:35
+[1]  Node type: expression, text: ");
+    $display("%s: load=%b, start: 53:39, end: 54:25
+[2]    Node type: expression, text: ");
+    $display("%s: load, start: 53:39, end: 54:22
+[3]      Node type: expression, text: ");
+    $display(", start: 53:39, end: 54:14
+[4]        Node type: primary, text: ");
+    $display(", start: 53:39, end: 54:14
+[5]          Node type: primary_literal, text: ");
+    $display(", start: 53:39, end: 54:14
+[6]            Node type: string_literal, text: ");
+    $display(", start: 53:39, end: 54:14
+[3]      Node type: ERROR, text: s:, start: 54:15, end: 54:17
+[4]        Node type: expression, text: s, start: 54:15, end: 54:16
+[5]          Node type: primary, text: s, start: 54:15, end: 54:16
+[6]            Node type: simple_identifier, text: s, start: 54:15, end: 54:16
+[3]      Node type: expression, text: load, start: 54:18, end: 54:22
+[4]        Node type: primary, text: load, start: 54:18, end: 54:22
+[5]          Node type: simple_identifier, text: load, start: 54:18, end: 54:22
+[2]    Node type: ERROR, text: =, start: 54:22, end: 54:23
+[2]    Node type: expression, text: b, start: 54:24, end: 54:25
+[3]      Node type: primary, text: b, start: 54:24, end: 54:25
+[4]        Node type: simple_identifier, text: b, start: 54:24, end: 54:25
+[1]  Node type: expression, text: data=%0, start: 54:27, end: 54:34
+[2]    Node type: expression, text: data, start: 54:27, end: 54:31
+[3]      Node type: primary, text: data, start: 54:27, end: 54:31
+[4]        Node type: simple_identifier, text: data, start: 54:27, end: 54:31
+[2]    Node type: ERROR, text: =, start: 54:31, end: 54:32
+[2]    Node type: expression, text: 0, start: 54:33, end: 54:34
+[3]      Node type: primary, text: 0, start: 54:33, end: 54:34
+[4]        Node type: primary_literal, text: 0, start: 54:33, end: 54:34
+[5]          Node type: integral_number, text: 0, start: 54:33, end: 54:34
+[6]            Node type: decimal_number, text: 0, start: 54:33, end: 54:34
+[7]              Node type: unsigned_number, text: 0, start: 54:33, end: 54:34
+[1]  Node type: ERROR, text: d, start: 54:34, end: 54:35
+[2]    Node type: simple_identifier, text: d, start: 54:34, end: 54:35
+[1]  Node type: expression, text: expected=%0, start: 54:37, end: 54:48
+[2]    Node type: expression, text: expected, start: 54:37, end: 54:45
+[3]      Node type: primary, text: expected, start: 54:37, end: 54:45
+[4]        Node type: simple_identifier, text: expected, start: 54:37, end: 54:45
+[2]    Node type: ERROR, text: =, start: 54:45, end: 54:46
+[2]    Node type: expression, text: 0, start: 54:47, end: 54:48
+[3]      Node type: primary, text: 0, start: 54:47, end: 54:48
+[4]        Node type: primary_literal, text: 0, start: 54:47, end: 54:48
+[5]          Node type: integral_number, text: 0, start: 54:47, end: 54:48
+[6]            Node type: decimal_number, text: 0, start: 54:47, end: 54:48
+[7]              Node type: unsigned_number, text: 0, start: 54:47, end: 54:48
+[1]  Node type: ERROR, text: d, start: 54:48, end: 54:49
+[2]    Node type: simple_identifier, text: d, start: 54:48, end: 54:49
+[1]  Node type: expression, text: state=%s", prefix, load, data, expected, state);
+    foreach (history[k]) $display("History[%0d] = %0d", k, history[k]);
+  endfunction
+endclass
+
+// Driver class
+class Driver;
+  virtual counter_if vif;
+  mailbox #(Trans) mbx;
+  semaphore sem = new(1);
+
+  task run();
+    Trans t;
+    $display("Driver starting...");
+    forever begin
+      sem.get(1);
+      mbx.get(t);
+      t.print("Driver");
+      @(vif.cb);
+      vif.cb.load <= t.load;
+      vif.cb.data <= t.data;
+      sem.put(1);
+    end
+  endtask
+endclass
+
+// Monitor class
+class Monitor;
+  virtual counter_if vif;
+  mailbox #(bit [3:0]) mbx;
+
+  task run();
+    $display("Monitor starting...");
+    forever begin
+      @(vif.cb);
+      mbx.put(vif.cb.count);
+      $display("Monitor observed count = %0d", vif.cb.count);
+    end
+  endtask
+endclass
+
+// Scoreboard class
+class Scoreboard;
+  mailbox #(bit [3:0]) mbx;
+  bit [3:0] expected_count = 0;
+
+  task run();
+    bit [3:0] observed;
+    forever begin
+      mbx.get(observed);
+      if (observed != expected_count)
+        $error("Scoreboard mismatch: expected %0, start: 54:51, end: 105:48
+[2]    Node type: expression, text: state=%s", prefix, load, data, expected, state);
+    foreach (history[k]) $display("History[%0d] = %0d", k, history[k]);
+  endfunction
+endclass
+
+// Driver class
+class Driver;
+  virtual counter_if vif;
+  mailbox #(Trans) mbx;
+  semaphore sem = new(1);
+
+  task run();
+    Trans t;
+    $display("Driver starting...");
+    forever begin
+      sem.get(1);
+      mbx.get(t);
+      t.print("Driver");
+      @(vif.cb);
+      vif.cb.load <= t.load;
+      vif.cb.data <= t.data;
+      sem.put(1);
+    end
+  endtask
+endclass
+
+// Monitor class
+class Monitor;
+  virtual counter_if vif;
+  mailbox #(bit [3:0]) mbx;
+
+  task run();
+    $display("Monitor starting...");
+    forever begin
+      @(vif.cb);
+      mbx.put(vif.cb.count);
+      $display("Monitor observed count = %0d", vif.cb.count);
+    end
+  endtask
+endclass
+
+// Scoreboard class
+class Scoreboard;
+  mailbox #(bit [3:0]) mbx;
+  bit [3:0] expected_count = 0;
+
+  task run();
+    bit [3:0] observed;
+    forever begin
+      mbx.get(observed);
+      if (observed != expected_count)
+        $error(", start: 54:51, end: 105:16
+[3]      Node type: expression, text: state=%s", prefix, load, data, expected, state);
+    foreach (history[k]) $display("History[%0d] = %0d", k, history[k]);
+  endfunction
+endclass
+
+// Driver class
+class Driver;
+  virtual counter_if vif;
+  mailbox #(Trans) mbx;
+  semaphore sem = new(1);
+
+  task run();
+    Trans t;
+    $display("Driver starting...");
+    forever begin
+      sem.get(1);
+      mbx.get(t);
+      t.print("Driver");
+      @(vif.cb);
+      vif.cb.load <= t.load;
+      vif.cb.data <= t.data;
+      sem.put(1);
+    end
+  endtask
+endclass
+
+// Monitor class
+class Monitor;
+  virtual counter_if vif;
+  mailbox #(bit [3:0]) mbx;
+
+  task run();
+    $display("Monitor starting...");
+    forever begin
+      @(vif.cb);
+      mbx.put(vif.cb.count);
+      $display("Monitor observed, start: 54:51, end: 90:32
+[4]        Node type: expression, text: state=%s", prefix, load, data, expected, state);
+    foreach (history[k]) $display("History[%0, start: 54:51, end: 55:45
+[5]          Node type: expression, text: state=%s", prefix, load, data, expected, state);
+    foreach (history[k]) $display("History, start: 54:51, end: 55:42
+[6]            Node type: expression, text: state, start: 54:51, end: 54:56
+[7]              Node type: primary, text: state, start: 54:51, end: 54:56
+[8]                Node type: simple_identifier, text: state, start: 54:51, end: 54:56
+[6]            Node type: ERROR, text: =, start: 54:56, end: 54:57
+[6]            Node type: ERROR, text: s", prefix, load, data, expected, state);
+    foreach (history[k]) $display(", start: 54:58, end: 55:35
+[7]              Node type: simple_identifier, text: s, start: 54:58, end: 54:59
+[7]              Node type: casting_type, text: ", prefix, load, data, expected, state);
+    foreach (history[k]) $display(", start: 54:59, end: 55:35
+[8]                Node type: constant_primary, text: ", prefix, load, data, expected, state);
+    foreach (history[k]) $display(", start: 54:59, end: 55:35
+[9]                  Node type: primary_literal, text: ", prefix, load, data, expected, state);
+    foreach (history[k]) $display(", start: 54:59, end: 55:35
+[10]                    Node type: string_literal, text: ", prefix, load, data, expected, state);
+    foreach (history[k]) $display(", start: 54:59, end: 55:35
+[6]            Node type: expression, text: History, start: 55:35, end: 55:42
+[7]              Node type: primary, text: History, start: 55:35, end: 55:42
+[8]                Node type: simple_identifier, text: History, start: 55:35, end: 55:42
+[5]          Node type: ERROR, text: [, start: 55:42, end: 55:43
+[5]          Node type: expression, text: 0, start: 55:44, end: 55:45
+[6]            Node type: primary, text: 0, start: 55:44, end: 55:45
+[7]              Node type: primary_literal, text: 0, start: 55:44, end: 55:45
+[8]                Node type: integral_number, text: 0, start: 55:44, end: 55:45
+[9]                  Node type: decimal_number, text: 0, start: 55:44, end: 55:45
+[10]                    Node type: unsigned_number, text: 0, start: 55:44, end: 55:45
+[4]        Node type: ERROR, text: d] =, start: 55:45, end: 55:49
+[5]          Node type: simple_identifier, text: d, start: 55:45, end: 55:46
+[4]        Node type: ERROR, text: 0d", k, history[k]);
+  endfunction
+endclass
+
+// Driver class
+class Driver;
+  virtual counter_if vif;
+  mailbox #(Trans) mbx;
+  semaphore sem = new(1);
+
+  task run();
+    Trans t;
+    $display("Driver starting...");
+    forever begin
+      sem.get(1);
+      mbx.get(t);
+      t.print("Driver");
+      @(vif.cb);
+      vif.cb.load <= t.load;
+      vif.cb.data <= t.data;
+      sem.put(1);
+    end
+  endtask
+endclass
+
+// Monitor class
+class Monitor;
+  virtual counter_if vif;
+  mailbox #(bit [3:0]) mbx;
+
+  task run();
+    $display("Monitor starting...");
+    forever begin
+      @(vif.cb);
+      mbx.put(vif.cb.count);
+      $display("Monitor, start: 55:51, end: 90:23
+[5]          Node type: unsigned_number, text: 0, start: 55:51, end: 55:52
+[5]          Node type: simple_identifier, text: d, start: 55:52, end: 55:53
+[5]          Node type: primary, text: ", k, history[k]);
+  endfunction
+endclass
+
+// Driver class
+class Driver;
+  virtual counter_if vif;
+  mailbox #(Trans) mbx;
+  semaphore sem = new(1);
+
+  task run();
+    Trans t;
+    $display(", start: 55:53, end: 67:14
+[6]            Node type: primary_literal, text: ", k, history[k]);
+  endfunction
+endclass
+
+// Driver class
+class Driver;
+  virtual counter_if vif;
+  mailbox #(Trans) mbx;
+  semaphore sem = new(1);
+
+  task run();
+    Trans t;
+    $display(", start: 55:53, end: 67:14
+[7]              Node type: string_literal, text: ", k, history[k]);
+  endfunction
+endclass
+
+// Driver class
+class Driver;
+  virtual counter_if vif;
+  mailbox #(Trans) mbx;
+  semaphore sem = new(1);
+
+  task run();
+    Trans t;
+    $display(", start: 55:53, end: 67:14
+[5]          Node type: ERROR, text: Driver starting., start: 67:14, end: 67:30
+[6]            Node type: simple_identifier, text: Driver, start: 67:14, end: 67:20
+[6]            Node type: simple_identifier, text: starting, start: 67:21, end: 67:29
+[5]          Node type: casting_type, text: ");
+    forever begin
+      sem.get(1);
+      mbx.get(t);
+      t.print(", start: 67:32, end: 71:15
+[6]            Node type: constant_primary, text: ");
+    forever begin
+      sem.get(1);
+      mbx.get(t);
+      t.print(", start: 67:32, end: 71:15
+[7]              Node type: primary_literal, text: ");
+    forever begin
+      sem.get(1);
+      mbx.get(t);
+      t.print(", start: 67:32, end: 71:15
+[8]                Node type: string_literal, text: ");
+    forever begin
+      sem.get(1);
+      mbx.get(t);
+      t.print(", start: 67:32, end: 71:15
+[5]          Node type: simple_identifier, text: Driver, start: 71:15, end: 71:21
+[5]          Node type: primary, text: ");
+      @(vif.cb);
+      vif.cb.load <= t.load;
+      vif.cb.data <= t.data;
+      sem.put(1);
+    end
+  endtask
+endclass
+
+// Monitor class
+class Monitor;
+  virtual counter_if vif;
+  mailbox #(bit [3:0]) mbx;
+
+  task run();
+    $display(", start: 71:21, end: 86:14
+[6]            Node type: primary_literal, text: ");
+      @(vif.cb);
+      vif.cb.load <= t.load;
+      vif.cb.data <= t.data;
+      sem.put(1);
+    end
+  endtask
+endclass
+
+// Monitor class
+class Monitor;
+  virtual counter_if vif;
+  mailbox #(bit [3:0]) mbx;
+
+  task run();
+    $display(", start: 71:21, end: 86:14
+[7]              Node type: string_literal, text: ");
+      @(vif.cb);
+      vif.cb.load <= t.load;
+      vif.cb.data <= t.data;
+      sem.put(1);
+    end
+  endtask
+endclass
+
+// Monitor class
+class Monitor;
+  virtual counter_if vif;
+  mailbox #(bit [3:0]) mbx;
+
+  task run();
+    $display(", start: 71:21, end: 86:14
+[5]          Node type: ERROR, text: Monitor starting., start: 86:14, end: 86:31
+[6]            Node type: simple_identifier, text: Monitor, start: 86:14, end: 86:21
+[6]            Node type: simple_identifier, text: starting, start: 86:22, end: 86:30
+[5]          Node type: casting_type, text: ");
+    forever begin
+      @(vif.cb);
+      mbx.put(vif.cb.count);
+      $display(", start: 86:33, end: 90:16
+[6]            Node type: constant_primary, text: ");
+    forever begin
+      @(vif.cb);
+      mbx.put(vif.cb.count);
+      $display(", start: 86:33, end: 90:16
+[7]              Node type: primary_literal, text: ");
+    forever begin
+      @(vif.cb);
+      mbx.put(vif.cb.count);
+      $display(", start: 86:33, end: 90:16
+[8]                Node type: string_literal, text: ");
+    forever begin
+      @(vif.cb);
+      mbx.put(vif.cb.count);
+      $display(", start: 86:33, end: 90:16
+[5]          Node type: simple_identifier, text: Monitor, start: 90:16, end: 90:23
+[4]        Node type: expression, text: observed, start: 90:24, end: 90:32
+[5]          Node type: primary, text: observed, start: 90:24, end: 90:32
+[6]            Node type: simple_identifier, text: observed, start: 90:24, end: 90:32
+[3]      Node type: ERROR, text: count =, start: 90:33, end: 90:40
+[4]        Node type: simple_identifier, text: count, start: 90:33, end: 90:38
+[3]      Node type: ERROR, text: 0d, start: 90:42, end: 90:44
+[4]        Node type: unsigned_number, text: 0, start: 90:42, end: 90:43
+[4]        Node type: simple_identifier, text: d, start: 90:43, end: 90:44
+[3]      Node type: expression, text: ", vif.cb.count);
+    end
+  endtask
+endclass
+
+// Scoreboard class
+class Scoreboard;
+  mailbox #(bit [3:0]) mbx;
+  bit [3:0] expected_count = 0;
+
+  task run();
+    bit [3:0] observed;
+    forever begin
+      mbx.get(observed);
+      if (observed != expected_count)
+        $error(", start: 90:44, end: 105:16
+[4]        Node type: primary, text: ", vif.cb.count);
+    end
+  endtask
+endclass
+
+// Scoreboard class
+class Scoreboard;
+  mailbox #(bit [3:0]) mbx;
+  bit [3:0] expected_count = 0;
+
+  task run();
+    bit [3:0] observed;
+    forever begin
+      mbx.get(observed);
+      if (observed != expected_count)
+        $error(", start: 90:44, end: 105:16
+[5]          Node type: primary_literal, text: ", vif.cb.count);
+    end
+  endtask
+endclass
+
+// Scoreboard class
+class Scoreboard;
+  mailbox #(bit [3:0]) mbx;
+  bit [3:0] expected_count = 0;
+
+  task run();
+    bit [3:0] observed;
+    forever begin
+      mbx.get(observed);
+      if (observed != expected_count)
+        $error(", start: 90:44, end: 105:16
+[6]            Node type: string_literal, text: ", vif.cb.count);
+    end
+  endtask
+endclass
+
+// Scoreboard class
+class Scoreboard;
+  mailbox #(bit [3:0]) mbx;
+  bit [3:0] expected_count = 0;
+
+  task run();
+    bit [3:0] observed;
+    forever begin
+      mbx.get(observed);
+      if (observed != expected_count)
+        $error(", start: 90:44, end: 105:16
+[2]    Node type: ERROR, text: Scoreboard mismatch: expected, start: 105:16, end: 105:45
+[3]      Node type: simple_identifier, text: Scoreboard, start: 105:16, end: 105:26
+[3]      Node type: simple_identifier, text: mismatch, start: 105:27, end: 105:35
+[3]      Node type: simple_identifier, text: expected, start: 105:37, end: 105:45
+[2]    Node type: expression, text: 0, start: 105:47, end: 105:48
+[3]      Node type: primary, text: 0, start: 105:47, end: 105:48
+[4]        Node type: primary_literal, text: 0, start: 105:47, end: 105:48
+[5]          Node type: integral_number, text: 0, start: 105:47, end: 105:48
+[6]            Node type: decimal_number, text: 0, start: 105:47, end: 105:48
+[7]              Node type: unsigned_number, text: 0, start: 105:47, end: 105:48
+[1]  Node type: ERROR, text: d, start: 105:48, end: 105:49
+[2]    Node type: simple_identifier, text: d, start: 105:48, end: 105:49
+[1]  Node type: expression, text: got %0d", expected_count, observed);
+      else
+        $display("Scoreboard match: %0d", observed);
+      expected_count = expected_count + 1;
+    end
+  endtask
+endclass
+
+// Environment class
+class Env;
+  Driver drv;
+  Monitor mon;
+  Scoreboard sb;
+  mailbox #(Trans) drv_mbx = new();
+  mailbox #(bit [3:0]) mon_mbx = new();
+  virtual counter_if vif;
+
+  function new(virtual counter_if v);
+    vif = v;
+    drv = new();
+    drv.vif = vif;
+    drv.mbx = drv_mbx;
+    mon = new();
+    mon.vif = vif;
+    mon.mbx = mon_mbx;
+    sb = new();
+    sb.mbx = mon_mbx;
+  endfunction
+
+  task run();
+    fork
+      drv.run();
+      mon.run();
+      sb.run();
+    join_none
+  endtask
+endclass
+
+// Test program block
+program test;
+  Env env = new(top.cif);
+
+  initial begin
+    Trans t;
+    bit [3:0] queue[$];   // Queue
+    string assoc_array[bit [3:0]];  // Associative array
+    int dynamic_array[];  // Dynamic array
+
+    // Reset
+    top.cif.rst = 1;
+    @(posedge top.cif.clk);
+    top.cif.rst = 0;
+
+    // Start environment
+    env.run();
+
+    // Transactions
+    for (int i = 0; i < 10; i++) begin
+      t = new();
+      assert(t.randomize()) else $fatal("Randomization failed");
+      t.calculate_expected(i[3:0]);
+      env.drv_mbx.put(t);
+      @(posedge top.cif.clk);
+      top.cif.cov_inst.sample();  // Sample coverage in testbench
+    end
+
+    // Additional features demo
+    queue.push_back(1);
+    queue.push_front(0);
+    queue.pop_back();
+    $display("Queue size: %0d", queue.size());
+
+    assoc_array[4'hA] = "KeyA";
+    if (assoc_array.exists(4'hA)) $display("Assoc value: %s", assoc_array[4'hA]);
+
+    dynamic_array = new[5];
+    foreach (dynamic_array[i]) dynamic_array[i] = i * 2;
+
+    // Finish
+    #100;
+    $display("Coverage: %0.2, start: 105:51, end: 185:28
+[2]    Node type: expression, text: got %0d", expected_count, observed);
+      else
+        $display("Scoreboard match: %0d", observed);
+      expected_count = expected_count + 1;
+    end
+  endtask
+endclass
+
+// Environment class
+class Env;
+  Driver drv;
+  Monitor mon;
+  Scoreboard sb;
+  mailbox #(Trans) drv_mbx = new();
+  mailbox #(bit [3:0]) mon_mbx = new();
+  virtual counter_if vif;
+
+  function new(virtual counter_if v);
+    vif = v;
+    drv = new();
+    drv.vif = vif;
+    drv.mbx = drv_mbx;
+    mon = new();
+    mon.vif = vif;
+    mon.mbx = mon_mbx;
+    sb = new();
+    sb.mbx = mon_mbx;
+  endfunction
+
+  task run();
+    fork
+      drv.run();
+      mon.run();
+      sb.run();
+    join_none
+  endtask
+endclass
+
+// Test program block
+program test;
+  Env env = new(top.cif);
+
+  initial begin
+    Trans t;
+    bit [3:0] queue[$];   // Queue
+    string assoc_array[bit [3:0]];  // Associative array
+    int dynamic_array[];  // Dynamic array
+
+    // Reset
+    top.cif.rst = 1;
+    @(posedge top.cif.clk);
+    top.cif.rst = 0;
+
+    // Start environment
+    env.run();
+
+    // Transactions
+    for (int i = 0; i < 10; i++) begin
+      t = new();
+      assert(t.randomize()) else $fatal("Randomization failed");
+      t.calculate_expected(i[3:0]);
+      env.drv_mbx.put(t);
+      @(posedge top.cif.clk);
+      top.cif.cov_inst.sample();  // Sample coverage in testbench
+    end
+
+    // Additional features demo
+    queue.push_back(1);
+    queue.push_front(0);
+    queue.pop_back();
+    $display("Queue size: %0d", queue.size());
+
+    assoc_array[4'hA] = "KeyA";
+    if (assoc_array.exists(4'hA)) $display("Assoc value: %s", assoc_array[4'hA]);
+
+    dynamic_array = new[5];
+    foreach (dynamic_array[i]) dynamic_array[i] = i * 2;
+
+    // Finish
+    #100;
+    $display(", start: 105:51, end: 185:14
+[3]      Node type: expression, text: got %0d", expected_count, observed);
+      else
+        $display("Scoreboard match: %0d", observed);
+      expected_count = expected_count + 1;
+    end
+  endtask
+endclass
+
+// Environment class
+class Env;
+  Driver drv;
+  Monitor mon;
+  Scoreboard sb;
+  mailbox #(Trans) drv_mbx = new();
+  mailbox #(bit [3:0]) mon_mbx = new();
+  virtual counter_if vif;
+
+  function new(virtual counter_if v);
+    vif = v;
+    drv = new();
+    drv.vif = vif;
+    drv.mbx = drv_mbx;
+    mon = new();
+    mon.vif = vif;
+    mon.mbx = mon_mbx;
+    sb = new();
+    sb.mbx = mon_mbx;
+  endfunction
+
+  task run();
+    fork
+      drv.run();
+      mon.run();
+      sb.run();
+    join_none
+  endtask
+endclass
+
+// Test program block
+program test;
+  Env env = new(top.cif);
+
+  initial begin
+    Trans t;
+    bit [3:0] queue[$];   // Queue
+    string assoc_array[bit [3:0]];  // Associative array
+    int dynamic_array[];  // Dynamic array
+
+    // Reset
+    top.cif.rst = 1;
+    @(posedge top.cif.clk);
+    top.cif.rst = 0;
+
+    // Start environment
+    env.run();
+
+    // Transactions
+    for (int i = 0; i < 10; i++) begin
+      t = new();
+      assert(t.randomize()) else $fatal("Randomization failed");
+      t.calculate_expected(i[3:0]);
+      env.drv_mbx.put(t);
+      @(posedge top.cif.clk);
+      top.cif.cov_inst.sample();  // Sample coverage in testbench
+    end
+
+    // Additional features demo
+    queue.push_back(1);
+    queue.push_front(0);
+    queue.pop_back();
+    $display("Queue size: %0d", queue.size());
+
+    assoc_array[4'hA] = "KeyA";
+    if (assoc_array.exists(4'hA)) $display("Assoc value, start: 105:51, end: 178:55
+[4]        Node type: expression, text: got %0d", expected_count, observed);
+      else
+        $display("Scoreboard match: %0d", observed);
+      expected_count = expected_count + 1;
+    end
+  endtask
+endclass
+
+// Environment class
+class Env;
+  Driver drv;
+  Monitor mon;
+  Scoreboard sb;
+  mailbox #(Trans) drv_mbx = new();
+  mailbox #(bit [3:0]) mon_mbx = new();
+  virtual counter_if vif;
+
+  function new(virtual counter_if v);
+    vif = v;
+    drv = new();
+    drv.vif = vif;
+    drv.mbx = drv_mbx;
+    mon = new();
+    mon.vif = vif;
+    mon.mbx = mon_mbx;
+    sb = new();
+    sb.mbx = mon_mbx;
+  endfunction
+
+  task run();
+    fork
+      drv.run();
+      mon.run();
+      sb.run();
+    join_none
+  endtask
+endclass
+
+// Test program block
+program test;
+  Env env = new(top.cif);
+
+  initial begin
+    Trans t;
+    bit [3:0] queue[$];   // Queue
+    string assoc_array[bit [3:0]];  // Associative array
+    int dynamic_array[];  // Dynamic array
+
+    // Reset
+    top.cif.rst = 1;
+    @(posedge top.cif.clk);
+    top.cif.rst = 0;
+
+    // Start environment
+    env.run();
+
+    // Transactions
+    for (int i = 0; i < 10; i++) begin
+      t = new();
+      assert(t.randomize()) else $fatal("Randomization failed");
+      t.calculate_expected(i[3:0]);
+      env.drv_mbx.put(t);
+      @(posedge top.cif.clk);
+      top.cif.cov_inst.sample();  // Sample coverage in testbench
+    end
+
+    // Additional features demo
+    queue.push_back(1);
+    queue.push_front(0);
+    queue.pop_back();
+    $display(", start: 105:51, end: 175:14
+[5]          Node type: expression, text: got %0d", expected_count, observed);
+      else
+        $display("Scoreboard match, start: 105:51, end: 107:34
+[6]            Node type: expression, text: got, start: 105:51, end: 105:54
+[7]              Node type: primary, text: got, start: 105:51, end: 105:54
+[8]                Node type: simple_identifier, text: got, start: 105:51, end: 105:54
+[6]            Node type: ERROR, text: 0d", expected_count, observed);
+      else
+        $display("Scoreboard, start: 105:56, end: 107:28
+[7]              Node type: unsigned_number, text: 0, start: 105:56, end: 105:57
+[7]              Node type: simple_identifier, text: d, start: 105:57, end: 105:58
+[7]              Node type: casting_type, text: ", expected_count, observed);
+      else
+        $display(", start: 105:58, end: 107:18
+[8]                Node type: constant_primary, text: ", expected_count, observed);
+      else
+        $display(", start: 105:58, end: 107:18
+[9]                  Node type: primary_literal, text: ", expected_count, observed);
+      else
+        $display(", start: 105:58, end: 107:18
+[10]                    Node type: string_literal, text: ", expected_count, observed);
+      else
+        $display(", start: 105:58, end: 107:18
+[7]              Node type: simple_identifier, text: Scoreboard, start: 107:18, end: 107:28
+[6]            Node type: expression, text: match, start: 107:29, end: 107:34
+[7]              Node type: primary, text: match, start: 107:29, end: 107:34
+[8]                Node type: simple_identifier, text: match, start: 107:29, end: 107:34
+[5]          Node type: ERROR, text: :, start: 107:34, end: 107:35
+[5]          Node type: ERROR, text: 0d", observed);
+      expected_count = expected_count + 1;
+    end
+  endtask
+endclass
+
+// Environment class
+class Env;
+  Driver drv;
+  Monitor mon;
+  Scoreboard sb;
+  mailbox #(Trans) drv_mbx = new();
+  mailbox #(bit [3:0]) mon_mbx = new();
+  virtual counter_if vif;
+
+  function new(virtual counter_if v);
+    vif = v;
+    drv = new();
+    drv.vif = vif;
+    drv.mbx = drv_mbx;
+    mon = new();
+    mon.vif = vif;
+    mon.mbx = mon_mbx;
+    sb = new();
+    sb.mbx = mon_mbx;
+  endfunction
+
+  task run();
+    fork
+      drv.run();
+      mon.run();
+      sb.run();
+    join_none
+  endtask
+endclass
+
+// Test program block
+program test;
+  Env env = new(top.cif);
+
+  initial begin
+    Trans t;
+    bit [3:0] queue[$];   // Queue
+    string assoc_array[bit [3:0]];  // Associative array
+    int dynamic_array[];  // Dynamic array
+
+    // Reset
+    top.cif.rst = 1;
+    @(posedge top.cif.clk);
+    top.cif.rst = 0;
+
+    // Start environment
+    env.run();
+
+    // Transactions
+    for (int i = 0; i < 10; i++) begin
+      t = new();
+      assert(t.randomize()) else $fatal("Randomization failed, start: 107:37, end: 164:61
+[6]            Node type: unsigned_number, text: 0, start: 107:37, end: 107:38
+[6]            Node type: simple_identifier, text: d, start: 107:38, end: 107:39
+[6]            Node type: casting_type, text: ", observed);
+      expected_count = expected_count + 1;
+    end
+  endtask
+endclass
+
+// Environment class
+class Env;
+  Driver drv;
+  Monitor mon;
+  Scoreboard sb;
+  mailbox #(Trans) drv_mbx = new();
+  mailbox #(bit [3:0]) mon_mbx = new();
+  virtual counter_if vif;
+
+  function new(virtual counter_if v);
+    vif = v;
+    drv = new();
+    drv.vif = vif;
+    drv.mbx = drv_mbx;
+    mon = new();
+    mon.vif = vif;
+    mon.mbx = mon_mbx;
+    sb = new();
+    sb.mbx = mon_mbx;
+  endfunction
+
+  task run();
+    fork
+      drv.run();
+      mon.run();
+      sb.run();
+    join_none
+  endtask
+endclass
+
+// Test program block
+program test;
+  Env env = new(top.cif);
+
+  initial begin
+    Trans t;
+    bit [3:0] queue[$];   // Queue
+    string assoc_array[bit [3:0]];  // Associative array
+    int dynamic_array[];  // Dynamic array
+
+    // Reset
+    top.cif.rst = 1;
+    @(posedge top.cif.clk);
+    top.cif.rst = 0;
+
+    // Start environment
+    env.run();
+
+    // Transactions
+    for (int i = 0; i < 10; i++) begin
+      t = new();
+      assert(t.randomize()) else $fatal(", start: 107:39, end: 164:41
+[7]              Node type: constant_primary, text: ", observed);
+      expected_count = expected_count + 1;
+    end
+  endtask
+endclass
+
+// Environment class
+class Env;
+  Driver drv;
+  Monitor mon;
+  Scoreboard sb;
+  mailbox #(Trans) drv_mbx = new();
+  mailbox #(bit [3:0]) mon_mbx = new();
+  virtual counter_if vif;
+
+  function new(virtual counter_if v);
+    vif = v;
+    drv = new();
+    drv.vif = vif;
+    drv.mbx = drv_mbx;
+    mon = new();
+    mon.vif = vif;
+    mon.mbx = mon_mbx;
+    sb = new();
+    sb.mbx = mon_mbx;
+  endfunction
+
+  task run();
+    fork
+      drv.run();
+      mon.run();
+      sb.run();
+    join_none
+  endtask
+endclass
+
+// Test program block
+program test;
+  Env env = new(top.cif);
+
+  initial begin
+    Trans t;
+    bit [3:0] queue[$];   // Queue
+    string assoc_array[bit [3:0]];  // Associative array
+    int dynamic_array[];  // Dynamic array
+
+    // Reset
+    top.cif.rst = 1;
+    @(posedge top.cif.clk);
+    top.cif.rst = 0;
+
+    // Start environment
+    env.run();
+
+    // Transactions
+    for (int i = 0; i < 10; i++) begin
+      t = new();
+      assert(t.randomize()) else $fatal(", start: 107:39, end: 164:41
+[8]                Node type: primary_literal, text: ", observed);
+      expected_count = expected_count + 1;
+    end
+  endtask
+endclass
+
+// Environment class
+class Env;
+  Driver drv;
+  Monitor mon;
+  Scoreboard sb;
+  mailbox #(Trans) drv_mbx = new();
+  mailbox #(bit [3:0]) mon_mbx = new();
+  virtual counter_if vif;
+
+  function new(virtual counter_if v);
+    vif = v;
+    drv = new();
+    drv.vif = vif;
+    drv.mbx = drv_mbx;
+    mon = new();
+    mon.vif = vif;
+    mon.mbx = mon_mbx;
+    sb = new();
+    sb.mbx = mon_mbx;
+  endfunction
+
+  task run();
+    fork
+      drv.run();
+      mon.run();
+      sb.run();
+    join_none
+  endtask
+endclass
+
+// Test program block
+program test;
+  Env env = new(top.cif);
+
+  initial begin
+    Trans t;
+    bit [3:0] queue[$];   // Queue
+    string assoc_array[bit [3:0]];  // Associative array
+    int dynamic_array[];  // Dynamic array
+
+    // Reset
+    top.cif.rst = 1;
+    @(posedge top.cif.clk);
+    top.cif.rst = 0;
+
+    // Start environment
+    env.run();
+
+    // Transactions
+    for (int i = 0; i < 10; i++) begin
+      t = new();
+      assert(t.randomize()) else $fatal(", start: 107:39, end: 164:41
+[9]                  Node type: string_literal, text: ", observed);
+      expected_count = expected_count + 1;
+    end
+  endtask
+endclass
+
+// Environment class
+class Env;
+  Driver drv;
+  Monitor mon;
+  Scoreboard sb;
+  mailbox #(Trans) drv_mbx = new();
+  mailbox #(bit [3:0]) mon_mbx = new();
+  virtual counter_if vif;
+
+  function new(virtual counter_if v);
+    vif = v;
+    drv = new();
+    drv.vif = vif;
+    drv.mbx = drv_mbx;
+    mon = new();
+    mon.vif = vif;
+    mon.mbx = mon_mbx;
+    sb = new();
+    sb.mbx = mon_mbx;
+  endfunction
+
+  task run();
+    fork
+      drv.run();
+      mon.run();
+      sb.run();
+    join_none
+  endtask
+endclass
+
+// Test program block
+program test;
+  Env env = new(top.cif);
+
+  initial begin
+    Trans t;
+    bit [3:0] queue[$];   // Queue
+    string assoc_array[bit [3:0]];  // Associative array
+    int dynamic_array[];  // Dynamic array
+
+    // Reset
+    top.cif.rst = 1;
+    @(posedge top.cif.clk);
+    top.cif.rst = 0;
+
+    // Start environment
+    env.run();
+
+    // Transactions
+    for (int i = 0; i < 10; i++) begin
+      t = new();
+      assert(t.randomize()) else $fatal(", start: 107:39, end: 164:41
+[6]            Node type: simple_identifier, text: Randomization, start: 164:41, end: 164:54
+[6]            Node type: simple_identifier, text: failed, start: 164:55, end: 164:61
+[5]          Node type: expression, text: ");
+      t.calculate_expected(i[3:0]);
+      env.drv_mbx.put(t);
+      @(posedge top.cif.clk);
+      top.cif.cov_inst.sample();  // Sample coverage in testbench
+    end
+
+    // Additional features demo
+    queue.push_back(1);
+    queue.push_front(0);
+    queue.pop_back();
+    $display(", start: 164:61, end: 175:14
+[6]            Node type: primary, text: ");
+      t.calculate_expected(i[3:0]);
+      env.drv_mbx.put(t);
+      @(posedge top.cif.clk);
+      top.cif.cov_inst.sample();  // Sample coverage in testbench
+    end
+
+    // Additional features demo
+    queue.push_back(1);
+    queue.push_front(0);
+    queue.pop_back();
+    $display(", start: 164:61, end: 175:14
+[7]              Node type: primary_literal, text: ");
+      t.calculate_expected(i[3:0]);
+      env.drv_mbx.put(t);
+      @(posedge top.cif.clk);
+      top.cif.cov_inst.sample();  // Sample coverage in testbench
+    end
+
+    // Additional features demo
+    queue.push_back(1);
+    queue.push_front(0);
+    queue.pop_back();
+    $display(", start: 164:61, end: 175:14
+[8]                Node type: string_literal, text: ");
+      t.calculate_expected(i[3:0]);
+      env.drv_mbx.put(t);
+      @(posedge top.cif.clk);
+      top.cif.cov_inst.sample();  // Sample coverage in testbench
+    end
+
+    // Additional features demo
+    queue.push_back(1);
+    queue.push_front(0);
+    queue.pop_back();
+    $display(", start: 164:61, end: 175:14
+[4]        Node type: ERROR, text: Queue size:, start: 175:14, end: 175:25
+[5]          Node type: simple_identifier, text: Queue, start: 175:14, end: 175:19
+[5]          Node type: simple_identifier, text: size, start: 175:20, end: 175:24
+[4]        Node type: ERROR, text: 0d", queue.size());
+
+    assoc_array[4'hA] = "KeyA";
+    if (assoc_array.exists(4'hA)) $display("Assoc, start: 175:27, end: 178:49
+[5]          Node type: unsigned_number, text: 0, start: 175:27, end: 175:28
+[5]          Node type: simple_identifier, text: d, start: 175:28, end: 175:29
+[5]          Node type: casting_type, text: ", queue.size());
+
+    assoc_array[4'hA] = ", start: 175:29, end: 177:25
+[6]            Node type: constant_primary, text: ", queue.size());
+
+    assoc_array[4'hA] = ", start: 175:29, end: 177:25
+[7]              Node type: primary_literal, text: ", queue.size());
+
+    assoc_array[4'hA] = ", start: 175:29, end: 177:25
+[8]                Node type: string_literal, text: ", queue.size());
+
+    assoc_array[4'hA] = ", start: 175:29, end: 177:25
+[5]          Node type: simple_identifier, text: KeyA, start: 177:25, end: 177:29
+[5]          Node type: casting_type, text: ";
+    if (assoc_array.exists(4'hA)) $display(", start: 177:29, end: 178:44
+[6]            Node type: constant_primary, text: ";
+    if (assoc_array.exists(4'hA)) $display(", start: 177:29, end: 178:44
+[7]              Node type: primary_literal, text: ";
+    if (assoc_array.exists(4'hA)) $display(", start: 177:29, end: 178:44
+[8]                Node type: string_literal, text: ";
+    if (assoc_array.exists(4'hA)) $display(", start: 177:29, end: 178:44
+[5]          Node type: simple_identifier, text: Assoc, start: 178:44, end: 178:49
+[4]        Node type: expression, text: value, start: 178:50, end: 178:55
+[5]          Node type: primary, text: value, start: 178:50, end: 178:55
+[6]            Node type: simple_identifier, text: value, start: 178:50, end: 178:55
+[3]      Node type: ERROR, text: :, start: 178:55, end: 178:56
+[3]      Node type: ERROR, text: s, start: 178:58, end: 178:59
+[4]        Node type: simple_identifier, text: s, start: 178:58, end: 178:59
+[3]      Node type: expression, text: ", assoc_array[4'hA]);
+
+    dynamic_array = new[5];
+    foreach (dynamic_array[i]) dynamic_array[i] = i * 2;
+
+    // Finish
+    #100;
+    $display(", start: 178:59, end: 185:14
+[4]        Node type: primary, text: ", assoc_array[4'hA]);
+
+    dynamic_array = new[5];
+    foreach (dynamic_array[i]) dynamic_array[i] = i * 2;
+
+    // Finish
+    #100;
+    $display(", start: 178:59, end: 185:14
+[5]          Node type: primary_literal, text: ", assoc_array[4'hA]);
+
+    dynamic_array = new[5];
+    foreach (dynamic_array[i]) dynamic_array[i] = i * 2;
+
+    // Finish
+    #100;
+    $display(", start: 178:59, end: 185:14
+[6]            Node type: string_literal, text: ", assoc_array[4'hA]);
+
+    dynamic_array = new[5];
+    foreach (dynamic_array[i]) dynamic_array[i] = i * 2;
+
+    // Finish
+    #100;
+    $display(", start: 178:59, end: 185:14
+[2]    Node type: ERROR, text: Coverage:, start: 185:14, end: 185:23
+[3]      Node type: simple_identifier, text: Coverage, start: 185:14, end: 185:22
+[2]    Node type: expression, text: 0.2, start: 185:25, end: 185:28
+[3]      Node type: primary, text: 0.2, start: 185:25, end: 185:28
+[4]        Node type: primary_literal, text: 0.2, start: 185:25, end: 185:28
+[5]          Node type: real_number, text: 0.2, start: 185:25, end: 185:28
+[6]            Node type: fixed_point_number, text: 0.2, start: 185:25, end: 185:28
+[1]  Node type: ERROR, text: f, start: 185:28, end: 185:29
+[2]    Node type: simple_identifier, text: f, start: 185:28, end: 185:29
+[1]  Node type: ERROR, text: %, start: 185:30, end: 185:31

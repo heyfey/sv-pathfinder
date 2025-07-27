@@ -55,7 +55,7 @@
     "viewsWelcome": [
       {
         "view": "openedDesignsView",
-        "contents": "Open a design database which can be debugged (uhdm, elab.kz or daidar) \n[Open Design](command:sv-pathfinder.openDesign) \n [learn more](https://github.com/heyfey/sv-pathfinder)."
+        "contents": "Open a design database (uhdm, elab.kz or daidar)\n[Open Design](command:sv-pathfinder.openDesign)\nLearn more on [Github](https://github.com/heyfey/sv-pathfinder)\nTry with an [example design](command:sv-pathfinder.openExampleDesign)"
       }
     ],
     "views": {
@@ -199,6 +199,10 @@
         "command": "sv-pathfinder.openDesign",
         "title": "Open Design",
         "icon": "$(file-directory-create)"
+      },
+      {
+        "command": "sv-pathfinder.openExampleDesign",
+        "title": "Open Example Design"
       },
       {
         "command": "sv-pathfinder.closeDesign",
