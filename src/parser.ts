@@ -37,6 +37,8 @@ export class Parser {
         let filePath = "/home/heyfey/waveform/Design/BJsource.v";
         filePath = "/home/heyfey/waveform/Design/tb_CPUsystem.v";
         filePath = "/home/heyfey/waveform/Design/CPU.v";
+        // filePath = "/home/heyfey/waveform/example/test2/tb.sv";
+        filePath = "/home/heyfey/waveform/example/test2/design.v";
 
         const sourceCode = fs.readFileSync(filePath, 'utf8');
         const tree = this.verilogParser.parse(sourceCode);

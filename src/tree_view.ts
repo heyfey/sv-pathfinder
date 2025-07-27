@@ -17,6 +17,8 @@ const interfaceIcon = new vscode.ThemeIcon('debug-disconnect', new vscode.ThemeC
 const packageIcon = new vscode.ThemeIcon('package', new vscode.ThemeColor('charts.purple'));
 const scopeIcon = new vscode.ThemeIcon('symbol-module', new vscode.ThemeColor('charts.purple'));
 const moduleDefIcon = new vscode.ThemeIcon('symbol-enum');
+const modportIcon = new vscode.ThemeIcon('plug', new vscode.ThemeColor('charts.orange'));
+const clockIcon = new vscode.ThemeIcon('watch', new vscode.ThemeColor('charts.blue'));
 
 export function createScope(fullName: string, type: string, file: string, lineNumber: number, columnNumber: number, moduleName: string, contextValue: string, parent: NetlistItem | undefined, handle: any | undefined) {
 
@@ -28,7 +30,7 @@ export function createScope(fullName: string, type: string, file: string, lineNu
         case 'function': { icon = funcIcon; break; }
         case 'begin': { icon = beginIcon; break; }
         case 'fork': { icon = forkIcon; break; }
-        case 'generate': { icon = scopeIcon; break; }
+        case 'generate': { icon = beginIcon; break; }
         case 'struct': { icon = structIcon; break; }
         case 'union': { icon = unionIcon; break; }
         case 'class': { icon = classIcon; break; }
@@ -41,13 +43,15 @@ export function createScope(fullName: string, type: string, file: string, lineNu
         case 'vhdlrecord': { icon = scopeIcon; break; }
         case 'vhdlprocess': { icon = scopeIcon; break; }
         case 'vhdlblock': { icon = scopeIcon; break; }
-        case 'vhdlforgenerate': { icon = scopeIcon; break; }
-        case 'vhdlifgenerate': { icon = scopeIcon; break; }
-        case 'vhdlgenerate': { icon = scopeIcon; break; }
+        case 'vhdlforgenerate': { icon = beginIcon; break; }
+        case 'vhdlifgenerate': { icon = beginIcon; break; }
+        case 'vhdlgenerate': { icon = beginIcon; break; }
         case 'vhdlpackage': { icon = packageIcon; break; }
         case 'ghwgeneric': { icon = scopeIcon; break; }
         case 'vhdlarray': { icon = scopeIcon; break; }
         case 'moduledef': { icon = moduleDefIcon; break; }
+        case 'modport': { icon = modportIcon; break; }
+        case 'clockingblock': { icon = clockIcon; break; }
     }
 
     const module = new NetlistItem(fullName, typename, 0, file, lineNumber, columnNumber, moduleName, contextValue, parent, [], handle, vscode.TreeItemCollapsibleState.Collapsed);
@@ -59,13 +63,14 @@ export function createScope(fullName: string, type: string, file: string, lineNu
 // Variables
 const regIcon = new vscode.ThemeIcon('symbol-array', new vscode.ThemeColor('charts.green'));
 const wireIcon = new vscode.ThemeIcon('symbol-interface', new vscode.ThemeColor('charts.pink'));
-const intIcon = new vscode.ThemeIcon('symbol-variable', new vscode.ThemeColor('charts.green'));
+const intIcon = new vscode.ThemeIcon('symbol-number', new vscode.ThemeColor('charts.green'));
 const paramIcon = new vscode.ThemeIcon('settings', new vscode.ThemeColor('charts.green'));
 const realIcon = new vscode.ThemeIcon('pulse', new vscode.ThemeColor('charts.orange'));
 const defaultIcon = new vscode.ThemeIcon('file-binary', new vscode.ThemeColor('charts.green'));
 const stringIcon = new vscode.ThemeIcon('symbol-key', new vscode.ThemeColor('charts.yellow'));
 const portIcon = new vscode.ThemeIcon('plug', new vscode.ThemeColor('charts.green'));
 const timeIcon = new vscode.ThemeIcon('watch', new vscode.ThemeColor('charts.green'));
+const variableIcon = new vscode.ThemeIcon('symbol-variable', new vscode.ThemeColor('charts.green'));
 
 export function createVar(fullName: string, type: string, width: number, file: string, lineNumber: number, columnNumber: number, moduleName: string, contextValue: string, parent: NetlistItem | undefined) {
     //   const field = bitRangeString(msb, lsb);
@@ -114,6 +119,7 @@ export function createVar(fullName: string, type: string, width: number, file: s
         case 'stdulogic': { icon = defaultIcon; break; }
         case 'stdulogicvector': { icon = defaultIcon; break; }
         case 'net': { icon = wireIcon; break; }
+        case 'variable': { icon = variableIcon; break; }
         case 'instance': { icon = moduleIcon; break; } // for module instance
     }
 
@@ -174,8 +180,10 @@ export class NetlistItem extends vscode.TreeItem {
             arguments: [this],
         };
 
-        this.tooltip = label;
-        // this.tooltip += `\nType: ${this.type}\n contextValue:  ${this.contextValue}\n fullName: ${this.fullName}\n Name: ${this.name}\n Module: ${this.moduleName}\n modulePath: file: ${this.modulePath}\n ${this.sourceFile}\n line: ${this.lineNumber}${this.columnNumber > 0 ? `, column: ${this.columnNumber}` : ''}\n witdh: ${this.width}`;
+        this.tooltip = `Name: ${this.fullName}`;
+        this.tooltip += `\nType: ${this.type}`;
+        // For debug
+        // this.tooltip += `\n contextValue:  ${this.contextValue}\n Name: ${this.name}\n Module: ${this.moduleName}\n modulePath: file: ${this.modulePath}\n ${this.sourceFile}\n line: ${this.lineNumber}${this.columnNumber > 0 ? `, column: ${this.columnNumber}` : ''}\n witdh: ${this.width}`;
     }
 
     getHierarchyName(): string {
@@ -599,7 +607,7 @@ class UhdmDesignItem extends DesignItem {
         const result: NetlistItem[] = [];
         for (const subScope of subScopes) {
             const defName = subScope.defName.replace("work@", ""); // remove prefix for UHDM
-            const scope = createScope(subScope.name, "module", subScope.file, subScope.line, subScope.column, defName, "scopeItem", element, subScope.handle);
+            const scope = createScope(subScope.name, subScope.type, subScope.file, subScope.line, subScope.column, defName, "scopeItem", element, subScope.handle);
             scope.description = defName;
             result.push(scope);
         }
@@ -940,6 +948,15 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
     async gotoDefinition(element: NetlistItem, isGoBackOrForward: boolean = false) {
         if (!this.activeDesign) { return; }
 
+        // Special cases: for generate, begin, clocking block, modport, go to definition is actually go to instantiation
+        if (element.type === 'generate' ||
+            element.type === 'begin' ||
+            element.type === 'clockingblock' ||
+            element.type === 'modport') {
+            await this.gotoInstantiation(element, isGoBackOrForward);
+            return;
+        }
+
         let filePath = element.sourceFile;
         let lineNumber = element.lineNumber;
         if (element.contextValue === 'scopeItem' || element.contextValue === 'instanceItem') {
@@ -1044,6 +1061,7 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         if (!this.activeDesign) { return; }
         if (element.contextValue !== 'scopeItem') { return; }
         const parent = element.parent ? element.parent : element; // For top-module, consider itself as parent
+        // TODO: should find parent recursively until find a module?
 
         await showTextDocumentLocation(element.sourceFile, element.lineNumber, element.columnNumber);
         await this.setActiveInstance(parent);

@@ -146,11 +146,11 @@ Napi::Value GetTopModules(const Napi::CallbackInfo& info) {
     return env.Null();
   }
 
-  vpiHandle instItr = vpi_iterate(UHDM::uhdmtopModules, design);
+  vpiHandle iter = vpi_iterate(UHDM::uhdmtopModules, design);
   Napi::Array result = Napi::Array::New(env);
   uint32_t index = 0;
 
-  while (vpiHandle obj_h = vpi_scan(instItr)) {
+  while (vpiHandle obj_h = vpi_scan(iter)) {
     Napi::Object module = Napi::Object::New(env);
     if (const char* s = vpi_get_str(vpiDefName, obj_h))
       module.Set("defName", s);
@@ -160,11 +160,105 @@ Napi::Value GetTopModules(const Napi::CallbackInfo& info) {
     module.Set("column", vpi_get(vpiColumnNo, obj_h));
     module.Set("handle", VpiHandleWrap::New(env, obj_h));
     result[index++] = module;
-    // vpi_release_handle(obj_h); // Do not release here; VpiHandleWrap will
-    // manage it
+
+    // Do not release here as VpiHandleWrap will manage it
+    // vpi_release_handle(obj_h);
   }
-  vpi_release_handle(instItr);
+  vpi_release_handle(iter);
   return result;
+}
+
+std::string getScopeTypeString(int scope_type) {
+  switch (scope_type) {
+    case vpiModule:
+      return "Module";
+    case vpiModuleArray:
+      return "ModuleArray";
+    case vpiInterface:
+      return "Interface";
+    case vpiProgram:
+      return "Program";
+    case vpiGenScope:
+      return "Generate";
+    case vpiGenScopeArray:
+      return "Generate";
+    case vpiTask:
+      return "Task";
+    case vpiFunction:
+      return "Function";
+    case vpiModport:
+      return "Modport";
+    case vpiClockingBlock:
+      return "ClockingBlock";
+    case vpiInterfaceArray:
+      return "InterfaceArray";
+    case vpiProgramArray:
+      return "ProgramArray";
+    default:
+      return std::to_string(scope_type);
+  }
+}
+
+void CollectSubScopes(const Napi::CallbackInfo& info,
+                      const vpiHandle& scopeHandle, Napi::Array& result,
+                      bool isFromGenScopeArray = false) {
+  Napi::Env env = info.Env();
+  std::vector<int> types = {vpiModule,         /*vpiModuleArray,*/ vpiGenScope,
+                            vpiGenScopeArray,  vpiInterface,
+                            vpiProgram,        vpiTaskFunc,
+                            vpiTask,           vpiFunction,
+                            vpiClockingBlock,  vpiModport,
+                            vpiInterfaceArray, vpiProgramArray};
+
+  uint32_t index =
+      result.Length();  // Start from the current length of the array
+
+  for (int type : types) {
+    vpiHandle iter = vpi_iterate(type, scopeHandle);
+    if (iter) {
+      while (vpiHandle obj_h = vpi_scan(iter)) {
+        // For GenScopeArray, get all it's subscopes recursively for one
+        // level instead
+        if (type == vpiGenScopeArray) {
+          if (isFromGenScopeArray) {
+            // If we are already in a GenScopeArray, skip this one
+            continue;
+          }
+          CollectSubScopes(info, obj_h, result, true /*isFromGenScopeArray*/);
+          continue;
+        }
+
+        Napi::Object scope = Napi::Object::New(env);
+        if (const char* s = vpi_get_str(vpiDefName, obj_h))
+          scope.Set("defName", s);
+        else
+          scope.Set("defName", "");
+
+        if (const char* s = vpi_get_str(vpiFullName, obj_h))
+          scope.Set("name", s);
+        else {  // If FullName is not available, use Name e.g. modport
+          scope.Set("name", vpi_get_str(vpiName, obj_h)
+                                ? vpi_get_str(vpiName, obj_h)
+                                : "unnamed");
+        }
+
+        if (const char* s = vpi_get_str(vpiFile, obj_h))
+          scope.Set("file", s);
+        else
+          scope.Set("file", "");
+
+        scope.Set("line", vpi_get(vpiLineNo, obj_h));
+        scope.Set("column", vpi_get(vpiColumnNo, obj_h));
+        scope.Set("type", getScopeTypeString(vpi_get(vpiType, obj_h)));
+        scope.Set("handle", VpiHandleWrap::New(env, obj_h));
+        result[index++] = scope;
+
+        // Do not release here as VpiHandleWrap will manage it
+        // vpi_release_handle(obj_h);
+      }
+      vpi_release_handle(iter);  // Release the iterator handle
+    }
+  }
 }
 
 Napi::Value GetSubScopes(const Napi::CallbackInfo& info) {
@@ -181,38 +275,15 @@ Napi::Value GetSubScopes(const Napi::CallbackInfo& info) {
 
   // Unwrap the VpiHandleWrap object to get the C++ instance
   VpiHandleWrap* wrap = VpiHandleWrap::Unwrap(info[0].As<Napi::Object>());
-  vpiHandle instHandle = wrap->GetHandle();
+  vpiHandle scopeHandle = wrap->GetHandle();
 
   // If the handle is null, return an empty array
-  if (!instHandle) {
+  if (!scopeHandle) {
     return Napi::Array::New(env, 0);
   }
 
-  // Iterate over submodules using the provided handle
-  vpiHandle instItr = vpi_iterate(vpiModule, instHandle);
   Napi::Array result = Napi::Array::New(env);
-  uint32_t index = 0;
-
-  while (vpiHandle obj_h = vpi_scan(instItr)) {
-    Napi::Object module = Napi::Object::New(env);
-    if (const char* s = vpi_get_str(vpiDefName, obj_h))
-      module.Set("defName", s);
-    if (const char* s = vpi_get_str(vpiFullName, obj_h)) module.Set("name", s);
-    if (const char* s = vpi_get_str(vpiFile, obj_h)) module.Set("file", s);
-    module.Set("line", vpi_get(vpiLineNo, obj_h));
-    module.Set("column", vpi_get(vpiColumnNo, obj_h));
-    module.Set("handle", VpiHandleWrap::New(env, obj_h));
-    result[index++] = module;
-    // vpi_release_handle(obj_h); // Do not release here; VpiHandleWrap will
-    // manage it
-  }
-
-  // TODO: Handle genScope, genScopeArray, scope, function, task, interface,
-  // interfaceArray, etc.
-
-  // Release the iterator
-  vpi_release_handle(instItr);
-  // Do NOT release instHandle here; it’s managed by VpiHandleWrap
+  CollectSubScopes(info, scopeHandle, result);
 
   return result;
 }
@@ -230,7 +301,7 @@ Napi::Value GetVars(const Napi::CallbackInfo& info) {
 
   // Unwrap the VpiHandleWrap to access the vpiHandle
   VpiHandleWrap* wrap = VpiHandleWrap::Unwrap(info[0].As<Napi::Object>());
-  vpiHandle instHandle = wrap->GetHandle();
+  vpiHandle scopeHandle = wrap->GetHandle();
 
   // Create an array to hold variable information
   Napi::Array result = Napi::Array::New(env);
@@ -238,13 +309,17 @@ Napi::Value GetVars(const Napi::CallbackInfo& info) {
 
   // Helper lambda to collect variables of a specific type
   auto collectVars = [&](int type, const std::string& typeName) {
-    vpiHandle iter = vpi_iterate(type, instHandle);
+    vpiHandle iter = vpi_iterate(type, scopeHandle);
     if (iter) {
       while (vpiHandle obj_h = vpi_scan(iter)) {
         Napi::Object var = Napi::Object::New(env);
         var.Set("type", typeName);
         if (const char* name = vpi_get_str(vpiFullName, obj_h)) {
           var.Set("name", name);
+        } else {  // If FullName is not available, use Name e.g. vars in modport
+          var.Set("name", vpi_get_str(vpiName, obj_h)
+                              ? vpi_get_str(vpiName, obj_h)
+                              : "unnamed");
         }
         if (const char* file = vpi_get_str(vpiFile, obj_h)) {
           var.Set("file", file);
@@ -263,10 +338,16 @@ Napi::Value GetVars(const Napi::CallbackInfo& info) {
   collectVars(vpiNet, "net");
   collectVars(vpiArrayNet, "net");
   collectVars(vpiReg, "reg");
-  collectVars(vpiVariables, "integer");
+  collectVars(vpiVariables, "variable");
   collectVars(vpiIntegerVar, "integer");
   collectVars(vpiRealVar, "real");
+  collectVars(vpiShortRealVar, "real");
   collectVars(vpiParameter, "parameter");
+  // For vpiModPort
+  collectVars(vpiIODecl, "net");
+  // For vpiClockingBlock
+  collectVars(vpiClockingEvent, "net");
+  collectVars(vpiClockingIODecl, "net");
 
   return result;
 }
