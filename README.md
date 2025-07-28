@@ -1,6 +1,6 @@
 # sv-pathfinder
 
-[sv-pathfinder](https://github.com/heyfey/sv-pathfinder) is an open-source VS Code extension for RTL tracing and design navigation, and seamlessly integrates with the waveform viewer [VaporView](https://github.com/heyfey/sv-pathfinder)
+VS Code extension for SystemVerilog design navigation and RTL tracing, and seamlessly integrates with the waveform viewer [VaporView](https://github.com/Lramseyer/vaporview)
 
 ![](https://github.com/heyfey/sv-pathfinder/blob/main/readme_assets/overview.png?raw=true)
 
@@ -13,6 +13,8 @@ Generating UHDM using [Surelog](https://github.com/chipsalliance/Surelog):
 # ./slpp_all/surelog.uhdm will be generated
 surelog dut.v tb.sv -elabuhdm -parse -sverilog -d uhdm
 ```
+
+Then you can open the .uhdm in sv-pathfinder.
 
 > Limitations: only supports Linux64 for now. Tested on Ubuntu 22.04
 
@@ -48,7 +50,7 @@ sv-pathfinder is seamlessly integrated with VaporView – [Download](https://mar
 
 - `"sv-pathfinder.remotePathPrefix": string`
 - `"sv-pathfinder.localPathPrefix": string`
-    - Replace the remote path prefix with the local path prefix when jumping to source files. This is useful when the debug database is generated on the different machine/path. Only take effect when both set.
+    - Replace the remote path prefix with the local path prefix when jumping to source files. This is useful when the design database is generated on the different machine/path. Only take effect when both set.
 
 ## Requirements
 
