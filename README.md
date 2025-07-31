@@ -1,8 +1,10 @@
 # sv-pathfinder
 
-VS Code extension for SystemVerilog design navigation and RTL tracing, and seamlessly integrates with the waveform viewer [VaporView](https://github.com/Lramseyer/vaporview)
+VS Code extension for SystemVerilog design navigation & RTL tracing.
 
-![](https://github.com/heyfey/sv-pathfinder/blob/main/readme_assets/overview.png?raw=true)
+sv-pathfinder helps you explore elaborated SystemVerilog designs at ease, and seamlessly integrates with the waveform viewer [VaporView](https://github.com/Lramseyer/vaporview) for post-simulation debug.
+
+![](https://github.com/heyfey/sv-pathfinder/blob/main/readme_assets/overview.gif?raw=true)
 
 ## Getting Started
 
@@ -22,16 +24,13 @@ Then you can open the .uhdm in sv-pathfinder.
 
 ### Browse design hierarchy
 
+- Jump to module definitions/instantiations, signal declarations, generate blocks, and more.
+
 ![](https://github.com/heyfey/sv-pathfinder/blob/main/readme_assets/browse.gif?raw=true)
 
 ### Go back/foward
 
 ![](https://github.com/heyfey/sv-pathfinder/blob/main/readme_assets/goback.gif?raw=true)
-
-### Select instance
-
-![](https://github.com/heyfey/sv-pathfinder/blob/main/readme_assets/instance.gif?raw=true)
-
 
 ## Waveform Integration
 
