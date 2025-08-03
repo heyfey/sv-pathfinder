@@ -274,8 +274,11 @@ export abstract class DesignItem extends vscode.TreeItem {
     private waveforms: WaveformItem[] = [];
     private activeWaveform?: WaveformItem | undefined;
 
+    readonly isExample: boolean;
+
     constructor(
         filePath: string,
+        isExample: boolean,
         collapsibleState?: vscode.TreeItemCollapsibleState,
     ) {
         const filename = path.basename(filePath); // "test.vcd"
@@ -285,6 +288,7 @@ export abstract class DesignItem extends vscode.TreeItem {
         super(label, collapsibleState);
         this.description = directory;
         this.resourceUri = vscode.Uri.file(filePath);
+        this.isExample = isExample;
 
         this.command = {
             command: 'sv-pathfinder.selectDesign',
@@ -676,19 +680,19 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
     public async openExampleDesign(): Promise<boolean> {
         // add design "../examples/test/surelog.uhdm"
         const examplePath = path.join(__dirname, '..', 'examples', 'test', 'surelog.uhdm');
-        this.addDesign(examplePath);
+        this.addDesign(examplePath, true/*isExample*/);
         return true;
     }
 
-    private async addDesign(designPath: string) {
+    private async addDesign(designPath: string, isExample: boolean = false) {
         let index = this.designList.findIndex(design => design.resourceUri.fsPath === designPath);
         if (index < 0) {
             const fileType = designPath.split('.').pop()?.toLocaleLowerCase() || '';
             let design: DesignItem;
             if (fileType === 'uhdm') {
-                design = new UhdmDesignItem(designPath);
+                design = new UhdmDesignItem(designPath, isExample);
             } else {
-                design = new KuzuDesignItem(designPath);
+                design = new KuzuDesignItem(designPath, false/*isExample*/);
             }
             const success = await design.load();
             if (success) {
@@ -851,7 +855,14 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
     }
 }
 
-function replaceFilePathIfNeeded(filePath: string) {
+function replaceFilePathIfNeeded(filePath: string, isExample: boolean = false) {
+    // dirty fix for absolute path in the example uhdm
+    if (isExample) {
+        const from = "/home/heyfey/git-repos/sv-pathfinder";
+        const to = path.join(__dirname, '..');
+        return filePath.replace(from, to);
+    }
+
     // get from and to from configuration
     const from = vscode.workspace.getConfiguration('sv-pathfinder').get('remotePathPrefix', '');
     const to = vscode.workspace.getConfiguration('sv-pathfinder').get('localPathPrefix', '');
@@ -861,8 +872,8 @@ function replaceFilePathIfNeeded(filePath: string) {
     return filePath.replace(from, to);
 }
 
-async function showTextDocumentLocation(filePath: string, lineNumber: number, columnNumber: number) {
-    filePath = replaceFilePathIfNeeded(filePath);
+async function showTextDocumentLocation(filePath: string, lineNumber: number, columnNumber: number, isExample: boolean = false) {
+    filePath = replaceFilePathIfNeeded(filePath, isExample);
     const uri = vscode.Uri.file(filePath);
     columnNumber = columnNumber > 0 ? columnNumber - 1 : 0; // Convert to 0-based index
     await vscode.window.showTextDocument(uri, { preview: true }).then(() => {
@@ -990,7 +1001,7 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
             }
         }
 
-        await showTextDocumentLocation(filePath, lineNumber, element.columnNumber);
+        await showTextDocumentLocation(filePath, lineNumber, element.columnNumber, this.activeDesign.isExample);
 
         await this.setActiveInstance(element);
 
@@ -1072,7 +1083,7 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         const parent = element.parent ? element.parent : element; // For top-module, consider itself as parent
         // TODO: should find parent recursively until find a module?
 
-        await showTextDocumentLocation(element.sourceFile, element.lineNumber, element.columnNumber);
+        await showTextDocumentLocation(element.sourceFile, element.lineNumber, element.columnNumber, this.activeDesign.isExample);
         await this.setActiveInstance(parent);
         await this.setContextForGoBackOrForward(element, 'gotoInstantiation', isGoBackOrForward);
     }
