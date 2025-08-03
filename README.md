@@ -18,7 +18,7 @@ surelog dut.v tb.sv -elabuhdm -parse -sverilog -d uhdm
 
 Then you can open the .uhdm in sv-pathfinder.
 
-> Limitations: only supports Linux64 for now. Tested on Ubuntu 22.04
+> Limitations: only supports Linux64 for now. Tested on Ubuntu 22.04, AlmaLinux 8
 
 ## Features
 
