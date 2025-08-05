@@ -1,6 +1,6 @@
 {
   "variables": {
-    "UHDM_HOME": "/home/heyfey/git-repos/UHDM/build",
+    "UHDM_HOME": "/home/heyfey/git-repos/UHDM-1.84/build", # /path/to/uhdm
   },
   "targets": [
     {

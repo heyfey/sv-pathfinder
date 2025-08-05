@@ -16,7 +16,9 @@ Generating UHDM using [Surelog](https://github.com/chipsalliance/Surelog):
 surelog dut.v tb.sv -elabuhdm -parse -sverilog -d uhdm
 ```
 
-Then you can open the .uhdm in sv-pathfinder.
+Then you can open the `.uhdm` in sv-pathfinder.
+
+> Compatibility Note: This extension is built with UHDM v1.84. It's recommended to use Surelog v1.84 to ensure compatibility. See [Build Surelog](https://github.com/heyfey/sv-pathfinder/blob/main/BUILD_SURELOG.md)
 
 > Limitations: only supports Linux64 for now. Tested on Ubuntu 22.04, AlmaLinux 8
 
