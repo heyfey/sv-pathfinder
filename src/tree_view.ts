@@ -361,7 +361,7 @@ export abstract class DesignItem extends vscode.TreeItem {
         return this.activeInstance?.moduleName;
     }
 
-    public addWaveform(uri: vscode.Uri) : WaveformItem | undefined {
+    public addWaveform(uri: vscode.Uri): WaveformItem | undefined {
         let index = this.waveforms.findIndex(waveform => waveform.resourceUri.fsPath === uri.fsPath);
         if (index < 0) {
             const waveform = new WaveformItem(uri, this, vscode.TreeItemCollapsibleState.None);
@@ -1110,6 +1110,33 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         for (const instancePath of instancePaths) {
             vscode.commands.executeCommand("waveformViewer.addVariable", { uri: waveformUri.toString(), instancePath: instancePath });
         }
+    }
+
+    async runYosys(element: NetlistItem) {
+        const { runYosys } = await import('@yowasp/yosys');
+
+        // Example: Synthesize a simple inverter module
+        // const args = ['-p', 'read_verilog inv.v; synth; write_json out.json'];  // Command-line args (excluding program name)
+        const args = ['-p', 'read_verilog inv.v; hierarchy -top inv; proc; write_json out.json; stat'];  // Command-line args (excluding program name)
+        // const args = ['-p', 'read_verilog inv.v; hierarchy -top inv; proc; write_json /home/heyfey/git-repos/sv-pathfinder/out.json; stat'];  // Command-line args (excluding program name)
+        const filesIn = {
+            'inv.v': 'module inv(input a, output o); assign o = ~a; endmodule'  // Input files as strings or Uint8Array
+        };
+
+        try {
+            const filesOut = await runYosys(args, filesIn, {
+                stdout: (bytes) => { if (bytes) { console.log(new TextDecoder().decode(bytes)); } },  // Handle stdout bytes
+                stderr: (bytes) => { if (bytes) { console.error(new TextDecoder().decode(bytes)); } },  // Handle stderr bytes
+                decodeASCII: true  // Return text files as strings (default: true)
+            });
+            if (filesOut) {
+                console.log('Output JSON:', filesOut['out.json']);  // Access output files
+            } else {
+                console.error('No output files generated');
+            }
+        } catch (error) {
+            console.error('Error running Yosys:', error);
+          }
     }
 }
 

@@ -159,6 +159,11 @@
           "command": "sv-pathfinder.addAllInScopeToWaveform",
           "when": "view == 'hierarchyView' && viewItem == 'scopeItem'",
           "group": "0_default@7"
+        },
+        {
+          "command": "sv-pathfinder.runYosys",
+          "when": "view == 'hierarchyView' && viewItem == 'scopeItem'",
+          "group": "0_default@7"
         }
       ],
       "editor/context": [
@@ -248,6 +253,10 @@
         "title": "Add All Variables in Scope to Waveform Viewer"
       },
       {
+        "command": "sv-pathfinder.runYosys",
+        "title": "Run Yosys"
+      },
+      {
         "command": "sv-pathfinder.selectInstance",
         "title": "Select Instance"
       },
@@ -320,6 +329,7 @@
     "typescript": "^5.7.3"
   },
   "dependencies": {
+    "@yowasp/yosys": "^0.56.46-dev.951",
     "kuzu": "^0.9.0",
     "web-tree-sitter": "^0.25.6"
   }

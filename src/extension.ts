@@ -121,6 +121,10 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	}
 
+	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.runYosys', (e) => {
+		hierarchyProvider.runYosys(e);
+	}));
+
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.goBack', async (e) => {
 		const element = await hierarchyProvider.goBack();
 		if (element) {
