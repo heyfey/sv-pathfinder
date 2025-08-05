@@ -1,6 +1,6 @@
 # sv-pathfinder
 
-VS Code extension for SystemVerilog design navigation & RTL tracing.
+VS Code extension for SystemVerilog design navigation & RTL tracing - [Download](https://marketplace.visualstudio.com/items?itemName=heyfey.sv-pathfinder)
 
 sv-pathfinder helps you explore elaborated SystemVerilog designs at ease, and seamlessly integrates with the waveform viewer [VaporView](https://github.com/Lramseyer/vaporview) for post-simulation debug.
 
