@@ -40,6 +40,11 @@
           "type": "string",
           "scope": "resource",
           "description": "Replace the remote path prefix with the local path prefix when jumping to source files. This is useful when the debug database is generated on the different machine. Only take effect when sv-pathfinder.remotePathPrefix is also set."
+        },
+        "sv-pathfinder.surelogPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the Surelog executable. If empty, 'surelog' will be resolved from your system PATH."
         }
       }
     },
@@ -55,7 +60,7 @@
     "viewsWelcome": [
       {
         "view": "openedDesignsView",
-        "contents": "Open a design database (uhdm, elab.kz or daidar)\n[Open Design](command:sv-pathfinder.openDesign)\nLearn more on [Github](https://github.com/heyfey/sv-pathfinder)\nTry with an [example design](command:sv-pathfinder.openExampleDesign)"
+        "contents": "Open a design database (.uhdm, .f, .elab.kz or .daidar)\n[Open Design](command:sv-pathfinder.openDesign)\nLearn more on [Github](https://github.com/heyfey/sv-pathfinder)\nTry with an [example design](command:sv-pathfinder.openExampleDesign)"
       }
     ],
     "views": {

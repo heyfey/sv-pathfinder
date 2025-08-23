@@ -1,5 +1,8 @@
 import * as vscode from 'vscode';
 import path from 'path';
+import * as fs from 'fs/promises';
+import * as os from 'os';
+import * as cp from 'child_process';
 
 // Must use require instead of import somehow
 const kuzu = require("kuzu");
@@ -262,13 +265,13 @@ export abstract class DesignItem extends vscode.TreeItem {
     private activeInstance?: NetlistItem | undefined;
     readonly command: vscode.Command;
     // Hierarchy
-    public treeData: NetlistItem[] = [];
+    protected treeData: NetlistItem[] = [];
     // For go back and forward
     public lastContext: gotoContext | undefined = undefined;
     public backwardStack: gotoContext[] = [];
     public forwardStack: gotoContext[] = [];
     // Module Instances
-    public moduleInstances: NetlistItem[] = [];
+    protected moduleInstances: NetlistItem[] = [];
 
     // Waveform integration
     private waveforms: WaveformItem[] = [];
@@ -301,7 +304,7 @@ export abstract class DesignItem extends vscode.TreeItem {
 
     // Abstract methods to load treeData for different kinds of design databases
     public abstract load(): Promise<boolean>;
-    protected abstract unload(): Promise<void>;
+    public abstract unload(): Promise<void>;
     public abstract getChildrenExternal(element: NetlistItem | undefined): Promise<NetlistItem[]>;
     public abstract getDriversAndLoadsExternal(element: NetlistItem): Promise<void>;
     public abstract getModuleInstancesExternal(element: NetlistItem | undefined): Promise<NetlistItem[]>;
@@ -549,7 +552,7 @@ class KuzuDesignItem extends DesignItem {
         return result;
     }
 
-    protected async unload(): Promise<void> {
+    public async unload(): Promise<void> {
         if (this.db) {
             this.db.close();
             this.db = undefined;
@@ -641,9 +644,159 @@ class UhdmDesignItem extends DesignItem {
         return [];
     }
 
-    protected async unload(): Promise<void> {
+    public async unload(): Promise<void> {
         await this.uhdmAddon.unloadDesign(this.designId);
     }
+}
+
+// #region FDesignItem
+class FDesignItem extends DesignItem {
+    private delegateDesign!: DesignItem;
+    private generatedUhdmUri?: vscode.Uri;
+
+    private static surelogOutputChannel: vscode.OutputChannel | undefined;
+
+    private async runSurelog(): Promise<boolean> {
+        const config = vscode.workspace.getConfiguration('sv-pathfinder');
+        let surelogPath = config.get<string>('surelogPath') || 'surelog';
+
+        // Verify Surelog exists
+        try {
+            await new Promise<void>((resolve, reject) => {
+                const verifyProc = cp.spawn(surelogPath, ['--version']);
+                verifyProc.on('error', reject);
+                verifyProc.on('close', (code) => {
+                    if (code === 0) resolve();
+                    else reject(new Error(`Surelog verification failed with code ${code}`));
+                });
+            });
+        } catch (error) {
+            vscode.window.showErrorMessage('Surelog not found or failed to execute. Please install Surelog or set "sv-pathfinder.surelogPath" in settings.');
+            return false;
+        }
+
+        const uuid = crypto.randomUUID();
+        const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), `sv-pathfinder-${uuid}-`));
+
+        // Create an output channel for Surelog logs
+        if (!FDesignItem.surelogOutputChannel) {
+            FDesignItem.surelogOutputChannel = vscode.window.createOutputChannel('Surelog Output');
+        }
+
+        // Prepare Surelog arguments
+        const args = [
+            '-f', this.resourceUri.fsPath,
+            '-odir', tempDir,
+            '-parse',
+            '-sverilog',
+            '-d', 'uhdm',
+            '-elabuhdm', // Optional
+        ];
+
+        // Spawn Surelog process
+        try {
+            await new Promise<void>((resolve, reject) => {
+                const flistDir = path.dirname(this.resourceUri.fsPath);
+                const proc = cp.spawn(surelogPath, args, {
+                    cwd: flistDir,
+                    shell: true // For PATH resolution if needed
+                });
+
+                proc.stdout.on('data', (data) => FDesignItem.surelogOutputChannel!.append(data.toString()));
+                proc.stderr.on('data', (data) => FDesignItem.surelogOutputChannel!.append(data.toString()));
+
+                proc.on('error', reject);
+                proc.on('close', (code) => {
+                    if (code === 0) resolve();
+                    else reject(new Error(`Surelog exited with code ${code}. Check "Surelog Output" channel for details.`));
+                });
+            });
+
+            // Verify generated UHDM file exists
+            const uhdmPath = path.join(tempDir, 'slpp_all', 'surelog.uhdm');
+            await fs.access(uhdmPath);
+            // console.log(`UHDM file generated at: ${uhdmPath}`);
+
+            this.generatedUhdmUri = vscode.Uri.file(uhdmPath);
+            return true;
+
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to generate UHDM: ${error instanceof Error ? error.message : String(error)}`);
+            FDesignItem.surelogOutputChannel.show(true);
+            // Optional: Clean up tempDir on failure
+            try {
+                await fs.rm(tempDir, { recursive: true, force: true });
+            } catch { }
+            return false;
+        }
+    }
+
+    public async load(): Promise<boolean> {
+        // console.log("loading FDesignItem: " + this.resourceUri.fsPath);
+
+        // Run Surelog to generate UHDM
+        const success = await this.runSurelog();
+        if (!success) {
+            return false;
+        }
+        try {
+            // Create and load the delegate design
+            this.delegateDesign = new UhdmDesignItem(this.generatedUhdmUri!.fsPath, this.isExample);
+            const success = await this.delegateDesign.load();
+            if (success) {
+                // Load the top modules from the generated design
+                this.treeData = this.delegateDesign.getTreeData();
+                return true;
+            } else {
+                return false;
+            }
+        } catch (error) {
+            // Optional: Clean up tempDir on failure
+            const tempDir = path.dirname(path.dirname(this.generatedUhdmUri!.fsPath)); // Assuming /tempDir/slpp_all/surelog.uhdm
+            try {
+                await fs.rm(tempDir, { recursive: true, force: true });
+            } catch { }
+            return false;
+        }
+    }
+
+    // tree data and module instances are from delegate design
+    public getTreeData(): NetlistItem[] { return this.delegateDesign.getTreeData(); }
+    public getModuleInstances(): NetlistItem[] { return this.delegateDesign.getModuleInstances(); }
+    public get DelegateDesign(): DesignItem { return this.delegateDesign; }
+
+    public async getChildrenExternal(element: NetlistItem | undefined): Promise<NetlistItem[]> {
+        if (!element) {
+            return this.treeData; // Returns top-level netlist items
+        }
+        await this.delegateDesign.getChildrenExternal(element);
+        return element.children;
+    }
+
+    public async getDriversAndLoadsExternal(element: NetlistItem): Promise<void> {
+        return;
+    }
+
+    public async getModuleInstancesExternal(element: NetlistItem | undefined): Promise<NetlistItem[]> {
+        return [];
+    }
+
+    public async unload(): Promise<void> {
+        await this.delegateDesign.unload();
+        // Clean up temp files
+        if (this.generatedUhdmUri) {
+            const tempDir = path.dirname(path.dirname(this.generatedUhdmUri.fsPath)); // Assuming /tempDir/slpp_all/surelog.uhdm
+            try {
+                await fs.rm(tempDir, { recursive: true, force: true });
+            } catch { }
+            this.generatedUhdmUri = undefined; // Clear the URI after cleanup
+        }
+    }
+
+    // public async reload(): Promise<void> {
+    //     await this.unload();
+    //     await this.load();
+    // }
 }
 
 // #region OpenedDesignsTreeProvider
@@ -669,7 +822,7 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
             canSelectFolders: true,
             canSelectMany: false,
             filters: {
-                'Designs': ['elab.kz', 'uhdm', 'simv.daidir'],
+                'Designs': ['uhdm', 'f', 'elab.kz', 'simv.daidir'],
             }
         };
 
@@ -694,6 +847,8 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
             let design: DesignItem;
             if (fileType === 'uhdm') {
                 design = new UhdmDesignItem(designPath, isExample);
+            } else if (fileType === 'f') {
+                design = new FDesignItem(designPath, false/*isExample*/);
             } else {
                 design = new KuzuDesignItem(designPath, false/*isExample*/);
             }
@@ -752,7 +907,7 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
         if (!element) { return; }
         this.hierarchyTreeProvider.setActiveDesign(element);
         this.moduleInstancesTreeProvider.setActiveDesign(element);
-        if (element instanceof UhdmDesignItem) {
+        if (element instanceof UhdmDesignItem || element instanceof FDesignItem) {
             // Hide the not used views for UHDM designs
             vscode.commands.executeCommand('setContext', 'sv-pathfinder.driversViewVisible', false);
             vscode.commands.executeCommand('setContext', 'sv-pathfinder.loadsViewVisible', false);
@@ -984,10 +1139,18 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         let lineNumber = element.lineNumber;
         if (element.contextValue === 'scopeItem' || element.contextValue === 'instanceItem') {
             // sourceFile and lineNumber for scopeItem and instanceItem is where it get instantiated. Find definition in its moduleDef instead.
-            if (this.activeDesign instanceof UhdmDesignItem) {
+            if (this.activeDesign instanceof UhdmDesignItem || this.activeDesign instanceof FDesignItem) {
+                let design;
+                if (this.activeDesign instanceof FDesignItem) {
+                    design = this.activeDesign.DelegateDesign; // FDesignItem uses delegate design
+                } else {
+                    design = this.activeDesign;
+                }
                 // Only need to get moduleDef for non-top-module, as sourceFile and lineNumber for top-module is already correct
-                if (element.parent) {
-                    const moduleDef = await this.activeDesign!.uhdmAddon.getModuleDef(element.handle);
+                if (element.parent &&
+                    design instanceof UhdmDesignItem // Always true
+                ) {
+                    const moduleDef = await design.uhdmAddon.getModuleDef(element.handle);
                     filePath = moduleDef.file;
                     lineNumber = moduleDef.line;
                 }
