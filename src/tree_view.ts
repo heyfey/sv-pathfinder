@@ -306,6 +306,9 @@ export abstract class DesignItem extends vscode.TreeItem {
     public abstract getDriversAndLoadsExternal(element: NetlistItem): Promise<void>;
     public abstract getModuleInstancesExternal(element: NetlistItem | undefined): Promise<NetlistItem[]>;
 
+    public getTreeData(): NetlistItem[] { return this.treeData; }
+    public getModuleInstances(): NetlistItem[] { return this.moduleInstances; }
+
     public async close() {
         await this.unload();
         this.treeData = [];
@@ -338,7 +341,7 @@ export abstract class DesignItem extends vscode.TreeItem {
         this.activeInstance = instance;
     }
 
-    public getActiveInstance() {
+    public getActiveInstance(): NetlistItem | undefined {
         return this.activeInstance;
     }
 
@@ -361,7 +364,7 @@ export abstract class DesignItem extends vscode.TreeItem {
         return this.activeInstance?.moduleName;
     }
 
-    public addWaveform(uri: vscode.Uri) : WaveformItem | undefined {
+    public addWaveform(uri: vscode.Uri): WaveformItem | undefined {
         let index = this.waveforms.findIndex(waveform => waveform.resourceUri.fsPath === uri.fsPath);
         if (index < 0) {
             const waveform = new WaveformItem(uri, this, vscode.TreeItemCollapsibleState.None);
@@ -528,11 +531,11 @@ class KuzuDesignItem extends DesignItem {
         if (element.children.length > 0) {
             return element.children; // Returns cached children
         }
-        element.children = await this.getModuleInstances(element);
+        element.children = await this.loadModuleInstances(element);
         return element.children;
     }
 
-    private async getModuleInstances(element: NetlistItem): Promise<NetlistItem[]> {
+    private async loadModuleInstances(element: NetlistItem): Promise<NetlistItem[]> {
         const conn = new kuzu.Connection(this.db);
         const query = `MATCH (m:ModuleDef {name: "${element.fullName}"})-[:instantiate]->(i:Instance) RETURN m,i;`;
         const queryResult = await conn.query(query);
@@ -914,7 +917,7 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         this.loadsTreeProvider.setTreeData([]);
 
         if (design) {
-            this.treeData = design.treeData;
+            this.treeData = design.getTreeData();
             this.activeScopeStatusBarItem.text = 'Active scope: ' + design.getActiveScope();
             this.activeScopeStatusBarItem.show();
         } else {
@@ -990,13 +993,14 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
                 }
             } else {
                 const moduleName = element.moduleName;
-                let index = this.activeDesign.moduleInstances.findIndex(module => module.fullName === moduleName);
+                const moduleInstances = this.activeDesign.getModuleInstances();
+                let index = moduleInstances.findIndex(module => module.fullName === moduleName);
                 if (index < 0) {
                     console.log('Cannot find module definition for ' + moduleName);
                     return;
                 } else {
-                    filePath = this.activeDesign.moduleInstances[index].sourceFile;
-                    lineNumber = this.activeDesign.moduleInstances[index].lineNumber;
+                    filePath = moduleInstances[index].sourceFile;
+                    lineNumber = moduleInstances[index].lineNumber;
                 }
             }
         }
@@ -1267,7 +1271,7 @@ export class ModuleInstancesTreeProvider implements vscode.TreeDataProvider<Netl
     public setActiveDesign(design: DesignItem | undefined) {
         this.activeDesign = design;
         if (design) {
-            this.treeData = design.moduleInstances;
+            this.treeData = design.getModuleInstances();
         } else {
             this.treeData = [];
         }
