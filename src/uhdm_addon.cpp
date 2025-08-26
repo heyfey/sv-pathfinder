@@ -10,6 +10,25 @@
 #include <unordered_map>
 #include <vector>
 
+// Utility function to log messages to the JavaScript console
+void LogToConsole(const Napi::Env& env, const std::string& message) {
+  Napi::Object global = env.Global();
+  Napi::Value console = global.Get("console");
+  if (console.IsObject()) {
+    Napi::Object consoleObj = console.As<Napi::Object>();
+    Napi::Value log = consoleObj.Get("log");
+    if (log.IsFunction()) {
+      Napi::Function logFn = log.As<Napi::Function>();
+      logFn.Call(consoleObj, {Napi::String::New(env, message)});
+    }
+  }
+}
+
+std::string RepeatString(const std::string& str, int count) {
+  return std::string(count, '  ') + str;
+}
+
+// Wrapper class for vpiHandle
 class VpiHandleWrap : public Napi::ObjectWrap<VpiHandleWrap> {
  public:
   // Factory method to create a new instance from a vpiHandle
@@ -54,31 +73,33 @@ class VpiHandleWrap : public Napi::ObjectWrap<VpiHandleWrap> {
 Napi::FunctionReference VpiHandleWrap::constructor;
 
 // Data structures for moduleDef:Instances
-// typedef struct {
-//   std::string fullName;
-//   std::string name;
-//   std::string file;
-//   int line;
-//   int column;
-// } instContext;
+typedef struct {
+  std::string name;
+  std::string file;
+  int line;
+  int column;
+} moduleDefContext;
 
-// typedef struct {
-//   std::string name;
-//   std::string file;
-//   int line;
-//   int column;
-// } moduleDefContext;
+typedef struct {
+  std::string fullName;
+  std::string name;
+  std::string file;
+  int line;
+  int column;
+} instContext;
 
-// typedef std::map<std::string, moduleDefContext> ModuleDefContextMap;
-// typedef std::unordered_map<std::string, std::vector<instContext>>
-//     ModuleDefInstContextMap;  // All instances in each module definition
+// module name: moduleDefContext
+typedef std::map<std::string, moduleDefContext> ModuleDefContextMap;
+// module name: [instContext]. instContext should be sorted by fullName
+typedef std::unordered_map<std::string, std::vector<instContext>>
+    InstContextMap;
 
 typedef struct {
   std::string filename;
   std::unique_ptr<UHDM::Serializer> serializer;
   vpiHandle design;
-  // ModuleDefContextMap moduleDefContextMap;
-  // ModuleDefInstContextMap moduleDefInstContextMap;
+  ModuleDefContextMap moduleDefContextMap;
+  InstContextMap instContextMap;
 } DesignContext;
 
 std::unordered_map<int, DesignContext> designContextMap;
@@ -201,7 +222,7 @@ std::string getScopeTypeString(int scope_type) {
 
 void CollectSubScopes(const Napi::CallbackInfo& info,
                       const vpiHandle& scopeHandle, Napi::Array& result,
-                      bool isFromGenScopeArray = false) {
+                      int level, bool isFromGenScopeArray = false) {
   Napi::Env env = info.Env();
   std::vector<int> types = {vpiModule,         /*vpiModuleArray,*/ vpiGenScope,
                             vpiGenScopeArray,  vpiInterface,
@@ -210,21 +231,36 @@ void CollectSubScopes(const Napi::CallbackInfo& info,
                             vpiClockingBlock,  vpiModport,
                             vpiInterfaceArray, vpiProgramArray};
 
-  uint32_t index =
-      result.Length();  // Start from the current length of the array
+  // LogToConsole(env, RepeatString("  ", level) + "CollectSubScopes level=" +
+  //                       std::to_string(level) + ", parent_type=" +
+  //                       std::to_string(vpi_get(vpiType, scopeHandle)) +
+  //                       ", isFromGenScopeArray=" +
+  //                       std::string(isFromGenScopeArray ? "true" : "false"));
 
   for (int type : types) {
     vpiHandle iter = vpi_iterate(type, scopeHandle);
     if (iter) {
       while (vpiHandle obj_h = vpi_scan(iter)) {
+        std::string obj_name =
+            vpi_get_str(vpiFullName, obj_h)
+                ? vpi_get_str(vpiFullName, obj_h)
+                : (vpi_get_str(vpiName, obj_h) ? vpi_get_str(vpiName, obj_h)
+                                               : "unnamed");
+        // LogToConsole(env, RepeatString("  ", level) + "Found obj: type=" +
+        //                       std::to_string(vpi_get(vpiType, obj_h)) +
+        //                       ", name=" + obj_name);
+
         // For GenScopeArray, get all it's subscopes recursively for one
-        // level instead
+        // level instead. TODO: how about nested GenScopeArray?
         if (type == vpiGenScopeArray) {
+          // LogToConsole(env, RepeatString("  ", level) +
+          //                       "Expanding GenScopeArray: " + obj_name);
           if (isFromGenScopeArray) {
             // If we are already in a GenScopeArray, skip this one
             continue;
           }
-          CollectSubScopes(info, obj_h, result, true /*isFromGenScopeArray*/);
+          CollectSubScopes(info, obj_h, result, level + 1,
+                           true /*isFromGenScopeArray*/);
           continue;
         }
 
@@ -251,6 +287,7 @@ void CollectSubScopes(const Napi::CallbackInfo& info,
         scope.Set("column", vpi_get(vpiColumnNo, obj_h));
         scope.Set("type", getScopeTypeString(vpi_get(vpiType, obj_h)));
         scope.Set("handle", VpiHandleWrap::New(env, obj_h));
+        uint32_t index = result.Length();
         result[index++] = scope;
 
         // Do not release here as VpiHandleWrap will manage it
@@ -283,7 +320,7 @@ Napi::Value GetSubScopes(const Napi::CallbackInfo& info) {
   }
 
   Napi::Array result = Napi::Array::New(env);
-  CollectSubScopes(info, scopeHandle, result);
+  CollectSubScopes(info, scopeHandle, result, 0);
 
   return result;
 }
@@ -373,6 +410,179 @@ Napi::Value GetModuleDef(const Napi::CallbackInfo& info) {
   if (const char* s = vpi_get_str(vpiDefFile, instHandle))
     result.Set("file", s);
   result.Set("line", vpi_get(vpiDefLineNo, instHandle));
+  result.Set("column", 0);  // No vpiDefColumnNo available
+
+  return result;
+}
+
+// Wrap getModuleDefs
+Napi::Value GetModuleDefs(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() < 1 || !info[0].IsNumber()) {
+    Napi::TypeError::New(env, "Number argument (design ID) expected")
+        .ThrowAsJavaScriptException();
+    return Napi::Array::New(env);
+  }
+
+  int designId = info[0].As<Napi::Number>().Int32Value();
+
+  auto it = designContextMap.find(designId);
+  if (it == designContextMap.end()) {
+    Napi::Error::New(env, "Design ID not found").ThrowAsJavaScriptException();
+    return Napi::Array::New(env);
+  }
+
+  DesignContext& dc = it->second;
+  vpiHandle design = dc.design;
+  if (!design) {
+    Napi::Error::New(env, "Design not loaded").ThrowAsJavaScriptException();
+    return Napi::Array::New(env);
+  }
+
+  // Clear existing maps
+  dc.moduleDefContextMap.clear();
+  dc.instContextMap.clear();
+
+  // Recursive traversal function
+  auto TraverseAndCollect = [&](auto& self, vpiHandle scopeHandle) -> void {
+    int scope_type = vpi_get(vpiType, scopeHandle);
+
+    if (scope_type == vpiModule || scope_type == vpiInterface ||
+        scope_type == vpiProgram) {
+      const char* def_name_c = vpi_get_str(vpiDefName, scopeHandle);
+      if (def_name_c) {
+        std::string def_name = def_name_c;
+
+        // Add to instContextMap
+        instContext inst_ctx;
+        inst_ctx.name = vpi_get_str(vpiName, scopeHandle)
+                            ? vpi_get_str(vpiName, scopeHandle)
+                            : "";
+        inst_ctx.fullName =
+            vpi_get_str(vpiFullName, scopeHandle)
+                ? vpi_get_str(vpiFullName, scopeHandle)
+                : inst_ctx.name;  // Use Name if FullName is not available
+                                  // (might happen to top module)
+        inst_ctx.file = vpi_get_str(vpiFile, scopeHandle)
+                            ? vpi_get_str(vpiFile, scopeHandle)
+                            : "";
+        inst_ctx.line = vpi_get(vpiLineNo, scopeHandle);
+        inst_ctx.column = vpi_get(vpiColumnNo, scopeHandle);
+        dc.instContextMap[def_name].push_back(inst_ctx);
+
+        // Add to moduleDefContextMap if not present
+        if (dc.moduleDefContextMap.find(def_name) ==
+            dc.moduleDefContextMap.end()) {
+          moduleDefContext def_ctx;
+          def_ctx.name = def_name;
+          def_ctx.file =
+              vpi_get_str(vpiDefFile, scopeHandle)
+                  ? vpi_get_str(vpiDefFile, scopeHandle)
+                  : inst_ctx.file;  // Use inst file if def file not available
+                                    // (might happen to top module)
+          def_ctx.line =
+              vpi_get(vpiDefLineNo, scopeHandle)
+                  ? vpi_get(vpiDefLineNo, scopeHandle)
+                  : inst_ctx.line;  // Use inst line if def line not available
+                                    // (might happen to top module)
+          def_ctx.column = 0;       // No vpiDefColumnNo available
+          dc.moduleDefContextMap[def_name] = def_ctx;
+        }
+      }
+    }
+
+    // Recurse on subscopes
+    std::vector<int> types = {
+        vpiModule,    vpiModuleArray,    vpiGenScope, vpiGenScopeArray,
+        vpiInterface, vpiInterfaceArray, vpiProgram,  vpiProgramArray,
+        vpiTaskFunc,  vpiTask,           vpiFunction, vpiClockingBlock,
+        vpiModport};
+    for (int type : types) {
+      vpiHandle iter = vpi_iterate(type, scopeHandle);
+      if (iter) {
+        while (vpiHandle sub_h = vpi_scan(iter)) {
+          self(self, sub_h);
+          vpi_release_handle(sub_h);
+        }
+        vpi_release_handle(iter);
+      }
+    }
+  };
+
+  // Start traversal from top modules
+  vpiHandle iter = vpi_iterate(UHDM::uhdmtopModules, design);
+  if (iter) {
+    while (vpiHandle top_h = vpi_scan(iter)) {
+      TraverseAndCollect(TraverseAndCollect, top_h);
+      vpi_release_handle(top_h);
+    }
+    vpi_release_handle(iter);
+  }
+
+  // Build the result array of module definitions
+  Napi::Array result = Napi::Array::New(env);
+  uint32_t index = 0;
+  for (const auto& pair : dc.moduleDefContextMap) {
+    const moduleDefContext& ctx = pair.second;
+    Napi::Object obj = Napi::Object::New(env);
+    obj.Set("defName", ctx.name);
+    obj.Set("file", ctx.file);
+    obj.Set("line", ctx.line);
+    obj.Set("column", ctx.column);
+    obj.Set("size", dc.instContextMap[ctx.name].size());
+    result.Set(index++, obj);
+  }
+
+  return result;
+}
+
+// Wrap getModuleInstances
+Napi::Value GetModuleInstances(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() < 2 || !info[0].IsNumber() || !info[1].IsString()) {
+    Napi::TypeError::New(
+        env, "Expected arguments: Number (design ID), String (moduleDef name)")
+        .ThrowAsJavaScriptException();
+    return Napi::Array::New(env);
+  }
+
+  int designId = info[0].As<Napi::Number>().Int32Value();
+  std::string moduleDefName = info[1].As<Napi::String>().Utf8Value();
+
+  auto it = designContextMap.find(designId);
+  if (it == designContextMap.end()) {
+    Napi::Error::New(env, "Design ID not found").ThrowAsJavaScriptException();
+    return Napi::Array::New(env);
+  }
+
+  DesignContext& dc = it->second;
+
+  auto instIt = dc.instContextMap.find(moduleDefName);
+  if (instIt == dc.instContextMap.end()) {
+    return Napi::Array::New(env);
+  }
+
+  std::vector<instContext> instances = instIt->second;
+
+  // Sort by fullName
+  std::sort(instances.begin(), instances.end(),
+            [](const instContext& a, const instContext& b) {
+              return a.fullName < b.fullName;
+            });
+
+  Napi::Array result = Napi::Array::New(env);
+  uint32_t index = 0;
+  for (const auto& inst : instances) {
+    Napi::Object obj = Napi::Object::New(env);
+    obj.Set("fullName", inst.fullName);
+    obj.Set("name", inst.name);
+    obj.Set("file", inst.file);
+    obj.Set("line", inst.line);
+    obj.Set("column", inst.column);
+    result.Set(index++, obj);
+  }
 
   return result;
 }
@@ -419,6 +629,9 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("getSubScopes", Napi::Function::New(env, GetSubScopes));
   exports.Set("getVars", Napi::Function::New(env, GetVars));
   exports.Set("getModuleDef", Napi::Function::New(env, GetModuleDef));
+  exports.Set("getModuleDefs", Napi::Function::New(env, GetModuleDefs));
+  exports.Set("getModuleInstances",
+              Napi::Function::New(env, GetModuleInstances));
   return exports;
 }
 

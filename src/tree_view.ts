@@ -264,7 +264,7 @@ export abstract class DesignItem extends vscode.TreeItem {
     readonly resourceUri: vscode.Uri;
     private activeInstance?: NetlistItem | undefined;
     readonly command: vscode.Command;
-    // Hierarchy
+    // Hierarchy tree
     protected treeData: NetlistItem[] = [];
     // For go back and forward
     public lastContext: gotoContext | undefined = undefined;
@@ -308,6 +308,7 @@ export abstract class DesignItem extends vscode.TreeItem {
     public abstract getChildrenExternal(element: NetlistItem | undefined): Promise<NetlistItem[]>;
     public abstract getDriversAndLoadsExternal(element: NetlistItem): Promise<void>;
     public abstract getModuleInstancesExternal(element: NetlistItem | undefined): Promise<NetlistItem[]>;
+    public abstract getDefinitionFileLocation(element: NetlistItem): Promise<{ filePath: string; lineNumber: number, columnNumber: number }>
 
     public getTreeData(): NetlistItem[] { return this.treeData; }
     public getModuleInstances(): NetlistItem[] { return this.moduleInstances; }
@@ -330,15 +331,34 @@ export abstract class DesignItem extends vscode.TreeItem {
             instance = element;
         } else if (element.contextValue === 'varItem') {
             instance = element.parent!;
+            // find parent recursively until it is a module
+            if (instance.type !== 'module') {
+                while (instance.parent && instance.type !== 'module') {
+                    instance = instance.parent;
+                }
+            }
+            // TODO: fix for interface, modport, clockblock, etc.
+            // // find parent recursively until it is a module or interface
+            // if (instance.type !== 'module' && instance.type !== 'interface') {
+            //     while (instance.parent && instance.type !== 'module' && instance.type !== 'interface') {
+            //         instance = instance.parent;
+            //     }
+            // }
         } else if (element.contextValue === 'loadItem' || element.contextValue === 'driverItem') {
             // find tree item using modulePath
-            instance = await this.findTreeItem(element.modulePath);
+            const scope = await this.findTreeItem(element.modulePath);
+            if (!scope) {
+                console.log('[setActiveInstance] Cannot find in hierarchy tree: ' + element.fullName); // Should not happen
+            } else {
+                instance = scope;
+            }
         } else if (element.contextValue === 'instanceItem') {
-            instance = await this.findTreeItem(element.fullName);
-        }
-        if (!instance) {
-            console.log('Cannot find instance for ' + element.fullName); // Should not happen
-            return;
+            const scope = await this.findTreeItem(element.fullName);
+            if (!scope) {
+                console.log('[setActiveInstance] Cannot find in hierarchy tree: ' + element.fullName); // Should not happen
+            } else {
+                instance = scope;
+            }
         }
 
         this.activeInstance = instance;
@@ -357,7 +377,9 @@ export abstract class DesignItem extends vscode.TreeItem {
         if (activeInstance.contextValue === 'scopeItem') {
             const label = typeof activeInstance.label === 'string' ? activeInstance.label : '';
             activeScope = activeScope === '' ? label : activeScope + '.' + label;
-        } else if (activeInstance.contextValue === 'instanceItem') { // Should not happen
+        } else if (activeInstance.contextValue === 'instanceItem') {
+            // Happen when we could not find scopeItem for instanceItem when setActiveInstance, thus fall back
+            // to use instanceItem
             activeScope = activeInstance.fullName;
         }
         return activeScope;
@@ -417,7 +439,9 @@ class KuzuDesignItem extends DesignItem {
             }, async () => {
                 this.db = new kuzu.Database(this.resourceUri.fsPath, 0, true, true, 0);
                 const conn = new kuzu.Connection(this.db);
-                await this.loadModuleDefs(conn);
+                if (vscode.workspace.getConfiguration('sv-pathfinder').get<boolean>('showInstancesView', true)) {
+                    await this.loadModuleDefs(conn);
+                }
                 await this.loadTopModules(conn);
             });
             return true;
@@ -552,6 +576,33 @@ class KuzuDesignItem extends DesignItem {
         return result;
     }
 
+    async getDefinitionFileLocation(element: NetlistItem): Promise<{ filePath: string; lineNumber: number, columnNumber: number }> {
+        let filePath = element.sourceFile;
+        let lineNumber = element.lineNumber;
+        let columnNumber = element.columnNumber;
+
+        if (element.contextValue === 'scopeItem') {
+            // Find the module definition in moduleInstances
+            const moduleName = element.moduleName;
+            const moduleInstances = this.getModuleInstances();
+            let index = moduleInstances.findIndex(module => module.fullName === moduleName);
+            if (index < 0) {
+                console.log('Cannot find module definition for ' + moduleName); // Should not happen
+            } else {
+                filePath = moduleInstances[index].sourceFile;
+                lineNumber = moduleInstances[index].lineNumber;
+                columnNumber = moduleInstances[index].columnNumber;
+            }
+        } else if (element.contextValue === 'instanceItem') {
+            // The parent of instanceItem is the moduleDef, so use its sourceFile and lineNumber
+            filePath = element.parent!.sourceFile;
+            lineNumber = element.parent!.lineNumber;
+            columnNumber = element.parent!.columnNumber;
+        }
+
+        return { filePath, lineNumber, columnNumber };
+    }
+
     public async unload(): Promise<void> {
         if (this.db) {
             this.db.close();
@@ -579,8 +630,10 @@ class UhdmDesignItem extends DesignItem {
                 cancellable: false
             }, async () => {
                 this.designId = await this.uhdmAddon.loadDesign(this.resourceUri.fsPath);
+                if (vscode.workspace.getConfiguration('sv-pathfinder').get<boolean>('showInstancesView', true)) {
+                    this.loadModuleDefs(); // need await?
+                }
                 await this.loadTopModules();
-                // await this.loadModuleDefs();
             });
             return true;
         } catch (error) {
@@ -640,8 +693,61 @@ class UhdmDesignItem extends DesignItem {
         return;
     }
 
+    private async loadModuleDefs() {
+        const moduleDefs = await this.uhdmAddon.getModuleDefs(this.designId);
+        for (const moduleDef of moduleDefs) {
+            // console.log(`Loaded module definition: ${moduleDef.defName} (${moduleDef.file}:${moduleDef.line})`);
+            const defName = moduleDef.defName.replace("work@", ""); // remove prefix for UHDM
+            const scope = createScope(defName, "moduledef", moduleDef.file, moduleDef.line, moduleDef.column, defName, "moduleDefItem", undefined, moduleDef.handle);
+            scope.description = `${moduleDef.size}`;
+            this.moduleInstances.push(scope);
+        }
+    }
+
     public async getModuleInstancesExternal(element: NetlistItem | undefined): Promise<NetlistItem[]> {
-        return [];
+        if (!element) {
+            return this.moduleInstances;
+        }
+        if (element.children.length > 0) {
+            return element.children; // Returns cached children
+        }
+        element.children = await this.loadModuleInstances(element);
+        return element.children;
+    }
+
+    private async loadModuleInstances(element: NetlistItem): Promise<NetlistItem[]> {
+        const moduleName = "work@" + element.moduleName; // add prefix for UHDM
+        const instances = await this.uhdmAddon.getModuleInstances(this.designId, moduleName);
+        const result: NetlistItem[] = [];
+        for (const instance of instances) {
+            const scope = createVar(instance.fullName, "instance", 0, instance.file, instance.line, instance.column, instance.name, "instanceItem", element);
+            // scope.description = instance.name;
+            result.push(scope);
+        }
+        return result;
+    }
+
+    async getDefinitionFileLocation(element: NetlistItem): Promise<{ filePath: string; lineNumber: number, columnNumber: number }> {
+        let filePath = element.sourceFile;
+        let lineNumber = element.lineNumber;
+        let columnNumber = element.columnNumber;
+
+        if (element.contextValue === 'scopeItem') {
+            // Only need to get moduleDef for non-top-module, as sourceFile and lineNumber for top-module is already correct
+            if (element.parent) {
+                const moduleDef = await this.uhdmAddon.getModuleDef(element.handle);
+                filePath = moduleDef.file;
+                lineNumber = moduleDef.line;
+                columnNumber = moduleDef.column;
+            }
+        } else if (element.contextValue === 'instanceItem') {
+            // The parent of instanceItem is the moduleDefItem, so use its sourceFile and lineNumber
+            filePath = element.parent!.sourceFile;
+            lineNumber = element.parent!.lineNumber;
+            columnNumber = element.parent!.columnNumber;
+        }
+
+        return { filePath, lineNumber, columnNumber };
     }
 
     public async unload(): Promise<void> {
@@ -666,8 +772,8 @@ class FDesignItem extends DesignItem {
                 const verifyProc = cp.spawn(surelogPath, ['--version']);
                 verifyProc.on('error', reject);
                 verifyProc.on('close', (code) => {
-                    if (code === 0) resolve();
-                    else reject(new Error(`Surelog verification failed with code ${code}`));
+                    if (code === 0) { resolve(); }
+                    else { reject(new Error(`Surelog verification failed with code ${code}`)); }
                 });
             });
         } catch (error) {
@@ -707,8 +813,8 @@ class FDesignItem extends DesignItem {
 
                 proc.on('error', reject);
                 proc.on('close', (code) => {
-                    if (code === 0) resolve();
-                    else reject(new Error(`Surelog exited with code ${code}. Check "Surelog Output" channel for details.`));
+                    if (code === 0) { resolve(); }
+                    else { reject(new Error(`Surelog exited with code ${code}. Check "Surelog Output" channel for details.`)); }
                 });
             });
 
@@ -778,7 +884,11 @@ class FDesignItem extends DesignItem {
     }
 
     public async getModuleInstancesExternal(element: NetlistItem | undefined): Promise<NetlistItem[]> {
-        return [];
+        return this.delegateDesign.getModuleInstancesExternal(element);
+    }
+
+    async getDefinitionFileLocation(element: NetlistItem): Promise<{ filePath: string; lineNumber: number, columnNumber: number }> {
+        return this.delegateDesign.getDefinitionFileLocation(element);
     }
 
     public async unload(): Promise<void> {
@@ -911,11 +1021,9 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
             // Hide the not used views for UHDM designs
             vscode.commands.executeCommand('setContext', 'sv-pathfinder.driversViewVisible', false);
             vscode.commands.executeCommand('setContext', 'sv-pathfinder.loadsViewVisible', false);
-            vscode.commands.executeCommand('setContext', 'sv-pathfinder.moduleInstancesViewVisible', false);
         } else {
             vscode.commands.executeCommand('setContext', 'sv-pathfinder.driversViewVisible', true);
             vscode.commands.executeCommand('setContext', 'sv-pathfinder.loadsViewVisible', true);
-            vscode.commands.executeCommand('setContext', 'sv-pathfinder.moduleInstancesViewVisible', true);
         }
         this.refresh();
     }
@@ -1123,7 +1231,7 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         };
     }
 
-    async gotoDefinition(element: NetlistItem, isGoBackOrForward: boolean = false) {
+    async gotoDefinition(element: NetlistItem, isGoBackOrForward: boolean = false): Promise<NetlistItem | undefined> {
         if (!this.activeDesign) { return; }
 
         // Special cases: for generate, begin, clocking block, modport, go to definition is actually go to instantiation
@@ -1131,44 +1239,21 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
             element.type === 'begin' ||
             element.type === 'clockingblock' ||
             element.type === 'modport') {
-            await this.gotoInstantiation(element, isGoBackOrForward);
-            return;
+            return await this.gotoInstantiation(element, isGoBackOrForward);
         }
 
-        let filePath = element.sourceFile;
-        let lineNumber = element.lineNumber;
-        if (element.contextValue === 'scopeItem' || element.contextValue === 'instanceItem') {
-            // sourceFile and lineNumber for scopeItem and instanceItem is where it get instantiated. Find definition in its moduleDef instead.
-            if (this.activeDesign instanceof UhdmDesignItem || this.activeDesign instanceof FDesignItem) {
-                let design;
-                if (this.activeDesign instanceof FDesignItem) {
-                    design = this.activeDesign.DelegateDesign; // FDesignItem uses delegate design
-                } else {
-                    design = this.activeDesign;
-                }
-                // Only need to get moduleDef for non-top-module, as sourceFile and lineNumber for top-module is already correct
-                if (element.parent &&
-                    design instanceof UhdmDesignItem // Always true
-                ) {
-                    const moduleDef = await design.uhdmAddon.getModuleDef(element.handle);
-                    filePath = moduleDef.file;
-                    lineNumber = moduleDef.line;
-                }
+        // If called from modeuleInstancesView, find the corresponding scopeItem in the hierarchy tree
+        if (element.contextValue === 'instanceItem') {
+            const scope = await this.activeDesign.findTreeItem(element.fullName);
+            if (!scope) {
+                console.log('[gotoDefinition] Cannot find in hierarchy tree: ' + element.fullName); // Should not happen
             } else {
-                const moduleName = element.moduleName;
-                const moduleInstances = this.activeDesign.getModuleInstances();
-                let index = moduleInstances.findIndex(module => module.fullName === moduleName);
-                if (index < 0) {
-                    console.log('Cannot find module definition for ' + moduleName);
-                    return;
-                } else {
-                    filePath = moduleInstances[index].sourceFile;
-                    lineNumber = moduleInstances[index].lineNumber;
-                }
+                element = scope;
             }
         }
 
-        await showTextDocumentLocation(filePath, lineNumber, element.columnNumber, this.activeDesign.isExample);
+        const fileInfo = await this.activeDesign.getDefinitionFileLocation(element);
+        await showTextDocumentLocation(fileInfo.filePath, fileInfo.lineNumber, fileInfo.columnNumber, this.activeDesign.isExample);
 
         await this.setActiveInstance(element);
 
@@ -1179,6 +1264,7 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         }
 
         await this.setContextForGoBackOrForward(element, 'gotoDefinition', isGoBackOrForward);
+        return element;
     }
 
     public async getDriversAndLoads(element: NetlistItem): Promise<void> {
@@ -1244,15 +1330,32 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         return context.element;
     }
 
-    async gotoInstantiation(element: NetlistItem, isGoBackOrForward: boolean = false) {
+    async gotoInstantiation(element: NetlistItem, isGoBackOrForward: boolean = false): Promise<NetlistItem | undefined> {
         if (!this.activeDesign) { return; }
-        if (element.contextValue !== 'scopeItem') { return; }
-        const parent = element.parent ? element.parent : element; // For top-module, consider itself as parent
-        // TODO: should find parent recursively until find a module?
+        if (element.contextValue !== 'scopeItem' && element.contextValue !== 'instanceItem') { return; }
+
+        // If called from modeuleInstancesView, find the corresponding scopeItem in the hierarchy tree
+        if (element.contextValue === 'instanceItem') {
+            const scope = await this.activeDesign.findTreeItem(element.fullName);
+            if (!scope) {
+                console.log('[gotoInstantiation] Cannot find in hierarchy tree: ' + element.fullName); // Should not happen
+                // TODO: error handling, currently setActiveInstance doesn't work if not found
+            } else {
+                element = scope;
+            }
+        }
+        let parent = element.parent ? element.parent : element; // For top-module, consider itself as parent
+        // Find parent recursively until it is a module
+        if (parent.type !== 'module') {
+            while (parent.parent && parent.type !== 'module') {
+                parent = parent.parent;
+            }
+        }
 
         await showTextDocumentLocation(element.sourceFile, element.lineNumber, element.columnNumber, this.activeDesign.isExample);
         await this.setActiveInstance(parent);
         await this.setContextForGoBackOrForward(element, 'gotoInstantiation', isGoBackOrForward);
+        return element; // should reveal element or parent?
     }
 
     async addToWaveform(element: NetlistItem, waveformUri: vscode.Uri) {
@@ -1452,7 +1555,10 @@ export class ModuleInstancesTreeProvider implements vscode.TreeDataProvider<Netl
     }
 
     getParent?(element: NetlistItem): vscode.ProviderResult<NetlistItem> {
-        return null;
+        if (element.contextValue === 'moduleDefItem') {
+            return element;
+        }
+        return element.parent; // element.contextValue === 'instanceItem'
     }
 
     resolveTreeItem?(item: vscode.TreeItem, element: NetlistItem, token: vscode.CancellationToken): vscode.ProviderResult<vscode.TreeItem> {

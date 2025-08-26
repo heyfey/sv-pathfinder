@@ -45,6 +45,11 @@
           "type": "string",
           "default": "",
           "description": "Path to the Surelog executable. If empty, 'surelog' will be resolved from your system PATH."
+        },
+        "sv-pathfinder.showInstancesView": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the instances view. Need to reload window to take effect."
         }
       }
     },
@@ -142,12 +147,12 @@
         },
         {
           "command": "sv-pathfinder.gotoDefinition",
-          "when": "view == 'hierarchyView'",
+          "when": "view == 'hierarchyView' || view == 'moduleInstancesView'",
           "group": "0_default@3"
         },
         {
           "command": "sv-pathfinder.gotoInstantiation",
-          "when": "view == 'hierarchyView' && viewItem == 'scopeItem'",
+          "when": "(view == 'hierarchyView' && viewItem == 'scopeItem') || (view == 'moduleInstancesView' && viewItem == 'instanceItem')",
           "group": "0_default@4"
         },
         {
@@ -169,32 +174,32 @@
       "editor/context": [
         {
           "command": "sv-pathfinder.selectInstance",
-          "when": "resourceLangId == verilog && sv-pathfinder.moduleInstancesViewVisible",
+          "when": "(resourceLangId == verilog || resourceLangId == systemverilog) && sv-pathfinder.moduleInstancesViewVisible",
           "group": "1_designNavigation@0"
         },
         {
           "command": "sv-pathfinder.traceDriver",
-          "when": "resourceLangId == verilog && sv-pathfinder.driversViewVisible",
+          "when": "(resourceLangId == verilog || resourceLangId == systemverilog) && sv-pathfinder.driversViewVisible",
           "group": "1_designNavigation@1"
         },
         {
           "command": "sv-pathfinder.traceLoad",
-          "when": "resourceLangId == verilog && sv-pathfinder.loadsViewVisible",
+          "when": "(resourceLangId == verilog || resourceLangId == systemverilog) && sv-pathfinder.loadsViewVisible",
           "group": "1_designNavigation@2"
         },
         {
           "command": "sv-pathfinder.showInHierarchyView",
-          "when": "resourceLangId == verilog",
+          "when": "resourceLangId == verilog || resourceLangId == systemverilog",
           "group": "1_designNavigation@3"
         },
         {
           "command": "sv-pathfinder.copyHierarchyName",
-          "when": "resourceLangId == verilog",
+          "when": "resourceLangId == verilog || resourceLangId == systemverilog",
           "group": "1_designNavigation@4"
         },
         {
           "command": "sv-pathfinder.addToWaveformViewer",
-          "when": "resourceLangId == verilog",
+          "when": "resourceLangId == verilog || resourceLangId == systemverilog",
           "group": "1_designNavigation@5"
         }
       ]

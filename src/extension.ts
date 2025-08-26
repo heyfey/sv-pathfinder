@@ -36,6 +36,11 @@ export function activate(context: vscode.ExtensionContext) {
 		manageCheckboxStateManually: false,
 		canSelectMany: true,
 	});
+	// Set initial state only on extension activation
+	// If the setting is changed, need to reload the window to take effect
+	if (vscode.workspace.getConfiguration('sv-pathfinder').get<boolean>('showInstancesView', true)) {
+		vscode.commands.executeCommand('setContext', 'sv-pathfinder.moduleInstancesViewVisible', true);
+	}
 
 	const designProvider = new OpenedDesignsTreeProvider(hierarchyProvider, moduleInstancesProvider);
 	const designsView = vscode.window.createTreeView('openedDesignsView', {
@@ -92,12 +97,20 @@ export function activate(context: vscode.ExtensionContext) {
 		hierarchyView.reveal(e.lastContext?.element, { select: true, focus: false, expand: 1 });
 	}));
 
-	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.gotoDefinition', (e) => {
-		hierarchyProvider.gotoDefinition(e);
+	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.gotoDefinition', async (e) => {
+		const element = await hierarchyProvider.gotoDefinition(e);
+		// If called from modeuleInstancesView, reveal the coresponding scope in hierarchyView
+		if (element && e.contextValue === 'instanceItem') {
+			hierarchyView.reveal(element, { select: true, focus: false, expand: 1 });
+		}
 	}));
 
-	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.gotoInstantiation', (e) => {
-		hierarchyProvider.gotoInstantiation(e);
+	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.gotoInstantiation', async (e) => {
+		const element = await hierarchyProvider.gotoInstantiation(e);
+		// If called from modeuleInstancesView, reveal the coresponding scope in hierarchyView
+		if (element && e.contextValue === 'instanceItem') {
+			hierarchyView.reveal(element, { select: true, focus: false, expand: 1 });
+		}
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.copyName', (e) => {

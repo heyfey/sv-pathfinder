@@ -61,6 +61,8 @@ sv-pathfinder is seamlessly integrated with VaporView – [Download](https://mar
 - `"sv-pathfinder.localPathPrefix": string`
     - Replace the remote path prefix with the local path prefix when jumping to source files. This is useful when the design database is generated on the different machine/path. Only take effect when both set.
 - `"sv-pathfinder.surelogPath": string`, Path to the Surelog executable. If empty, 'surelog' will be resolved from your system PATH.
+- `"sv-pathfinder.showInstancesView": boolean`, Show the instances view. Need to reload window to take effect.
+    - Default: `true`
 
 ## Requirements
 
