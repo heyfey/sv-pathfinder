@@ -157,7 +157,7 @@
         },
         {
           "command": "sv-pathfinder.copyName",
-          "when": "view == 'hierarchyView'",
+          "when": "view == 'hierarchyView' || view == 'moduleInstancesView'",
           "group": "0_default@5"
         },
         {
