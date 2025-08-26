@@ -75,6 +75,7 @@ Napi::FunctionReference VpiHandleWrap::constructor;
 // Data structures for moduleDef:Instances
 typedef struct {
   std::string name;
+  std::string type;
   std::string file;
   int line;
   int column;
@@ -83,6 +84,7 @@ typedef struct {
 typedef struct {
   std::string fullName;
   std::string name;
+  std::string type;
   std::string file;
   int line;
   int column;
@@ -464,6 +466,7 @@ Napi::Value GetModuleDefs(const Napi::CallbackInfo& info) {
                 ? vpi_get_str(vpiFullName, scopeHandle)
                 : inst_ctx.name;  // Use Name if FullName is not available
                                   // (might happen to top module)
+        inst_ctx.type = getScopeTypeString(scope_type);
         inst_ctx.file = vpi_get_str(vpiFile, scopeHandle)
                             ? vpi_get_str(vpiFile, scopeHandle)
                             : "";
@@ -476,6 +479,7 @@ Napi::Value GetModuleDefs(const Napi::CallbackInfo& info) {
             dc.moduleDefContextMap.end()) {
           moduleDefContext def_ctx;
           def_ctx.name = def_name;
+          def_ctx.type = getScopeTypeString(scope_type);
           def_ctx.file =
               vpi_get_str(vpiDefFile, scopeHandle)
                   ? vpi_get_str(vpiDefFile, scopeHandle)
@@ -527,6 +531,7 @@ Napi::Value GetModuleDefs(const Napi::CallbackInfo& info) {
     const moduleDefContext& ctx = pair.second;
     Napi::Object obj = Napi::Object::New(env);
     obj.Set("defName", ctx.name);
+    obj.Set("type", ctx.type);
     obj.Set("file", ctx.file);
     obj.Set("line", ctx.line);
     obj.Set("column", ctx.column);
@@ -578,6 +583,7 @@ Napi::Value GetModuleInstances(const Napi::CallbackInfo& info) {
     Napi::Object obj = Napi::Object::New(env);
     obj.Set("fullName", inst.fullName);
     obj.Set("name", inst.name);
+    obj.Set("type", inst.type);
     obj.Set("file", inst.file);
     obj.Set("line", inst.line);
     obj.Set("column", inst.column);

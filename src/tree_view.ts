@@ -57,7 +57,16 @@ export function createScope(fullName: string, type: string, file: string, lineNu
         case 'clockingblock': { icon = clockIcon; break; }
     }
 
-    const module = new NetlistItem(fullName, typename, 0, file, lineNumber, columnNumber, moduleName, contextValue, parent, [], handle, vscode.TreeItemCollapsibleState.Collapsed);
+    // Hack for instances view
+    if (contextValue === 'moduleDefItem') {
+        icon = new vscode.ThemeIcon(icon.id, new vscode.ThemeColor('charts.orange'));
+    }
+    let collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
+    if (contextValue === 'instanceItem') {
+        collapsibleState = vscode.TreeItemCollapsibleState.None;
+    }
+
+    const module = new NetlistItem(fullName, typename, 0, file, lineNumber, columnNumber, moduleName, contextValue, parent, [], handle, collapsibleState);
     module.iconPath = icon;
 
     return module;
@@ -698,7 +707,7 @@ class UhdmDesignItem extends DesignItem {
         for (const moduleDef of moduleDefs) {
             // console.log(`Loaded module definition: ${moduleDef.defName} (${moduleDef.file}:${moduleDef.line})`);
             const defName = moduleDef.defName.replace("work@", ""); // remove prefix for UHDM
-            const scope = createScope(defName, "moduledef", moduleDef.file, moduleDef.line, moduleDef.column, defName, "moduleDefItem", undefined, moduleDef.handle);
+            const scope = createScope(defName, moduleDef.type, moduleDef.file, moduleDef.line, moduleDef.column, defName, "moduleDefItem", undefined, moduleDef.handle);
             scope.description = `${moduleDef.size}`;
             this.moduleInstances.push(scope);
         }
@@ -720,7 +729,7 @@ class UhdmDesignItem extends DesignItem {
         const instances = await this.uhdmAddon.getModuleInstances(this.designId, moduleName);
         const result: NetlistItem[] = [];
         for (const instance of instances) {
-            const scope = createVar(instance.fullName, "instance", 0, instance.file, instance.line, instance.column, instance.name, "instanceItem", element);
+            const scope = createScope(instance.fullName, instance.type, instance.file, instance.line, instance.column, instance.name, "instanceItem", element, undefined);
             // scope.description = instance.name;
             result.push(scope);
         }
