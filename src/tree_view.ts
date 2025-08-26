@@ -9,7 +9,7 @@ const kuzu = require("kuzu");
 
 // Scopes
 const moduleIcon = new vscode.ThemeIcon('chip', new vscode.ThemeColor('charts.purple'));
-const taskIcon = new vscode.ThemeIcon('debug-stack-frame', new vscode.ThemeColor('charts.blue'));
+const taskIcon = new vscode.ThemeIcon('debug-stackframe', new vscode.ThemeColor('charts.blue'));
 const funcIcon = new vscode.ThemeIcon('symbol-module', new vscode.ThemeColor('charts.blue'));
 const beginIcon = new vscode.ThemeIcon('debug-start', new vscode.ThemeColor('charts.blue'));
 const forkIcon = new vscode.ThemeIcon('repo-forked', new vscode.ThemeColor('charts.blue'));
@@ -38,6 +38,7 @@ export function createScope(fullName: string, type: string, file: string, lineNu
         case 'union': { icon = unionIcon; break; }
         case 'class': { icon = classIcon; break; }
         case 'interface': { icon = interfaceIcon; break; }
+        case 'interfacearray': { icon = interfaceIcon; break; }
         case 'package': { icon = packageIcon; break; }
         case 'program': { icon = scopeIcon; break; }
         case 'vhdlarchitecture': { icon = scopeIcon; break; }
@@ -340,19 +341,12 @@ export abstract class DesignItem extends vscode.TreeItem {
             instance = element;
         } else if (element.contextValue === 'varItem') {
             instance = element.parent!;
-            // find parent recursively until it is a module
-            if (instance.type !== 'module') {
-                while (instance.parent && instance.type !== 'module') {
+            // Find parent recursively until it is a module or interface
+            if (instance.type !== 'module' && instance.type !== 'interface') {
+                while (instance.parent && instance.type !== 'module' && instance.type !== 'interface') {
                     instance = instance.parent;
                 }
             }
-            // TODO: fix for interface, modport, clockblock, etc.
-            // // find parent recursively until it is a module or interface
-            // if (instance.type !== 'module' && instance.type !== 'interface') {
-            //     while (instance.parent && instance.type !== 'module' && instance.type !== 'interface') {
-            //         instance = instance.parent;
-            //     }
-            // }
         } else if (element.contextValue === 'loadItem' || element.contextValue === 'driverItem') {
             // find tree item using modulePath
             const scope = await this.findTreeItem(element.modulePath);
@@ -745,6 +739,10 @@ class UhdmDesignItem extends DesignItem {
             // Only need to get moduleDef for non-top-module, as sourceFile and lineNumber for top-module is already correct
             if (element.parent) {
                 const moduleDef = await this.uhdmAddon.getModuleDef(element.handle);
+                if (!moduleDef.file) {
+                    // Might happen when vpiDefFile not found because of UHDM bug
+                    vscode.window.showWarningMessage('UHDM: definition not found for ' + element.moduleName + '. Please try to select a variable under it as workaround.');
+                }
                 filePath = moduleDef.file;
                 lineNumber = moduleDef.line;
                 columnNumber = moduleDef.column;
@@ -1243,11 +1241,14 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
     async gotoDefinition(element: NetlistItem, isGoBackOrForward: boolean = false): Promise<NetlistItem | undefined> {
         if (!this.activeDesign) { return; }
 
-        // Special cases: for generate, begin, clocking block, modport, go to definition is actually go to instantiation
+        // Special cases: for these types go to definition is actually go to instantiation
         if (element.type === 'generate' ||
             element.type === 'begin' ||
             element.type === 'clockingblock' ||
-            element.type === 'modport') {
+            element.type === 'modport' ||
+            element.type === 'task' ||
+            element.type === 'function' ||
+            element.type === 'interfacearray') {
             return await this.gotoInstantiation(element, isGoBackOrForward);
         }
 
@@ -1262,7 +1263,9 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         }
 
         const fileInfo = await this.activeDesign.getDefinitionFileLocation(element);
-        await showTextDocumentLocation(fileInfo.filePath, fileInfo.lineNumber, fileInfo.columnNumber, this.activeDesign.isExample);
+        if (fileInfo.filePath) {
+            await showTextDocumentLocation(fileInfo.filePath, fileInfo.lineNumber, fileInfo.columnNumber, this.activeDesign.isExample);
+        }
 
         await this.setActiveInstance(element);
 
@@ -1353,10 +1356,11 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
                 element = scope;
             }
         }
+
         let parent = element.parent ? element.parent : element; // For top-module, consider itself as parent
-        // Find parent recursively until it is a module
-        if (parent.type !== 'module') {
-            while (parent.parent && parent.type !== 'module') {
+        // Find parent recursively until it is a module or interface
+        if (parent.type !== 'module' && parent.type !== 'interface') {
+            while (parent.parent && parent.type !== 'module' && parent.type !== 'interface') {
                 parent = parent.parent;
             }
         }
