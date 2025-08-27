@@ -65,7 +65,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const editorMenuProvider = new EditorMenuProvider(designProvider, hierarchyView, hierarchyProvider, moduleInstancesView, moduleInstancesProvider, parser);
 
 	// #region External Commands
-	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.openDesign', () => {
+	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.openDesign', async () => {
 		designProvider.openDesign();
 	}));
 

@@ -7,6 +7,7 @@
 #include <random>
 #include <string>
 // #include <map>
+#include <mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -26,6 +27,37 @@ void LogToConsole(const Napi::Env& env, const std::string& message) {
 
 std::string RepeatString(const std::string& str, int count) {
   return std::string(count, '  ') + str;
+}
+
+std::string getScopeTypeString(int scope_type) {
+  switch (scope_type) {
+    case vpiModule:
+      return "Module";
+    case vpiModuleArray:
+      return "ModuleArray";
+    case vpiInterface:
+      return "Interface";
+    case vpiProgram:
+      return "Program";
+    case vpiGenScope:
+      return "Generate";
+    case vpiGenScopeArray:
+      return "Generate";
+    case vpiTask:
+      return "Task";
+    case vpiFunction:
+      return "Function";
+    case vpiModport:
+      return "Modport";
+    case vpiClockingBlock:
+      return "ClockingBlock";
+    case vpiInterfaceArray:
+      return "InterfaceArray";
+    case vpiProgramArray:
+      return "ProgramArray";
+    default:
+      return std::to_string(scope_type);
+  }
 }
 
 // Wrapper class for vpiHandle
@@ -105,44 +137,218 @@ typedef struct {
 } DesignContext;
 
 std::unordered_map<int, DesignContext> designContextMap;
+std::mutex designContextMapMutex;
 
-// Function to load UHDM design
-Napi::Number LoadDesign(const Napi::CallbackInfo& info) {
+// Worker for LoadDesign
+class LoadDesignWorker : public Napi::AsyncWorker {
+ public:
+  LoadDesignWorker(Napi::Promise::Deferred deferred, std::string filename)
+      : Napi::AsyncWorker(deferred.Env()),
+        deferred(deferred),
+        filename(filename) {}
+
+  void Execute() override {
+    serializer = std::make_unique<UHDM::Serializer>();
+    restoredDesigns = serializer->Restore(filename);
+    if (restoredDesigns.empty()) {
+      SetError("Failed to restore design from " + filename);
+      return;
+    }
+
+    design = restoredDesigns[0];  // Only consider the first design
+    if (!vpi_get(vpiElaborated, design)) {
+      elaboratorContext = new UHDM::ElaboratorContext(serializer.get());
+      elaboratorContext->m_elaborator.listenDesigns(restoredDesigns);
+      delete elaboratorContext;
+    }
+
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+    static std::uniform_int_distribution<> dis(1, 1000000);
+    designId = dis(gen);
+
+    {
+      std::lock_guard<std::mutex> lock(designContextMapMutex);
+      designContextMap[designId] =
+          DesignContext{filename, std::move(serializer), design};
+    }
+  }
+
+  void OnOK() override {
+    Napi::Env env = Env();
+    deferred.Resolve(Napi::Number::New(env, designId));
+  }
+
+ private:
+  Napi::Promise::Deferred deferred;
+  std::string filename;
+  std::unique_ptr<UHDM::Serializer> serializer;
+  std::vector<vpiHandle> restoredDesigns;
+  vpiHandle design = nullptr;
+  UHDM::ElaboratorContext* elaboratorContext = nullptr;
+  int designId = -1;
+};
+
+// Function to load UHDM design (now async)
+Napi::Value LoadDesign(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
   if (info.Length() < 1 || !info[0].IsString()) {
-    Napi::TypeError::New(env, "String argument (filename) expected")
-        .ThrowAsJavaScriptException();
-    return Napi::Number::New(env, -1);
+    Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
+    deferred.Reject(
+        Napi::TypeError::New(env, "String argument (filename) expected")
+            .Value());
+    return deferred.Promise();
   }
 
   std::string filename = info[0].As<Napi::String>().Utf8Value();
-  auto serializer = std::make_unique<UHDM::Serializer>();
-  const std::vector<vpiHandle>& restoredDesigns = serializer->Restore(filename);
-  if (restoredDesigns.empty()) {
-    Napi::Error::New(env, "Failed to restore design from " + filename)
-        .ThrowAsJavaScriptException();
-    return Napi::Number::New(env, -1);
+  Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
+
+  LoadDesignWorker* worker = new LoadDesignWorker(deferred, filename);
+  worker->Queue();
+
+  return deferred.Promise();
+}
+
+class GetModuleDefsWorker : public Napi::AsyncWorker {
+ public:
+  GetModuleDefsWorker(Napi::Promise::Deferred deferred, int designId)
+      : Napi::AsyncWorker(deferred.Env()),
+        deferred(deferred),
+        designId(designId) {}
+
+  void Execute() override {
+    {
+      std::lock_guard<std::mutex> lock(designContextMapMutex);
+      auto it = designContextMap.find(designId);
+      if (it == designContextMap.end()) {
+        SetError("Design ID not found");
+        return;
+      }
+      dc = &it->second; // Store pointer for use outside lock
+    }
+    design = dc->design;
+    if (!design) {
+      SetError("Design not loaded");
+      return;
+    }
+
+    dc->moduleDefContextMap.clear();
+    dc->instContextMap.clear();
+
+    auto TraverseAndCollect = [&](auto& self, vpiHandle scopeHandle) -> void {
+      int scope_type = vpi_get(vpiType, scopeHandle);
+
+      if (scope_type == vpiModule || scope_type == vpiInterface ||
+          scope_type == vpiProgram) {
+        const char* def_name_c = vpi_get_str(vpiDefName, scopeHandle);
+        if (def_name_c) {
+          std::string def_name = def_name_c;
+
+          instContext inst_ctx;
+          inst_ctx.name = vpi_get_str(vpiName, scopeHandle)
+                              ? vpi_get_str(vpiName, scopeHandle)
+                              : "";
+          inst_ctx.fullName = vpi_get_str(vpiFullName, scopeHandle)
+                                  ? vpi_get_str(vpiFullName, scopeHandle)
+                                  : inst_ctx.name;
+          inst_ctx.type = getScopeTypeString(scope_type);
+          inst_ctx.file = vpi_get_str(vpiFile, scopeHandle)
+                              ? vpi_get_str(vpiFile, scopeHandle)
+                              : "";
+          inst_ctx.line = vpi_get(vpiLineNo, scopeHandle);
+          inst_ctx.column = vpi_get(vpiColumnNo, scopeHandle);
+          dc->instContextMap[def_name].push_back(inst_ctx);
+
+          if (dc->moduleDefContextMap.find(def_name) ==
+              dc->moduleDefContextMap.end()) {
+            moduleDefContext def_ctx;
+            def_ctx.name = def_name;
+            def_ctx.type = getScopeTypeString(scope_type);
+            def_ctx.file = vpi_get_str(vpiDefFile, scopeHandle)
+                               ? vpi_get_str(vpiDefFile, scopeHandle)
+                               : inst_ctx.file;
+            def_ctx.line = vpi_get(vpiDefLineNo, scopeHandle)
+                               ? vpi_get(vpiDefLineNo, scopeHandle)
+                               : inst_ctx.line;
+            def_ctx.column = 0;
+            dc->moduleDefContextMap[def_name] = def_ctx;
+          }
+        }
+      }
+
+      std::vector<int> types = {
+          vpiModule,    vpiModuleArray,    vpiGenScope, vpiGenScopeArray,
+          vpiInterface, vpiInterfaceArray, vpiProgram,  vpiProgramArray,
+          vpiTaskFunc,  vpiTask,           vpiFunction, vpiClockingBlock,
+          vpiModport};
+      for (int type : types) {
+        vpiHandle iter = vpi_iterate(type, scopeHandle);
+        if (iter) {
+          while (vpiHandle sub_h = vpi_scan(iter)) {
+            self(self, sub_h);
+            vpi_release_handle(sub_h);
+          }
+          vpi_release_handle(iter);
+        }
+      }
+    };
+
+    vpiHandle iter = vpi_iterate(UHDM::uhdmtopModules, design);
+    if (iter) {
+      while (vpiHandle top_h = vpi_scan(iter)) {
+        TraverseAndCollect(TraverseAndCollect, top_h);
+        vpi_release_handle(top_h);
+      }
+      vpi_release_handle(iter);
+    }
   }
 
-  vpiHandle design = restoredDesigns[0];  // Only consider the first design
-  if (!vpi_get(vpiElaborated, design)) {
-    UHDM::ElaboratorContext* elaboratorContext =
-        new UHDM::ElaboratorContext(serializer.get());
-    elaboratorContext->m_elaborator.listenDesigns(restoredDesigns);
-    delete elaboratorContext;
+  void OnOK() override {
+    Napi::Env env = Env();
+    // Build the result array of module definitions
+    Napi::Array result = Napi::Array::New(env);
+    uint32_t index = 0;
+    for (const auto& pair : dc->moduleDefContextMap) {
+      const moduleDefContext& ctx = pair.second;
+      Napi::Object obj = Napi::Object::New(env);
+      obj.Set("defName", ctx.name);
+      obj.Set("type", ctx.type);
+      obj.Set("file", ctx.file);
+      obj.Set("line", ctx.line);
+      obj.Set("column", ctx.column);
+      obj.Set("size", dc->instContextMap[ctx.name].size());
+      result.Set(index++, obj);
+    }
+    deferred.Resolve(result);
   }
 
-  // Generate random id for design context
-  static std::random_device rd;
-  static std::mt19937 gen(rd());
-  static std::uniform_int_distribution<> dis(1, 1000000);
-  int designId = dis(gen);
-  // Create a new DesignContext and store it
-  designContextMap[designId] =
-      DesignContext{filename, std::move(serializer), design};
+ private:
+  Napi::Promise::Deferred deferred;
+  int designId;
+  DesignContext* dc = nullptr;
+  vpiHandle design = nullptr;
+};
 
-  return Napi::Number::New(env, designId);
+// Wrap getModuleDefs (now async)
+Napi::Value GetModuleDefs(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() < 1 || !info[0].IsNumber()) {
+    Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
+    deferred.Reject(
+        Napi::TypeError::New(env, "Number argument (design ID) expected")
+            .Value());
+    return deferred.Promise();
+  }
+
+  int designId = info[0].As<Napi::Number>().Int32Value();
+  Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
+
+  GetModuleDefsWorker* worker = new GetModuleDefsWorker(deferred, designId);
+  worker->Queue();
+
+  return deferred.Promise();
 }
 
 // Wrap getTopModules
@@ -154,19 +360,24 @@ Napi::Value GetTopModules(const Napi::CallbackInfo& info) {
         .ThrowAsJavaScriptException();
     return env.Null();
   }
+
   // Get the design ID from the first argument
   int designId = info[0].As<Napi::Number>().Int32Value();
-  // Check if the design ID exists in the designContextMap
-  auto it = designContextMap.find(designId);
-  if (it == designContextMap.end()) {
-    Napi::Error::New(env, "Design ID not found").ThrowAsJavaScriptException();
-    return env.Null();
-  }
-  // Get the design handle from the DesignContext
-  vpiHandle design = it->second.design;
-  if (!design) {
-    Napi::Error::New(env, "Design not loaded").ThrowAsJavaScriptException();
-    return env.Null();
+  vpiHandle design = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(designContextMapMutex);
+    // Check if the design ID exists in the designContextMap
+    auto it = designContextMap.find(designId);
+    if (it == designContextMap.end()) {
+      Napi::Error::New(env, "Design ID not found").ThrowAsJavaScriptException();
+      return env.Null();
+    }
+    // Get the design handle from the DesignContext
+    design = it->second.design;
+    if (!design) {
+      Napi::Error::New(env, "Design not loaded").ThrowAsJavaScriptException();
+      return env.Null();
+    }
   }
 
   vpiHandle iter = vpi_iterate(UHDM::uhdmtopModules, design);
@@ -189,37 +400,6 @@ Napi::Value GetTopModules(const Napi::CallbackInfo& info) {
   }
   vpi_release_handle(iter);
   return result;
-}
-
-std::string getScopeTypeString(int scope_type) {
-  switch (scope_type) {
-    case vpiModule:
-      return "Module";
-    case vpiModuleArray:
-      return "ModuleArray";
-    case vpiInterface:
-      return "Interface";
-    case vpiProgram:
-      return "Program";
-    case vpiGenScope:
-      return "Generate";
-    case vpiGenScopeArray:
-      return "Generate";
-    case vpiTask:
-      return "Task";
-    case vpiFunction:
-      return "Function";
-    case vpiModport:
-      return "Modport";
-    case vpiClockingBlock:
-      return "ClockingBlock";
-    case vpiInterfaceArray:
-      return "InterfaceArray";
-    case vpiProgramArray:
-      return "ProgramArray";
-    default:
-      return std::to_string(scope_type);
-  }
 }
 
 void CollectSubScopes(const Napi::CallbackInfo& info,
@@ -417,131 +597,6 @@ Napi::Value GetModuleDef(const Napi::CallbackInfo& info) {
   return result;
 }
 
-// Wrap getModuleDefs
-Napi::Value GetModuleDefs(const Napi::CallbackInfo& info) {
-  Napi::Env env = info.Env();
-
-  if (info.Length() < 1 || !info[0].IsNumber()) {
-    Napi::TypeError::New(env, "Number argument (design ID) expected")
-        .ThrowAsJavaScriptException();
-    return Napi::Array::New(env);
-  }
-
-  int designId = info[0].As<Napi::Number>().Int32Value();
-
-  auto it = designContextMap.find(designId);
-  if (it == designContextMap.end()) {
-    Napi::Error::New(env, "Design ID not found").ThrowAsJavaScriptException();
-    return Napi::Array::New(env);
-  }
-
-  DesignContext& dc = it->second;
-  vpiHandle design = dc.design;
-  if (!design) {
-    Napi::Error::New(env, "Design not loaded").ThrowAsJavaScriptException();
-    return Napi::Array::New(env);
-  }
-
-  // Clear existing maps
-  dc.moduleDefContextMap.clear();
-  dc.instContextMap.clear();
-
-  // Recursive traversal function
-  auto TraverseAndCollect = [&](auto& self, vpiHandle scopeHandle) -> void {
-    int scope_type = vpi_get(vpiType, scopeHandle);
-
-    if (scope_type == vpiModule || scope_type == vpiInterface ||
-        scope_type == vpiProgram) {
-      const char* def_name_c = vpi_get_str(vpiDefName, scopeHandle);
-      if (def_name_c) {
-        std::string def_name = def_name_c;
-
-        // Add to instContextMap
-        instContext inst_ctx;
-        inst_ctx.name = vpi_get_str(vpiName, scopeHandle)
-                            ? vpi_get_str(vpiName, scopeHandle)
-                            : "";
-        inst_ctx.fullName =
-            vpi_get_str(vpiFullName, scopeHandle)
-                ? vpi_get_str(vpiFullName, scopeHandle)
-                : inst_ctx.name;  // Use Name if FullName is not available
-                                  // (might happen to top module)
-        inst_ctx.type = getScopeTypeString(scope_type);
-        inst_ctx.file = vpi_get_str(vpiFile, scopeHandle)
-                            ? vpi_get_str(vpiFile, scopeHandle)
-                            : "";
-        inst_ctx.line = vpi_get(vpiLineNo, scopeHandle);
-        inst_ctx.column = vpi_get(vpiColumnNo, scopeHandle);
-        dc.instContextMap[def_name].push_back(inst_ctx);
-
-        // Add to moduleDefContextMap if not present
-        if (dc.moduleDefContextMap.find(def_name) ==
-            dc.moduleDefContextMap.end()) {
-          moduleDefContext def_ctx;
-          def_ctx.name = def_name;
-          def_ctx.type = getScopeTypeString(scope_type);
-          def_ctx.file =
-              vpi_get_str(vpiDefFile, scopeHandle)
-                  ? vpi_get_str(vpiDefFile, scopeHandle)
-                  : inst_ctx.file;  // Use inst file if def file not available
-                                    // (might happen to top module)
-          def_ctx.line =
-              vpi_get(vpiDefLineNo, scopeHandle)
-                  ? vpi_get(vpiDefLineNo, scopeHandle)
-                  : inst_ctx.line;  // Use inst line if def line not available
-                                    // (might happen to top module)
-          def_ctx.column = 0;       // No vpiDefColumnNo available
-          dc.moduleDefContextMap[def_name] = def_ctx;
-        }
-      }
-    }
-
-    // Recurse on subscopes
-    std::vector<int> types = {
-        vpiModule,    vpiModuleArray,    vpiGenScope, vpiGenScopeArray,
-        vpiInterface, vpiInterfaceArray, vpiProgram,  vpiProgramArray,
-        vpiTaskFunc,  vpiTask,           vpiFunction, vpiClockingBlock,
-        vpiModport};
-    for (int type : types) {
-      vpiHandle iter = vpi_iterate(type, scopeHandle);
-      if (iter) {
-        while (vpiHandle sub_h = vpi_scan(iter)) {
-          self(self, sub_h);
-          vpi_release_handle(sub_h);
-        }
-        vpi_release_handle(iter);
-      }
-    }
-  };
-
-  // Start traversal from top modules
-  vpiHandle iter = vpi_iterate(UHDM::uhdmtopModules, design);
-  if (iter) {
-    while (vpiHandle top_h = vpi_scan(iter)) {
-      TraverseAndCollect(TraverseAndCollect, top_h);
-      vpi_release_handle(top_h);
-    }
-    vpi_release_handle(iter);
-  }
-
-  // Build the result array of module definitions
-  Napi::Array result = Napi::Array::New(env);
-  uint32_t index = 0;
-  for (const auto& pair : dc.moduleDefContextMap) {
-    const moduleDefContext& ctx = pair.second;
-    Napi::Object obj = Napi::Object::New(env);
-    obj.Set("defName", ctx.name);
-    obj.Set("type", ctx.type);
-    obj.Set("file", ctx.file);
-    obj.Set("line", ctx.line);
-    obj.Set("column", ctx.column);
-    obj.Set("size", dc.instContextMap[ctx.name].size());
-    result.Set(index++, obj);
-  }
-
-  return result;
-}
-
 // Wrap getModuleInstances
 Napi::Value GetModuleInstances(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
@@ -556,20 +611,23 @@ Napi::Value GetModuleInstances(const Napi::CallbackInfo& info) {
   int designId = info[0].As<Napi::Number>().Int32Value();
   std::string moduleDefName = info[1].As<Napi::String>().Utf8Value();
 
-  auto it = designContextMap.find(designId);
-  if (it == designContextMap.end()) {
-    Napi::Error::New(env, "Design ID not found").ThrowAsJavaScriptException();
-    return Napi::Array::New(env);
+  std::vector<instContext> instances;
+  {
+    std::lock_guard<std::mutex> lock(designContextMapMutex);
+    auto it = designContextMap.find(designId);
+    if (it == designContextMap.end()) {
+      Napi::Error::New(env, "Design ID not found").ThrowAsJavaScriptException();
+      return Napi::Array::New(env);
+    }
+
+    DesignContext& dc = it->second;
+
+    auto instIt = dc.instContextMap.find(moduleDefName);
+    if (instIt == dc.instContextMap.end()) {
+      return Napi::Array::New(env);
+    }
+    instances = instIt->second;  // Copy to local vector
   }
-
-  DesignContext& dc = it->second;
-
-  auto instIt = dc.instContextMap.find(moduleDefName);
-  if (instIt == dc.instContextMap.end()) {
-    return Napi::Array::New(env);
-  }
-
-  std::vector<instContext> instances = instIt->second;
 
   // Sort by fullName
   std::sort(instances.begin(), instances.end(),
@@ -606,6 +664,7 @@ Napi::Value UnloadDesign(const Napi::CallbackInfo& info) {
   // Get the design ID from the argument
   int designId = info[0].As<Napi::Number>().Int32Value();
 
+  std::lock_guard<std::mutex> lock(designContextMapMutex);
   // Find the design context in the map
   auto it = designContextMap.find(designId);
   if (it == designContextMap.end()) {
