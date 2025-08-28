@@ -77,6 +77,10 @@ export function activate(context: vscode.ExtensionContext) {
 		designProvider.closeDesign(e);
 	}));
 
+	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.reloadDesign', async (e) => {
+		designProvider.reloadDesign(e);
+	}));
+
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.openWaveform', async (e) => {
 		const element = await designProvider.openWaveform(e);
 		if (element) {

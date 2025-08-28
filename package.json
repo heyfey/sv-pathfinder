@@ -121,9 +121,14 @@
           "group": "inline@0"
         },
         {
-          "command": "sv-pathfinder.closeDesign",
+          "command": "sv-pathfinder.reloadDesign",
           "when": "view == 'openedDesignsView' && viewItem == 'designItem'",
           "group": "inline@1"
+        },
+        {
+          "command": "sv-pathfinder.closeDesign",
+          "when": "view == 'openedDesignsView' && viewItem == 'designItem'",
+          "group": "inline@2"
         },
         {
           "command": "sv-pathfinder.closeWaveform",
@@ -133,7 +138,17 @@
         {
           "command": "sv-pathfinder.openWaveform",
           "when": "view == 'openedDesignsView' && viewItem == 'designItem'",
-          "group": "0_default@1"
+          "group": "0_default@0"
+        },
+        {
+          "command": "sv-pathfinder.reloadDesign",
+          "when": "view == 'openedDesignsView' && viewItem == 'designItem'",
+          "group": "1_default@0"
+        },
+        {
+          "command": "sv-pathfinder.closeDesign",
+          "when": "view == 'openedDesignsView' && viewItem == 'designItem'",
+          "group": "1_default@1"
         },
         {
           "command": "sv-pathfinder.closeWaveform",
@@ -218,6 +233,11 @@
         "command": "sv-pathfinder.closeDesign",
         "title": "Close Design",
         "icon": "$(close)"
+      },
+      {
+        "command": "sv-pathfinder.reloadDesign",
+        "title": "Reload Design",
+        "icon": "$(refresh)"
       },
       {
         "command": "sv-pathfinder.openWaveform",

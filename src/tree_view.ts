@@ -323,15 +323,19 @@ export abstract class DesignItem extends vscode.TreeItem {
     public getTreeData(): NetlistItem[] { return this.treeData; }
     public getModuleInstances(): NetlistItem[] { return this.moduleInstances; }
 
-    public async close() {
-        await this.unload();
+    public unloadTreeData() {
         this.treeData = [];
         this.moduleInstances = [];
         this.activeInstance = undefined;
-        this.waveforms = [];
-        this.activeWaveform = undefined;
+        // this.waveforms = [];
+        // this.activeWaveform = undefined;
         this.backwardStack = [];
         this.forwardStack = [];
+    }
+
+    public async reload() {
+        await this.unload();
+        await this.load();
     }
 
     public async setActiveInstance(element: NetlistItem) {
@@ -607,8 +611,9 @@ class KuzuDesignItem extends DesignItem {
     }
 
     public async unload(): Promise<void> {
+        this.unloadTreeData();
         if (this.db) {
-            this.db.close();
+            await this.db.close();
             this.db = undefined;
         }
     }
@@ -634,7 +639,10 @@ class UhdmDesignItem extends DesignItem {
             }, async () => {
                 this.designId = await this.uhdmAddon.loadDesign(this.resourceUri.fsPath);
                 if (vscode.workspace.getConfiguration('sv-pathfinder').get<boolean>('showInstancesView', true)) {
-                    this.loadModuleDefs(); // need await?
+                    // Consider remove "await" for large designs, but:
+                    //   1. Need to make sure loadModuleDefs is finished before selectInstance called
+                    //   2. Need to refresh moduleInstancesTreeProvider after loadModuleDefs is finished
+                    await this.loadModuleDefs();
                 }
                 await this.loadTopModules();
             });
@@ -758,6 +766,7 @@ class UhdmDesignItem extends DesignItem {
     }
 
     public async unload(): Promise<void> {
+        this.unloadTreeData();
         await this.uhdmAddon.unloadDesign(this.designId);
     }
 }
@@ -899,6 +908,7 @@ class FDesignItem extends DesignItem {
     }
 
     public async unload(): Promise<void> {
+        this.unloadTreeData();
         await this.delegateDesign.unload();
         // Clean up temp files
         if (this.generatedUhdmUri) {
@@ -909,11 +919,6 @@ class FDesignItem extends DesignItem {
             this.generatedUhdmUri = undefined; // Clear the URI after cleanup
         }
     }
-
-    // public async reload(): Promise<void> {
-    //     await this.unload();
-    //     await this.load();
-    // }
 }
 
 // #region OpenedDesignsTreeProvider
@@ -982,7 +987,7 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
     }
 
     public async closeDesign(element: DesignItem) {
-        await element.close();
+        await element.unload();
         // Remove the design from the list
         const index = this.designList.indexOf(element);
         if (index >= 0) {
@@ -993,6 +998,12 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
             this.hierarchyTreeProvider.setActiveDesign(undefined);
             this.moduleInstancesTreeProvider.setActiveDesign(undefined);
         }
+    }
+
+    public async reloadDesign(element: DesignItem) {
+        await element.reload();
+        this.hierarchyTreeProvider.refreshDesign(element);
+        this.moduleInstancesTreeProvider.refreshDesign(element);
     }
 
     getTreeItem(element: vscode.TreeItem): vscode.TreeItem | Thenable<vscode.TreeItem> {
@@ -1178,6 +1189,22 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
     private _onDidChangeActiveInstance: vscode.EventEmitter<NetlistItem | undefined | null | void> = new vscode.EventEmitter<NetlistItem | undefined | null | void>();
     public readonly onDidChangeActiveInstance: vscode.Event<NetlistItem | undefined | null | void> = this._onDidChangeActiveInstance.event;
 
+    public refresh(): void {
+        this._onDidChangeTreeData.fire(undefined);
+    }
+
+    public refreshDesign(design: DesignItem) {
+        if (this.activeDesign !== design) { return; }
+        this.treeData = design?.getTreeData() ?? [];
+        this.refresh();
+
+        // Clear the drivers and loads tree data
+        this.driversTreeProvider.setTreeData([]);
+        this.loadsTreeProvider.setTreeData([]);
+        this.driversTreeProvider.refresh();
+        this.loadsTreeProvider.refresh();
+    }
+
     public setActiveDesign(design: DesignItem | undefined) {
         if (this.activeDesign === design) { return; }
         this.activeDesign = design;
@@ -1195,7 +1222,7 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
             this.activeScopeStatusBarItem.hide();
         }
 
-        this._onDidChangeTreeData.fire(undefined); // Trigger a refresh of the Netlist view
+        this.refresh(); // Trigger a refresh of the Netlist view
     }
 
     public getActiveDesign(): DesignItem | undefined {
@@ -1580,5 +1607,11 @@ export class ModuleInstancesTreeProvider implements vscode.TreeDataProvider<Netl
 
     refresh(): void {
         this._onDidChangeTreeData.fire();
+    }
+
+    public refreshDesign(design: DesignItem) {
+        if (this.activeDesign !== design) { return; }
+        this.treeData = design?.getModuleInstances() ?? [];
+        this.refresh();
     }
 }
