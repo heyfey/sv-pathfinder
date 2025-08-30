@@ -546,6 +546,44 @@ Napi::Value GetVars(const Napi::CallbackInfo& info) {
         var.Set("line", vpi_get(vpiLineNo, obj_h));
         var.Set("column", vpi_get(vpiColumnNo, obj_h));
         var.Set("width", vpi_get(vpiSize, obj_h));  // Not working now
+
+        // Get constant value for parameters
+        if (type == vpiParameter) {
+          s_vpi_value val;
+          vpi_get_value(obj_h, &val);
+          switch (val.format) {
+            case vpiIntVal:
+            case vpiUIntVal:
+            case vpiShortIntVal:
+            case vpiLongIntVal:
+              var.Set("constValue", static_cast<int>(val.value.integer));
+              break;
+            case vpiRealVal:
+            case vpiShortRealVal:
+              var.Set("constValue", static_cast<float>(val.value.real));
+              break;
+            case vpiStringVal:
+            case vpiBinStrVal:
+            case vpiOctStrVal:
+            case vpiDecStrVal:
+            case vpiHexStrVal:
+              var.Set("constValue", std::string(val.value.str));
+              break;
+            case vpiScalarVal:
+            case vpiVectorVal:
+            case vpiStrengthVal:
+            case vpiTimeVal:
+            case vpiObjTypeVal:
+            case vpiSuppressVal:
+            case vpiRawTwoStateVal:
+            case vpiRawFourStateVal:
+              // Not handled currently
+              break;
+            default:
+              break;
+          }
+        }
+
         result.Set(index++, var);
         vpi_release_handle(obj_h);  // Clean up object handle
       }

@@ -695,6 +695,9 @@ class UhdmDesignItem extends DesignItem {
         const result: NetlistItem[] = [];
         for (const variable of vars) {
             const v = createVar(variable.name, variable.type, variable.width, variable.file, variable.line, variable.column, element.moduleName, "varItem", element);
+            if (variable.constValue !== undefined) {
+                v.description = `= ${variable.constValue}`;
+            }
             result.push(v);
         }
         return result;
