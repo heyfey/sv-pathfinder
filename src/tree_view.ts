@@ -270,7 +270,7 @@ interface gotoContext {
 // #region DesignItem
 export abstract class DesignItem extends vscode.TreeItem {
     contextValue = 'designItem';
-    readonly iconPath = new vscode.ThemeIcon('file-directory');
+    public iconPath = new vscode.ThemeIcon('file-directory');
     readonly resourceUri: vscode.Uri;
     private activeInstance?: NetlistItem | undefined;
     readonly command: vscode.Command;
@@ -927,7 +927,7 @@ class FDesignItem extends DesignItem {
 // #region OpenedDesignsTreeProvider
 export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
     private designList: DesignItem[] = [];
-    // private activeDesign: DesignItem | undefined = undefined;
+    private activeDesign: DesignItem | undefined = undefined;
 
     constructor(
         private readonly hierarchyTreeProvider: HierarchyTreeProvider,
@@ -991,6 +991,9 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
 
     public async closeDesign(element: DesignItem) {
         await element.unload();
+        if (this.activeDesign === element) {
+            this.activeDesign = undefined;
+        }
         // Remove the design from the list
         const index = this.designList.indexOf(element);
         if (index >= 0) {
@@ -1036,6 +1039,13 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
 
     selectDesign(element: DesignItem) {
         if (!element) { return; }
+        if (this.activeDesign === element) { return; }
+        if (this.activeDesign) {
+            this.activeDesign.iconPath = new vscode.ThemeIcon('file-directory');
+        }
+        this.activeDesign = element;
+        this.activeDesign.iconPath = new vscode.ThemeIcon('folder-active');
+
         this.hierarchyTreeProvider.setActiveDesign(element);
         this.moduleInstancesTreeProvider.setActiveDesign(element);
         if (element instanceof UhdmDesignItem || element instanceof FDesignItem) {
