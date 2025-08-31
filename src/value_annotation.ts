@@ -148,6 +148,9 @@ export class WaveformValueAnnotationProvider {
         const activeDesign = this.hierarchyTreeProvider.getActiveDesign();
         if (!activeDesign) { return; }
 
+        const activeInstance = activeDesign.getActiveInstance();
+        if (!activeInstance) { return; }
+
         const activeModule = activeDesign.getActiveModule();
         if (!activeModule) { return; }
 
@@ -160,20 +163,8 @@ export class WaveformValueAnnotationProvider {
         const nodes = await this.parser.parseAndCollectIdentifiersInModule(document, activeModule);
         if (!nodes || nodes.length === 0) { return; }
 
-        // Get all unique variable names within the module
-        const variableNameSet = new Set();
-        for (const node of nodes) {
-            variableNameSet.add(node.text);
-        }
-
-        // Get instance paths for variables
-        const scopeName = activeDesign.getActiveScope();
-        const instancePaths = [];
-        for (const variableName of variableNameSet) {
-            const instancePath = scopeName ? `${scopeName}.${variableName}` : variableName;
-            instancePaths.push(instancePath);
-        }
-        // console.log('Instance paths:', instancePaths);
+        // Get all variable instance paths in the active instance
+        const instancePaths = await activeInstance.getAllChildVarsNames(activeDesign);
 
         // Get waveform values from waveform viewer
         const waveformValues = await vscode.commands.executeCommand<{ instancePath: string; value: string }[]>(
@@ -182,7 +173,6 @@ export class WaveformValueAnnotationProvider {
         );
 
         // Store [variableName, waveform value] in a map
-        // TODO: This map is not necessary. Could create decorationTypesMap directly
         const waveformValueMap = new Map<string, string>();
         for (const v of waveformValues) {
             const variableName = v.instancePath.split('.').pop()!;
@@ -190,6 +180,9 @@ export class WaveformValueAnnotationProvider {
             if (value === undefined) { continue; }
             waveformValueMap.set(variableName, value);
         }
+
+        // Show the waveform values in the hierarchy view treeItem's description
+        this.hierarchyTreeProvider.updateWaveformValuesDescriptions(activeInstance, waveformValueMap);
 
         // Store [variableName, decorationType] in decorationTypesMap
         for (const [variableName, value] of waveformValueMap) {

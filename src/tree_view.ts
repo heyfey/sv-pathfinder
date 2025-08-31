@@ -227,6 +227,31 @@ export class NetlistItem extends vscode.TreeItem {
             return undefined;
         }
     }
+
+    async getAllChildVarsNames(design: DesignItem): Promise<string[]> {
+        let names: string[] = [];
+        if (this.contextValue !== 'scopeItem') { return names; }
+        if (this.children.length === 0) {
+            await design.getChildrenExternal(this);
+        }
+        for (const child of this.children) {
+            // TODO: recursively add variables in generated blocks, modports, etc.
+            if (child.contextValue === 'varItem' && child.type !== 'parameter') {
+                names.push(child.getHierarchyName());
+            }
+        }
+        return names;
+    }
+
+    public clearWaveformValuesDescriptions() {
+        if (this.children.length === 0) { return; }
+        // Assume children are already loaded
+        for (const child of this.children) {
+            if (child.contextValue === 'varItem' && child.type !== 'parameter') {
+                child.description = undefined;
+            }
+        }
+    }
 }
 
 // #region WaveformItem
@@ -338,7 +363,9 @@ export abstract class DesignItem extends vscode.TreeItem {
         await this.load();
     }
 
-    public async setActiveInstance(element: NetlistItem) {
+    // Set active instance based on different kinds of NetlistItem.
+    // Returns true if active instance is changed.
+    public async setActiveInstance(element: NetlistItem): Promise<boolean> {
         let instance;
         instance = element;
         if (element.contextValue === 'scopeItem') {
@@ -367,8 +394,10 @@ export abstract class DesignItem extends vscode.TreeItem {
                 instance = scope;
             }
         }
-
+        if (this.activeInstance === instance) { return false; }
+        this.activeInstance?.clearWaveformValuesDescriptions();
         this.activeInstance = instance;
+        return true;
     }
 
     public getActiveInstance(): NetlistItem | undefined {
@@ -1337,7 +1366,8 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
     private async setActiveInstance(element: NetlistItem) {
         if (!this.activeDesign) { return; }
 
-        await this.activeDesign.setActiveInstance(element);
+        const hasChange = await this.activeDesign.setActiveInstance(element);
+        if (!hasChange) { return; }
         this.activeScopeStatusBarItem.text = 'Active scope: ' + this.activeDesign.getActiveScope();
         this._onDidChangeActiveInstance.fire(this.activeDesign.getActiveInstance());
     }
@@ -1437,6 +1467,25 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         for (const instancePath of instancePaths) {
             vscode.commands.executeCommand("waveformViewer.addVariable", { uri: waveformUri.toString(), instancePath: instancePath });
         }
+    }
+
+    async updateWaveformValuesDescriptions(scope: NetlistItem, waveformValueMap: Map<string, string>) {
+        if (scope.contextValue !== 'scopeItem') { return; }
+        // Assume children are already loaded
+        // if (scope.children.length === 0) {
+        //     await this.getChildren(scope);
+        // }
+        for (const child of scope.children) {
+            // Skip parameters as they are constant
+            if (child.contextValue === 'varItem' && child.type !== 'parameter') {
+                if (waveformValueMap.has(child.name)) {
+                    child.description = `= ${waveformValueMap.get(child.name)}`;
+                } else {
+                    child.description = '';
+                }
+            }
+        }
+        this.refresh();
     }
 }
 
