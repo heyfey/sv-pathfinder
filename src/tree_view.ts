@@ -980,6 +980,10 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
             const success = await design.load();
             if (success) {
                 this.designList.push(design);
+                // If it's the first design, select it
+                if (this.designList.length === 1) {
+                    this.selectDesign(design);
+                }
             }
         } else {
             // this.designList[index] = database;
