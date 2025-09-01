@@ -5,7 +5,7 @@ import * as os from 'os';
 import * as cp from 'child_process';
 
 // Must use require instead of import somehow
-const kuzu = require("kuzu");
+let kuzu: any | undefined; // require("kuzu");
 
 // Scopes
 const moduleIcon = new vscode.ThemeIcon('chip', new vscode.ThemeColor('charts.purple'));
@@ -467,6 +467,14 @@ class KuzuDesignItem extends DesignItem {
     private db?: any/*kuzu.Database*/ | undefined;
 
     public async load(): Promise<boolean> {
+        if (!kuzu) {
+            try {
+                kuzu = require("kuzu");
+            } catch (error) {
+                vscode.window.showErrorMessage('Failed to load Kuzu database addon: ' + error);
+                return false;
+            }
+        }
         try {
             await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
