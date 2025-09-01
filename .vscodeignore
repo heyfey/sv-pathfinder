@@ -13,3 +13,4 @@ vsc-extension-quickstart.md
 **/.vscode-test.*
 node_modules/**
 !node_modules/web-tree-sitter/
+readme_assets/**

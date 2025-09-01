@@ -6,7 +6,7 @@ import { WaveformValueAnnotationProvider } from './value_annotation';
 import { Parser } from './parser';
 
 export function activate(context: vscode.ExtensionContext) {
-	console.log('SV Pathfinder: There are venoms and virtues aplenty in the wilds, if you know where to look.');
+	console.log('sv-pathfinder: there are venoms and virtues aplenty in the wilds, if you know where to look.');
 
 	// #region TreeView
 	const driversProvider = new DriversLoadsTreeProvider();
