@@ -89,13 +89,7 @@ export class WaveformValueAnnotationProvider {
                 (editor) => editor.document.uri.fsPath === this.targetFile
             );
             if (!editor) { return; }
-
-            for (const [variableName, ranges] of this.rangesMap) {
-                const decorationType = this.decorationTypesMap.get(variableName);
-                if (decorationType) {
-                    editor.setDecorations(decorationType, ranges);
-                }
-            }
+            this.applyCachedDecorationsToEditor(editor);
             return;
         } else {
             this.debounceUpdateDecorations();
@@ -125,25 +119,24 @@ export class WaveformValueAnnotationProvider {
         // Clear any existing timer
         clearTimeout(this.debounceTimer);
         // Set a new timer to call updateDecorations after delay
-        this.debounceTimer = setTimeout(() => {
-            this.updateDecorations();
+        this.debounceTimer = setTimeout(async () => {
+            await this.updateDecorations();
         }, this.debounceTimerDelay);
     }
 
     // #region updateDecorations()
     public async updateDecorations() {
-        const visibleEditors = vscode.window.visibleTextEditors;
+        this.clearDecorations();
+        const visibleEditors = vscode.window.visibleTextEditors.filter(
+            editor => editor.document.languageId === 'verilog' || editor.document.languageId === 'systemverilog'
+        );
         for (const editor of visibleEditors) {
             // TODO: Only update the target file, which should be known in advance
-            if (editor.document.languageId === 'verilog' || editor.document.languageId === 'systemverilog') {
-                this.updateDecorationsForEditor(editor);
-            }
+            await this.updateDecorationsForEditor(editor);
         }
     }
 
     public async updateDecorationsForEditor(editor: vscode.TextEditor) {
-        this.clearDecorations();
-
         // Get metadata from the active design
         const activeDesign = this.hierarchyTreeProvider.getActiveDesign();
         if (!activeDesign) { return; }
@@ -182,10 +175,20 @@ export class WaveformValueAnnotationProvider {
         }
 
         // Show the waveform values in the hierarchy view treeItem's description
-        this.hierarchyTreeProvider.updateWaveformValuesDescriptions(activeInstance, waveformValueMap);
+        await this.hierarchyTreeProvider.updateWaveformValuesDescriptions(activeInstance, waveformValueMap);
 
-        // Store [variableName, decorationType] in decorationTypesMap
-        for (const [variableName, value] of waveformValueMap) {
+        // Create new decorations with unique keys
+        for (const node of nodes) {
+            if (!waveformValueMap.has(node.text)) { continue; }
+            const value = waveformValueMap.get(node.text)!;
+
+            // Use unique key to prevent duplicates
+            const variableKey = `${node.text}:${node.startPosition.row}:${node.startPosition.column}`;
+            if (this.rangesMap.has(variableKey)) {
+                // console.warn(`WaveformValueAnnotationProvider: Duplicate symbol ${node.text} at ${node.startPosition.row}:${node.startPosition.column}`);
+                continue;
+            }
+
             const decorationType = vscode.window.createTextEditorDecorationType({
                 after: {
                     contentText: `${value}`,
@@ -196,32 +199,27 @@ export class WaveformValueAnnotationProvider {
                     textDecoration: `border: 1px solid ${new vscode.ThemeColor('editorWidget.border')}; border-radius: 8px;`,
                 }
             });
-            this.decorationTypesMap.set(variableName, decorationType);
-        }
 
-        // Create ranges for each variable
-        for (const node of nodes) {
-            // Skip the node that didn't found in the waveform viewer
-            if (!waveformValueMap.get(node.text)) { continue; }
             const range = new vscode.Range(
                 new vscode.Position(node.startPosition.row, node.startPosition.column),
                 new vscode.Position(node.endPosition.row, node.endPosition.column)
             );
-            // Append the range to the rangesMap for the variable
-            if (this.rangesMap.has(node.text)) {
-                this.rangesMap.get(node.text)?.push(range);
-            }
-            else {
-                this.rangesMap.set(node.text, [range]);
-            }
-        }
 
-        // Apply decorations for each variable
-        for (const [variableName, ranges] of this.rangesMap) {
-            const decorationType = this.decorationTypesMap.get(variableName);
-            if (decorationType) {
-                editor.setDecorations(decorationType, ranges);
-            }
+            this.decorationTypesMap.set(variableKey, decorationType);
+            this.rangesMap.set(variableKey, [range]);
+            editor.setDecorations(decorationType, [range]);
+        }
+    }
+
+    private applyCachedDecorationsToEditor(editor: vscode.TextEditor) {
+        // Clear existing decorations for this editor
+        for (const decorationType of this.decorationTypesMap.values()) {
+            editor.setDecorations(decorationType, []);
+        }
+        // Apply cached decorations
+        for (const [variableKey, decorationType] of this.decorationTypesMap) {
+            const ranges = this.rangesMap.get(variableKey) || [];
+            editor.setDecorations(decorationType, ranges);
         }
     }
 
@@ -233,5 +231,15 @@ export class WaveformValueAnnotationProvider {
         // Clear all cached results
         this.decorationTypesMap.clear();
         this.rangesMap.clear();
+
+        // Clear decorations from all visible editors for the target file
+        const visibleEditors = vscode.window.visibleTextEditors;
+        for (const editor of visibleEditors) {
+            if (editor.document.uri.fsPath === this.targetFile) {
+                for (const decorationType of this.decorationTypesMap.values()) {
+                    editor.setDecorations(decorationType, []);
+                }
+            }
+        }
     }
 }
