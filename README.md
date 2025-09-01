@@ -42,6 +42,10 @@ Then you can open the `.uhdm` in sv-pathfinder.
 
 ![](https://github.com/heyfey/sv-pathfinder/blob/main/readme_assets/goback.gif?raw=true)
 
+### Select instance
+
+![](https://github.com/heyfey/sv-pathfinder/blob/main/readme_assets/instances.gif?raw=true)
+
 ## Waveform Integration
 
 sv-pathfinder is seamlessly integrated with VaporView – [Download](https://marketplace.visualstudio.com/items?itemName=lramseyer.vaporview)
