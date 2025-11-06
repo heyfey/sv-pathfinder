@@ -959,78 +959,80 @@ class SlangDesignItem extends DesignItem {
 
         let children: any[] = []; // slang.Item[]
         children = await slang.getScope(element.fullName);
-        for (const child of children) {
-            this.addChild(element, child);
-        }
+
+        const [subScopes, variables] = this.collectChildren(element, children);
+        element.children = [...subScopes, ...variables];
         return element.children;
     }
 
-    // Add child recursively
-    private addChild(element: NetlistItem, child: any/*slang.Item*/) {
-        const uri = child.instLoc.uri.toString();
-        const file = vscode.Uri.parse(uri).fsPath;
-        const line = child.instLoc.range.start.line + 1;
-        const column = child.instLoc.range.start.character + 1;
-        let scope;
-        let fullName = element.fullName + '.' + child.instName;
-        switch (child.kind) {
-            case slang.SlangKind.Instance:
-                // Might want to save decLoc also? So don't need to search declLoc in moduleInstances.
-                // uri = child.declLoc.uri.toString();
-                // file = vscode.Uri.parse(uri).fsPath;
-                // line = child.declLoc.range.start.line + 1;
-                // column = child.declLoc.range.start.character + 1;
-                if (element.type === 'instancearray') { fullName = element.fullName + child.instName; }
-                scope = createScope(fullName, "module", file, line, column, child.declName, "scopeItem", element, undefined);
-                if (child.declName && child.declName !== "") {
+    // Collect children into subScopes and variables recursively
+    private collectChildren(element: NetlistItem, children: any[]/*slang.Item[]*/): [NetlistItem[], NetlistItem[]] {
+        const subScopes: NetlistItem[] = [];
+        const variables: NetlistItem[] = [];
+        for (const child of children) {
+            const uri = child.instLoc.uri.toString();
+            const file = vscode.Uri.parse(uri).fsPath;
+            const line = child.instLoc.range.start.line + 1;
+            const column = child.instLoc.range.start.character + 1;
+            let scope;
+            let fullName = element.fullName + '.' + child.instName;
+            switch (child.kind) {
+                case slang.SlangKind.Instance:
+                    // Might want to save decLoc also? So don't need to search declLoc in moduleInstances.
+                    // uri = child.declLoc.uri.toString();
+                    // file = vscode.Uri.parse(uri).fsPath;
+                    // line = child.declLoc.range.start.line + 1;
+                    // column = child.declLoc.range.start.character + 1;
+                    if (element.type === 'instancearray') { fullName = element.fullName + child.instName; }
+                    scope = createScope(fullName, "module", file, line, column, child.declName, "scopeItem", element, undefined);
+                    if (child.declName && child.declName !== "") {
+                        scope.description = child.declName;
+                    }
+                    subScopes.push(scope);
+                    break
+                case slang.SlangKind.InstanceArray:
+                    scope = createScope(fullName, "instancearray", file, line, column, element.moduleName, "scopeItem", element, undefined);
+                    if (child.declName && child.declName !== "") {
+                        scope.description = child.declName;
+                    }
+                    const [subSubScopes, subVariables] = this.collectChildren(scope, child.children);
+                    scope.children = [...subSubScopes, ...subVariables];
+                    subScopes.push(scope);
+                    break
+                case slang.SlangKind.Param:
+                case slang.SlangKind.Port:
+                case slang.SlangKind.Logic:
+                    const parsed = parseSlangType(child.type);
+                    // console.log(`Name: ${child.instName}, Input: "${child.type}" -> Direction: ${parsed.direction}, Type: ${parsed.type}, bitRange: ${parsed.bitRange}`);
+                    let type = parsed.type ? parsed.type : "unknown";
+                    if (child.kind === slang.SlangKind.Param) { type = "parameter"; }
+                    if (child.kind === slang.SlangKind.Port) { type = "port"; }
+                    const v = createVar(fullName, type, 0, file, line, column, element.moduleName, "varItem", element);
+                    v.description = child.type;
+                    if (child.kind === slang.SlangKind.Param) {
+                        v.description += ` = ${child.value}`;
+                    }
+                    variables.push(v);
+                    break
+                case slang.SlangKind.Scope:
+                    if (element.type === 'scopearray') { fullName = element.fullName + child.instName; }
+                    scope = createScope(fullName, "scope", file, line, column, element.moduleName, "scopeItem", element, undefined);
+                    const [subSubScopes2, subVariables2] = this.collectChildren(scope, child.children);
+                    scope.children = [...subSubScopes2, ...subVariables2];
+                    subScopes.push(scope);
+                    break
+                case slang.SlangKind.ScopeArray:
+                    scope = createScope(fullName, "scopearray", file, line, column, element.moduleName, "scopeItem", element, undefined);
                     scope.description = child.declName;
-                }
-                element.children.push(scope);
-                break
-            case slang.SlangKind.InstanceArray:
-                scope = createScope(fullName, "instancearray", file, line, column, element.moduleName, "scopeItem", element, undefined);
-                if (child.declName && child.declName !== "") {
-                    scope.description = child.declName;
-                }
-                for (const grandChild of child.children) {
-                    this.addChild(scope, grandChild);
-                }
-                element.children.push(scope);
-                break
-            case slang.SlangKind.Param:
-            case slang.SlangKind.Port:
-            case slang.SlangKind.Logic:
-                const parsed = parseSlangType(child.type);
-                // console.log(`Name: ${child.instName}, Input: "${child.type}" -> Direction: ${parsed.direction}, Type: ${parsed.type}, bitRange: ${parsed.bitRange}`);
-                let type = parsed.type ? parsed.type : "unknown";
-                if (child.kind === slang.SlangKind.Param) { type = "parameter"; }
-                if (child.kind === slang.SlangKind.Port) { type = "port"; }
-                const v = createVar(fullName, type, 0, file, line, column, element.moduleName, "varItem", element);
-                v.description = child.type;
-                if (child.kind === slang.SlangKind.Param) {
-                    v.description += ` = ${child.value}`;
-                }
-                element.children.push(v);
-                break
-            case slang.SlangKind.Scope:
-                if (element.type === 'scopearray') { fullName = element.fullName + child.instName; }
-                scope = createScope(fullName, "scope", file, line, column, element.moduleName, "scopeItem", element, undefined);
-                for (const grandChild of child.children) {
-                    this.addChild(scope, grandChild);
-                }
-                element.children.push(scope);
-                break
-            case slang.SlangKind.ScopeArray:
-                scope = createScope(fullName, "scopearray", file, line, column, element.moduleName, "scopeItem", element, undefined);
-                scope.description = child.declName;
-                for (const grandChild of child.children) {
-                    this.addChild(scope, grandChild);
-                }
-                element.children.push(scope);
-                break
-            default:
-                vscode.window.showErrorMessage('Unknown item kind: ' + child.kind);
+                    const [subScopes3, subVariables3] = this.collectChildren(scope, child.children);
+                    scope.children = [...subScopes3, ...subVariables3];
+                    subScopes.push(scope);
+                    break
+                default:
+                    vscode.window.showErrorMessage('Unknown item kind: ' + child.kind);
+            }
         }
+        return [subScopes, variables];
     }
 
     public async getDriversAndLoadsExternal(element: NetlistItem): Promise<void> {
