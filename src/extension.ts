@@ -96,8 +96,8 @@ export function activate(context: vscode.ExtensionContext) {
 		designProvider.closeWaveform(e);
 	}));
 
-	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.selectDesign', (e) => {
-		designProvider.selectDesign(e);
+	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.selectDesign', async (e) => {
+		await designProvider.selectDesign(e);
 		hierarchyView.reveal(e.lastContext?.element, { select: true, focus: false, expand: 1 });
 	}));
 

@@ -34,22 +34,32 @@
         "sv-pathfinder.remotePathPrefix": {
           "type": "string",
           "scope": "resource",
-          "description": "Replace the remote path prefix with the local path prefix when jumping to source files. This is useful when the debug database is generated on the different machine. Only take effect when sv-pathfinder.localPathPrefix is also set."
+          "markdownDescription": "Replace the remote path prefix with the local path prefix when navigating to source files. This is useful when the debug database is generated on the different machine, and file paths need remapping to match your local environment. Only take effect when `#sv-pathfinder.localPathPrefix#` is also set."
         },
         "sv-pathfinder.localPathPrefix": {
           "type": "string",
           "scope": "resource",
-          "description": "Replace the remote path prefix with the local path prefix when jumping to source files. This is useful when the debug database is generated on the different machine. Only take effect when sv-pathfinder.remotePathPrefix is also set."
+          "markdownDescription": "Replace the remote path prefix with the local path prefix when navigating to source files. This is useful when the debug database is generated on the different machine, and file paths need remapping to match your local environment. Only take effect when `#sv-pathfinder.remotePathPrefix#` is also set."
+        },
+        "sv-pathfinder.compiler": {
+          "type": "string",
+          "enum": ["slang-server", "Surelog"],
+          "default": "slang-server",
+          "markdownDescription": "Compiler backend to parse and elaborate the `.f` files.\nPrerequisites:\n - [slang-server](https://github.com/hudson-trading/slang-server): Requires the VS Code extension [slang-server: Verilog/SystemVerilog LSP](https://marketplace.visualstudio.com/items?itemName=Hudson-River-Trading.vscode-slang) to be installed and properly configured.\n - [Surelog](https://github.com/chipsalliance/Surelog): Requires Surelog to be installed. Or specify surelog path in setting: `#sv-pathfinder.surelogPath#`.",
+          "markdownEnumDescriptions": [
+            "[slang-server](https://github.com/hudson-trading/slang-server): A SystemVerilog language server based on the Slang library.",
+            "[Surelog](https://github.com/chipsalliance/Surelog): SystemVerilog 2017 Pre-processor, Parser, Elaborator, UHDM Compiler."
+          ]
         },
         "sv-pathfinder.surelogPath": {
           "type": "string",
           "default": "",
-          "description": "Path to the Surelog executable. If empty, 'surelog' will be resolved from your system PATH."
+          "markdownDescription": "Path to the Surelog executable. If empty, 'surelog' will be resolved from your system PATH. This setting is only relevant when `#sv-pathfinder.compiler#` is set to 'Surelog'."
         },
         "sv-pathfinder.showInstancesView": {
           "type": "boolean",
           "default": true,
-          "description": "Show the instances view. Need to reload window to take effect."
+          "markdownDescription": "Show the instances view. Need to reload window to take effect."
         }
       }
     },

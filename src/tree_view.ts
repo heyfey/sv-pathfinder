@@ -3,6 +3,7 @@ import path from 'path';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as cp from 'child_process';
+import * as slang from './slang_server/SlangInterface'
 
 // Must use require instead of import somehow
 let kuzu: any | undefined; // require("kuzu");
@@ -56,6 +57,9 @@ export function createScope(fullName: string, type: string, file: string, lineNu
         case 'moduledef': { icon = moduleDefIcon; break; }
         case 'modport': { icon = modportIcon; break; }
         case 'clockingblock': { icon = clockIcon; break; }
+        case 'scope': { icon = scopeIcon; break; } // for slang
+        case 'scopearray': { icon = scopeIcon; break; } // for slang
+        case 'instancearray': { icon = moduleIcon; break; } // for slang
     }
 
     // Hack for instances view
@@ -219,9 +223,32 @@ export class NetlistItem extends vscode.TreeItem {
             await design.getChildrenExternal(this);
         }
 
-        const childItem = this.children.find((child) => child.name === currentModule);
+        const childItem = this.children.find((child) => {
+            // Special handling for slang scopearray and instancearray, as
+            // it's layouted like this in tree:
+            // module: top
+            //     scopearray: gen_mc -> top.gen_mc (only slang has this)
+            //         scope: gen_mc[0] -> top.gen_mc[0]
+            //         scope: gen_mc[1] -> top.gen_mc[1]
+            //
+            // (Actually we don't need to findTreeItem if already store instLoc in
+            //     NetlistItem, which could be retrieved directly from slang)
+            if (child.type === 'scopearray' || child.type === 'instancearray') {
+                // remove bit range from name
+                const regex = /\[(\d+:)?(\d+)\]$/;
+                const currentModule2 = currentModule?.replace(regex, '');
+                return child.name === currentModule2;
+            }
+
+            // Normal case
+            return child.name === currentModule;
+        });
 
         if (childItem) {
+            // No need to shift 1 when searching in slang scopearray and instancearray
+            if (childItem.type === 'scopearray' || childItem.type === 'instancearray') {
+                return await childItem.findChild(fullName, design);
+            }
             return await childItem.findChild(subModules.join("."), design);
         } else {
             return undefined;
@@ -243,12 +270,16 @@ export class NetlistItem extends vscode.TreeItem {
         return names;
     }
 
-    public clearWaveformValuesDescriptions() {
+    public resetWaveformValuesDescriptions() {
         if (this.children.length === 0) { return; }
         // Assume children are already loaded
         for (const child of this.children) {
             if (child.contextValue === 'varItem' && child.type !== 'parameter') {
-                child.description = undefined;
+                let parts: string[] = [];
+                if (typeof child.description === 'string') {
+                    parts = child.description.split('=');
+                }
+                child.description = parts[0].trim();
             }
         }
     }
@@ -395,7 +426,7 @@ export abstract class DesignItem extends vscode.TreeItem {
             }
         }
         if (this.activeInstance === instance) { return false; }
-        this.activeInstance?.clearWaveformValuesDescriptions();
+        this.activeInstance?.resetWaveformValuesDescriptions();
         this.activeInstance = instance;
         return true;
     }
@@ -811,12 +842,261 @@ class UhdmDesignItem extends DesignItem {
     }
 }
 
+function parseSlangType(typeDecl: string): { direction: string | null; type: string | null; bitRange: string | null } {
+    // Regex breakdown:
+    // ^\s*                     -> optional leading whitespace
+    // (input|output|inout)?    -> optional direction
+    // \s*                      -> optional spaces
+    // (\w+)                    -> type (logic, reg, wire, etc.)
+    // \s*                      -> optional spaces
+    // (\[\s*\d+\s*:\s*\d+\s*\])? -> optional bitRange [msb:lsb], with flexible spaces
+    // \s*$                     -> trailing whitespace
+    const re = /^\s*(input|output|inout)?\s*(\w+)\s*(\[\s*\d+\s*:\s*\d+\s*\])?\s*$/i;
+    const match = typeDecl.match(re);
+
+    if (!match) {
+        return { direction: null, type: null, bitRange: null };
+    }
+
+    const direction = match[1] ? match[1].toLowerCase() : null;
+    const type = match[2].toLowerCase();
+    const bitRangeRaw = match[3] || null;
+
+    // Normalize bitRange: remove all whitespace inside [ ]
+    const bitRange = bitRangeRaw ? bitRangeRaw.replace(/\s+/g, '') : null;
+
+    return { direction, type, bitRange };
+}
+
+// #region SlangDesignItem
+class SlangDesignItem extends DesignItem {
+    // Top $unit, has top level(s) + packages
+    private unit?: slang.Instance[] | undefined = undefined;
+
+    // This is called in setActiveDesign, that means we recompile every time user switch designs.
+    // This should be reviewed, search for "slangfixme" for related code.
+    public async load(): Promise<boolean> {
+        await slang.setBuildFile(this.resourceUri.fsPath);
+        this.unit = await slang.getUnit();
+        // console.log("Loaded SlangDesignItem: " + this.resourceUri.fsPath);
+        // console.log(this.unit);
+
+        // Though we recompile every time, we reuse the loaded treeData and moduleInstances
+        // from the first time. Use "reloadDesign" if the design file is changed on disk.
+        // slangfixme
+        if (this.treeData.length == 0) {
+            await this.loadTopModules();
+        }
+        if (this.moduleInstances.length == 0) {
+            await this.loadModuleDefs();
+        }
+
+        // console.log(this.treeData);
+        return true;
+    }
+
+    private async loadTopModules() {
+        for (const top of this.unit!) {
+            if (top.kind === slang.SlangKind.Instance) { // not handle packages yet
+                const uri = top.declLoc.uri.toString();
+                const file = vscode.Uri.parse(uri).fsPath;
+                const line = top.declLoc.range.start.line + 1;
+                const column = top.declLoc.range.start.character + 1;
+
+                const scope = createScope(top.instName, "module", file, line, column, top.declName, "scopeItem", undefined, undefined);
+                scope.description = top.declName;
+                this.treeData.push(scope);
+            }
+        }
+    }
+
+    private async loadModuleDefs() {
+        const modules = await slang.getScopesByModule();
+        for (const module of modules) {
+            const uri = module.declLoc.uri.toString();
+            const file = vscode.Uri.parse(uri).fsPath;
+            const line = module.declLoc.range.start.line + 1;
+            const column = module.declLoc.range.start.character + 1;
+            const scope = createScope(module.declName, "module", file, line, column, module.declName, "moduleDefItem", undefined, undefined);
+            scope.description = `${module.instCount}`;
+            if (module.inst) {
+                this.addInstanceChild(scope, module.inst);
+            }
+            this.moduleInstances.push(scope);
+        }
+    }
+
+    public async getModuleInstancesExternal(element: NetlistItem | undefined): Promise<NetlistItem[]> {
+        if (!element) {
+            return this.moduleInstances;
+        }
+        if (element.children.length > 0) {
+            return element.children; // Returns cached children
+        }
+        const insts = await slang.getInstancesOfModule(element.name);
+        for (const inst of insts) {
+            this.addInstanceChild(element, inst);
+        }
+        return element.children;
+    }
+
+    private addInstanceChild(element: NetlistItem, inst: any/*slang.Item*/) {
+        let uri = inst.instLoc.uri.toString();
+        let file = vscode.Uri.parse(uri).fsPath;
+        let line = inst.instLoc.range.start.line + 1;
+        let column = inst.instLoc.range.start.character + 1;
+        const scope = createScope(inst.instPath, "instance", file, line, column, inst.instPath, "instanceItem", element, undefined);
+        element.children.push(scope);
+    }
+
+    public async getChildrenExternal(element: NetlistItem | undefined): Promise<NetlistItem[]> {
+        if (!element) {
+            return this.treeData;
+        }
+        if (element.children.length > 0) {
+            return element.children;
+        }
+
+        let children: any[] = []; // slang.Item[]
+        children = await slang.getScope(element.fullName);
+        for (const child of children) {
+            this.addChild(element, child);
+        }
+        return element.children;
+    }
+
+    // Add child recursively
+    private addChild(element: NetlistItem, child: any/*slang.Item*/) {
+        const uri = child.instLoc.uri.toString();
+        const file = vscode.Uri.parse(uri).fsPath;
+        const line = child.instLoc.range.start.line + 1;
+        const column = child.instLoc.range.start.character + 1;
+        let scope;
+        let fullName = element.fullName + '.' + child.instName;
+        switch (child.kind) {
+            case slang.SlangKind.Instance:
+                // Might want to save decLoc also? So don't need to search declLoc in moduleInstances.
+                // uri = child.declLoc.uri.toString();
+                // file = vscode.Uri.parse(uri).fsPath;
+                // line = child.declLoc.range.start.line + 1;
+                // column = child.declLoc.range.start.character + 1;
+                if (element.type === 'instancearray') { fullName = element.fullName + child.instName; }
+                scope = createScope(fullName, "module", file, line, column, child.declName, "scopeItem", element, undefined);
+                if (child.declName && child.declName !== "") {
+                    scope.description = child.declName;
+                }
+                element.children.push(scope);
+                break
+            case slang.SlangKind.InstanceArray:
+                scope = createScope(fullName, "instancearray", file, line, column, element.moduleName, "scopeItem", element, undefined);
+                if (child.declName && child.declName !== "") {
+                    scope.description = child.declName;
+                }
+                for (const grandChild of child.children) {
+                    this.addChild(scope, grandChild);
+                }
+                element.children.push(scope);
+                break
+            case slang.SlangKind.Param:
+            case slang.SlangKind.Port:
+            case slang.SlangKind.Logic:
+                const parsed = parseSlangType(child.type);
+                // console.log(`Name: ${child.instName}, Input: "${child.type}" -> Direction: ${parsed.direction}, Type: ${parsed.type}, bitRange: ${parsed.bitRange}`);
+                let type = parsed.type ? parsed.type : "unknown";
+                if (child.kind === slang.SlangKind.Param) { type = "parameter"; }
+                if (child.kind === slang.SlangKind.Port) { type = "port"; }
+                const v = createVar(fullName, type, 0, file, line, column, element.moduleName, "varItem", element);
+                v.description = child.type;
+                if (child.kind === slang.SlangKind.Param) {
+                    v.description += ` = ${child.value}`;
+                }
+                element.children.push(v);
+                break
+            case slang.SlangKind.Scope:
+                if (element.type === 'scopearray') { fullName = element.fullName + child.instName; }
+                scope = createScope(fullName, "scope", file, line, column, element.moduleName, "scopeItem", element, undefined);
+                for (const grandChild of child.children) {
+                    this.addChild(scope, grandChild);
+                }
+                element.children.push(scope);
+                break
+            case slang.SlangKind.ScopeArray:
+                scope = createScope(fullName, "scopearray", file, line, column, element.moduleName, "scopeItem", element, undefined);
+                scope.description = child.declName;
+                for (const grandChild of child.children) {
+                    this.addChild(scope, grandChild);
+                }
+                element.children.push(scope);
+                break
+            default:
+                vscode.window.showErrorMessage('Unknown item kind: ' + child.kind);
+        }
+    }
+
+    public async getDriversAndLoadsExternal(element: NetlistItem): Promise<void> {
+        return;
+    }
+
+    // The implementation is same as KuzuDesignItem, that find definition from moduleInstances for scopeItem. However, we
+    // should consider to store definition location in scopeItem when loading treeData to avoid searching every time.
+    async getDefinitionFileLocation(element: NetlistItem): Promise<{ filePath: string; lineNumber: number, columnNumber: number }> {
+        let filePath = element.sourceFile;
+        let lineNumber = element.lineNumber;
+        let columnNumber = element.columnNumber;
+
+        if (element.contextValue === 'scopeItem') {
+            // Find the module definition in moduleInstances
+            const moduleName = element.moduleName;
+            const moduleInstances = this.getModuleInstances();
+            let index = moduleInstances.findIndex(module => module.fullName === moduleName);
+            if (index < 0) {
+                console.log('Cannot find module definition for ' + moduleName); // Should not happen
+            } else {
+                filePath = moduleInstances[index].sourceFile;
+                lineNumber = moduleInstances[index].lineNumber;
+                columnNumber = moduleInstances[index].columnNumber;
+            }
+        } else if (element.contextValue === 'instanceItem') {
+            // The parent of instanceItem is the moduleDef, so use its sourceFile and lineNumber
+            filePath = element.parent!.sourceFile;
+            lineNumber = element.parent!.lineNumber;
+            columnNumber = element.parent!.columnNumber;
+        }
+
+        return { filePath, lineNumber, columnNumber };
+    }
+
+    public async unload(): Promise<void> {
+        this.unloadTreeData();
+        this.unit = undefined;
+        await slang.setBuildFile('');
+    }
+}
+
 // #region FDesignItem
 class FDesignItem extends DesignItem {
     private delegateDesign!: DesignItem;
-    private generatedUhdmUri?: vscode.Uri;
+    private generatedUhdmUri?: vscode.Uri; // For generated UHDM file from Surelog
 
     private static surelogOutputChannel: vscode.OutputChannel | undefined;
+
+    public async load(): Promise<boolean> {
+        const config = vscode.workspace.getConfiguration('sv-pathfinder');
+        const compiler = config.get<string>('compiler');
+        if (compiler === 'slang-server') {
+            return await this.loadSlang();
+        }
+        return await this.loadSurelog();
+    }
+
+    private async loadSlang(): Promise<boolean> {
+        this.delegateDesign = new SlangDesignItem(this.resourceUri.fsPath, this.isExample);
+        // Defer loading to setActiveDesign, that means we recompile every time user switch designs
+        // slangfixme
+        // await this.delegateDesign.load();
+        this.treeData = this.delegateDesign.getTreeData();
+        return true;
+    }
 
     private async runSurelog(): Promise<boolean> {
         const config = vscode.workspace.getConfiguration('sv-pathfinder');
@@ -893,9 +1173,7 @@ class FDesignItem extends DesignItem {
         }
     }
 
-    public async load(): Promise<boolean> {
-        // console.log("loading FDesignItem: " + this.resourceUri.fsPath);
-
+    private async loadSurelog(): Promise<boolean> {
         // Run Surelog to generate UHDM
         const success = await this.runSurelog();
         if (!success) {
@@ -1019,7 +1297,7 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
                 this.designList.push(design);
                 // If it's the first design, select it
                 if (this.designList.length === 1) {
-                    this.selectDesign(design);
+                    await this.selectDesign(design);
                 }
             }
         } else {
@@ -1042,13 +1320,25 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
         }
         this.refresh();
         if (this.hierarchyTreeProvider.getActiveDesign() === element) {
-            this.hierarchyTreeProvider.setActiveDesign(undefined);
-            this.moduleInstancesTreeProvider.setActiveDesign(undefined);
+            await this.hierarchyTreeProvider.setActiveDesign(undefined);
+            await this.moduleInstancesTreeProvider.setActiveDesign(undefined);
         }
     }
 
     public async reloadDesign(element: DesignItem) {
         await element.reload();
+
+        // slangfixme
+        if (this.activeDesign === element) {
+            if (element instanceof FDesignItem && element.DelegateDesign instanceof SlangDesignItem) {
+                // Force re-select to reload Slang design. This is because we defer loading
+                // to setActiveDesign, so need to re-trigger it here.
+                this.activeDesign = undefined;
+                await this.hierarchyTreeProvider.setActiveDesign(undefined);
+                await this.selectDesign(element);
+            }
+        }
+
         this.hierarchyTreeProvider.refreshDesign(element);
         this.moduleInstancesTreeProvider.refreshDesign(element);
     }
@@ -1078,7 +1368,7 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
         throw new Error('Method not implemented.');
     }
 
-    selectDesign(element: DesignItem) {
+    async selectDesign(element: DesignItem) {
         if (!element) { return; }
         if (this.activeDesign === element) { return; }
         if (this.activeDesign) {
@@ -1087,8 +1377,8 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
         this.activeDesign = element;
         this.activeDesign.iconPath = new vscode.ThemeIcon('folder-active');
 
-        this.hierarchyTreeProvider.setActiveDesign(element);
-        this.moduleInstancesTreeProvider.setActiveDesign(element);
+        await this.hierarchyTreeProvider.setActiveDesign(element);
+        await this.moduleInstancesTreeProvider.setActiveDesign(element);
         if (element instanceof UhdmDesignItem || element instanceof FDesignItem) {
             // Hide the not used views for UHDM designs
             vscode.commands.executeCommand('setContext', 'sv-pathfinder.driversViewVisible', false);
@@ -1259,8 +1549,15 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         this.loadsTreeProvider.refresh();
     }
 
-    public setActiveDesign(design: DesignItem | undefined) {
+    public async setActiveDesign(design: DesignItem | undefined) {
         if (this.activeDesign === design) { return; }
+
+        // slangfixme
+        if (design instanceof FDesignItem && design.DelegateDesign instanceof SlangDesignItem) {
+            // For slang, we recompile the whole design when switching designs
+            await design.DelegateDesign.load();
+        }
+
         this.activeDesign = design;
 
         // Clear the drivers and loads tree data
@@ -1329,7 +1626,11 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
             element.type === 'modport' ||
             element.type === 'task' ||
             element.type === 'function' ||
-            element.type === 'interfacearray') {
+            element.type === 'interfacearray' ||
+            element.type === 'scope' || // for slang
+            element.type === 'scopearray' || // for slang
+            element.type === 'instancearray') // for slang
+        {
             return await this.gotoInstantiation(element, isGoBackOrForward);
         }
 
@@ -1486,10 +1787,14 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         for (const child of scope.children) {
             // Skip parameters as they are constant
             if (child.contextValue === 'varItem' && child.type !== 'parameter') {
+                let parts: string[] = [];
+                if (typeof child.description === 'string') {
+                    parts = child.description.split('=');
+                }
                 if (waveformValueMap.has(child.name)) {
-                    child.description = `= ${waveformValueMap.get(child.name)}`;
+                    child.description = parts[0].trim() + ` = ${waveformValueMap.get(child.name)}`;
                 } else {
-                    child.description = '';
+                    child.description = parts[0].trim();
                 }
             }
         }
@@ -1648,7 +1953,7 @@ export class ModuleInstancesTreeProvider implements vscode.TreeDataProvider<Netl
     //     this.refresh();
     // }
 
-    public setActiveDesign(design: DesignItem | undefined) {
+    public async setActiveDesign(design: DesignItem | undefined) {
         this.activeDesign = design;
         if (design) {
             this.treeData = design.getModuleInstances();
