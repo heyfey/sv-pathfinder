@@ -11,7 +11,8 @@ const vscode = acquireVsCodeApi();
 let circuit = null;
 let paper = null;
 let labelIndex = null;
-let zoomLevel = 0;
+let autoFit = true;   // auto-fit after async ELK layout until the user zooms manually
+let fitTimer = null;
 
 const paperDiv = () => document.getElementById('paper');
 
@@ -112,6 +113,7 @@ function loadSchematic(msg) {
         labelIndex = null;
     }
     document.getElementById('breadcrumb').textContent = `${msg.scopePath}  (${msg.moduleName})`;
+    setStatus('laying out schematic…');
     const container = document.getElementById('paper-container');
     container.innerHTML = '<div id="paper"></div>';
 
@@ -123,8 +125,15 @@ function loadSchematic(msg) {
 
     // never start the engine — external values only
     paper.on('cell:pointerclick', (cellView) => emitClick(cellView.model));
+    // ELK runs asynchronously AFTER displayOn returns, re-rendering when done — keep
+    // auto-fitting on each render pass until the user takes over the zoom.
+    autoFit = true;
+    paper.on('render:done', () => {
+        if (!autoFit) { return; }
+        clearTimeout(fitTimer);
+        fitTimer = setTimeout(() => { if (autoFit) { fitToView(); } }, 150);
+    });
 
-    zoomLevel = 0;
     setStatus(`${Object.keys(labelIndex.wires).length} named nets, ` +
               `${Object.keys(labelIndex.devices).length} devices`);
 
@@ -137,13 +146,33 @@ function setStatus(text) {
 }
 
 // ---- toolbar ----
-function setZoom(level) {
-    zoomLevel = Math.max(-10, Math.min(10, level));
-    if (circuit && paper) { circuit.scaleAndRefreshPaper(paper, zoomLevel); }
+function zoomBy(factor) {
+    if (!paper) { return; }
+    autoFit = false;
+    const s = Math.min(Math.max(paper.scale().sx * factor, 0.05), 10);
+    paper.scale(s);
+    paper.fitToContent({ padding: 30, allowNewOrigin: 'any' });
 }
-document.getElementById('zoom-in').addEventListener('click', () => setZoom(zoomLevel + 1));
-document.getElementById('zoom-out').addEventListener('click', () => setZoom(zoomLevel - 1));
-document.getElementById('zoom-fit').addEventListener('click', () => setZoom(0));
+
+function fitToView() {
+    if (!paper) { return; }
+    const container = document.getElementById('paper-container');
+    try {
+        paper.transformToFitContent({
+            padding: 20,
+            minScale: 0.05,
+            maxScale: 1,
+            fittingBBox: { x: 0, y: 0, width: container.clientWidth, height: container.clientHeight },
+        });
+    } catch (e) {
+        // older JointJS without transformToFitContent: fall back to 1:1
+        paper.scale(1);
+        paper.fitToContent({ padding: 30, allowNewOrigin: 'any' });
+    }
+}
+document.getElementById('zoom-in').addEventListener('click', () => zoomBy(1.25));
+document.getElementById('zoom-out').addEventListener('click', () => zoomBy(0.8));
+document.getElementById('zoom-fit').addEventListener('click', fitToView);
 document.getElementById('refresh').addEventListener('click', () => post({ type: 'refresh' }));
 const presetButton = document.getElementById('preset-toggle');
 presetButton.addEventListener('click', () => {
