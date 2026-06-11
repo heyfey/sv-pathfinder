@@ -1,0 +1,94 @@
+/* C7 — VS Code theming for the schematic webview.
+ * digitaljs renders SVG with its own classes; we theme chrome with --vscode-* vars
+ * and keep wire-value colors semantic (green=1, dim=0, gray=x). */
+
+html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    background: var(--vscode-editor-background);
+    color: var(--vscode-editor-foreground);
+    font-family: var(--vscode-font-family);
+    font-size: var(--vscode-font-size);
+    display: flex;
+    flex-direction: column;
+}
+
+#toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--vscode-editorWidget-border, #444);
+    flex: 0 0 auto;
+}
+
+#breadcrumb {
+    font-family: var(--vscode-editor-font-family, monospace);
+    opacity: 0.9;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#toolbar-right button {
+    background: var(--vscode-button-secondaryBackground, #3a3d41);
+    color: var(--vscode-button-secondaryForeground, #ffffff);
+    border: 1px solid var(--vscode-editorWidget-border, transparent);
+    border-radius: 3px;
+    padding: 2px 8px;
+    margin-left: 4px;
+    cursor: pointer;
+}
+
+#toolbar-right button:hover {
+    background: var(--vscode-button-secondaryHoverBackground, #45494e);
+}
+
+#paper-container {
+    flex: 1 1 auto;
+    overflow: auto;
+}
+
+#status {
+    flex: 0 0 auto;
+    padding: 2px 8px;
+    font-size: 0.85em;
+    opacity: 0.75;
+    border-top: 1px solid var(--vscode-editorWidget-border, #444);
+}
+
+/* ---- digitaljs SVG theming ---- */
+
+/* paper background follows the editor; the svg has its own white default */
+#paper svg {
+    background: var(--vscode-editor-background) !important;
+}
+
+.djs * {
+    font-family: var(--vscode-editor-font-family, monospace);
+}
+
+/* gate bodies / boxes */
+#paper .joint-cell [joint-selector="body"],
+#paper .joint-cell rect.body, #paper .joint-cell circle.body,
+#paper .joint-cell polygon.body, #paper .joint-cell path.body {
+    fill: var(--vscode-editorWidget-background, #252526);
+    stroke: var(--vscode-editor-foreground, #cccccc);
+}
+
+/* text labels (cell names, port labels, wire netnames) */
+#paper .joint-cell text,
+#paper .joint-link text {
+    fill: var(--vscode-editor-foreground, #cccccc);
+}
+
+/* default (undriven / multi-bit) wires */
+#paper .joint-link path.connection {
+    stroke: var(--vscode-editorWidget-border, #888888);
+}
+
+/* value-driven wire colors — digitaljs toggles classes on signal change;
+ * keep them vivid and theme-independent for at-a-glance debug */
+#paper .joint-link.live path.connection { stroke: #4cc24c; }
+#paper .joint-link.low  path.connection { stroke: #6a9ddf; }

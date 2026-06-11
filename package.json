@@ -43,7 +43,10 @@
         },
         "sv-pathfinder.compiler": {
           "type": "string",
-          "enum": ["slang-server", "Surelog"],
+          "enum": [
+            "slang-server",
+            "Surelog"
+          ],
           "default": "slang-server",
           "markdownDescription": "Compiler backend to parse and elaborate the `.f` files.\nPrerequisites:\n - [slang-server](https://github.com/hudson-trading/slang-server): Requires the VS Code extension [slang-server: Verilog/SystemVerilog LSP](https://marketplace.visualstudio.com/items?itemName=Hudson-River-Trading.vscode-slang) to be installed and properly configured.\n - [Surelog](https://github.com/chipsalliance/Surelog): Requires Surelog to be installed. Or specify surelog path in setting: `#sv-pathfinder.surelogPath#`.",
           "markdownEnumDescriptions": [
@@ -60,6 +63,11 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "Show the instances view. Need to reload window to take effect."
+        },
+        "sv-pathfinder.ossCadSuitePath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to the [OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build) installation directory (the folder containing `bin/yosys`). OSS CAD Suite bundles Yosys with the [yosys-slang](https://github.com/povik/yosys-slang) SystemVerilog frontend, which the schematic feature uses as its primary backend. If empty, `yosys` is resolved from PATH; `yowasp-yosys` (`pip install yowasp-yosys`) is the zero-install fallback for simple designs."
         }
       }
     },
@@ -194,6 +202,11 @@
           "command": "sv-pathfinder.addAllInScopeToWaveform",
           "when": "view == 'hierarchyView' && viewItem == 'scopeItem'",
           "group": "0_default@7"
+        },
+        {
+          "command": "sv-pathfinder.showSchematic",
+          "when": "(view == 'hierarchyView' && viewItem == 'scopeItem') || (view == 'moduleInstancesView' && viewItem == 'instanceItem')",
+          "group": "0_default@8"
         }
       ],
       "editor/context": [
@@ -226,6 +239,11 @@
           "command": "sv-pathfinder.addToWaveformViewer",
           "when": "resourceLangId == verilog || resourceLangId == systemverilog",
           "group": "1_designNavigation@5"
+        },
+        {
+          "command": "sv-pathfinder.showSchematic",
+          "when": "resourceLangId == verilog || resourceLangId == systemverilog",
+          "group": "1_designNavigation@6"
         }
       ]
     },
@@ -327,6 +345,11 @@
         "title": "Go Forward",
         "icon": "$(arrow-right)",
         "enablement": "sv-pathfinder.isGoForwardEnabled"
+      },
+      {
+        "command": "sv-pathfinder.showSchematic",
+        "title": "Show Schematic",
+        "icon": "$(circuit-board)"
       }
     ]
   },
@@ -360,7 +383,10 @@
     "typescript": "^5.7.3"
   },
   "dependencies": {
+    "3vl": "^1.0.1",
+    "digitaljs": "^0.14.2",
     "kuzu": "^0.9.0",
-    "web-tree-sitter": "^0.25.6"
+    "web-tree-sitter": "^0.25.6",
+    "yosys2digitaljs": "^0.10.3"
   }
 }

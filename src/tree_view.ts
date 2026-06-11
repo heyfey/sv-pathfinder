@@ -1485,7 +1485,7 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
     }
 }
 
-function replaceFilePathIfNeeded(filePath: string, isExample: boolean = false) {
+export function replaceFilePathIfNeeded(filePath: string, isExample: boolean = false) {
     // dirty fix for absolute path in the example uhdm
     if (isExample) {
         const from = "/home/heyfey/git-repos/sv-pathfinder";
@@ -1502,7 +1502,7 @@ function replaceFilePathIfNeeded(filePath: string, isExample: boolean = false) {
     return filePath.replace(from, to);
 }
 
-async function showTextDocumentLocation(filePath: string, lineNumber: number, columnNumber: number, isExample: boolean = false) {
+export async function showTextDocumentLocation(filePath: string, lineNumber: number, columnNumber: number, isExample: boolean = false) {
     filePath = replaceFilePathIfNeeded(filePath, isExample);
     const uri = vscode.Uri.file(filePath);
     columnNumber = columnNumber > 0 ? columnNumber - 1 : 0; // Convert to 0-based index

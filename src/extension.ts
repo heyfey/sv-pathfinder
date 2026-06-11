@@ -4,6 +4,7 @@ import { OpenedDesignsTreeProvider, HierarchyTreeProvider, DriversLoadsTreeProvi
 import { EditorMenuProvider } from './editor_menu';
 import { WaveformValueAnnotationProvider } from './value_annotation';
 import { Parser } from './parser';
+import { SchematicViewProvider } from './schematic/schematic_view';
 
 export function activate(context: vscode.ExtensionContext) {
 	console.log('sv-pathfinder: there are venoms and virtues aplenty in the wilds, if you know where to look.');
@@ -204,6 +205,15 @@ export function activate(context: vscode.ExtensionContext) {
 	vscode.commands.executeCommand('setContext', 'sv-pathfinder.isCommandEnabled', true);
 
 
+	// #region Schematic
+	const schematicProvider = new SchematicViewProvider(context, hierarchyProvider);
+	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.showSchematic', async (e) => {
+		await schematicProvider.showSchematic(e);
+	}));
+	schematicProvider.listenToMarkerSetEvent().then(disposable => {
+		if (disposable) { context.subscriptions.push(disposable); }
+	});
+
 	// #region Value Annotation
 	const annotationProvider = new WaveformValueAnnotationProvider(hierarchyProvider, parser);
 	annotationProvider.listenToMarkerSetEventEvent().then(disposable => {
@@ -220,6 +230,7 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.workspace.onDidChangeTextDocument((e) => annotationProvider.handleChangeTextDocument(e)),
 		hierarchyProvider.onDidChangeActiveInstance((e) => annotationProvider.handleActiveInstanceChanges(e)),
 		designProvider.onDidChangeActiveWaveformForActiveDesign((e) => annotationProvider.handleActiveWaveformChanges(e)),
+		designProvider.onDidChangeActiveWaveformForActiveDesign(() => schematicProvider.handleActiveWaveformChanges()),
 	);
 
 	// Initial update for the active editor

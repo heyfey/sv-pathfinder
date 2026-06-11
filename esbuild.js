@@ -42,11 +42,46 @@ async function main() {
 			esbuildProblemMatcherPlugin,
 		],
 	});
+	// Schematic webview bundle: digitaljs (JointJS/ELK) + the bridge script.
+	// jQuery must be injected as a global (digitaljs's webpack uses ProvidePlugin) and
+	// jquery-ui's per-widget UMD files break under esbuild — alias to the prebuilt dist.
+	// See docs/spikes/value-display/findings.md "Renderer notes".
+	const webviewCtx = await esbuild.context({
+		entryPoints: [
+			'src/schematic_webview/main.mjs',
+		],
+		bundle: true,
+		format: 'iife',
+		minify: production,
+		sourcemap: false,
+		platform: 'browser',
+		outdir: 'dist',
+		entryNames: 'schematic_webview',
+		inject: ['src/schematic_webview/jquery-shim.mjs'],
+		alias: {
+			'jquery-ui/ui/widgets/dialog.js': 'jquery-ui/dist/jquery-ui.js',
+		},
+		loader: {
+			'.png': 'dataurl',
+			'.gif': 'dataurl',
+			'.svg': 'dataurl',
+			'.woff': 'dataurl',
+			'.woff2': 'dataurl',
+			'.ttf': 'dataurl',
+			'.eot': 'dataurl',
+		},
+		logLevel: 'silent',
+		plugins: [
+			esbuildProblemMatcherPlugin,
+		],
+	});
 	if (watch) {
-		await ctx.watch();
+		await Promise.all([ctx.watch(), webviewCtx.watch()]);
 	} else {
 		await ctx.rebuild();
+		await webviewCtx.rebuild();
 		await ctx.dispose();
+		await webviewCtx.dispose();
 	}
 }
 
