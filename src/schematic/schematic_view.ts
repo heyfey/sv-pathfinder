@@ -209,7 +209,7 @@ export class SchematicViewProvider {
         }
         // celltype = (uniquified) module name of a child box -> module declaration
         if (msg.celltype) {
-            const moduleName = msg.celltype.split('$')[0];
+            const moduleName = cleanModuleName(msg.celltype);
             const moduleDef = shown.design.getModuleInstances().find(m => m.moduleName === moduleName || m.fullName === moduleName);
             if (moduleDef && moduleDef.sourceFile) {
                 await showTextDocumentLocation(moduleDef.sourceFile, moduleDef.lineNumber, moduleDef.columnNumber, shown.design.isExample);
@@ -285,6 +285,18 @@ export class SchematicViewProvider {
             console.warn('sv-pathfinder schematic: value push failed', e);
         }
     }
+}
+
+// Yosys uniquifies child module names: slang emits `mod$top.path.inst`, the native
+// frontend emits `$paramod\mod\PARAM=...`. Resolve back to the plain module name.
+// (Keep in sync with the copy in schematic_webview/main.mjs — separate bundles.)
+function cleanModuleName(celltype: string): string {
+    if (celltype.startsWith('$paramod\\')) {
+        const parts = celltype.split('\\');
+        return parts[1] || celltype;
+    }
+    const i = celltype.indexOf('$');
+    return i > 0 ? celltype.slice(0, i) : celltype;
 }
 
 // VaporView returns either a JSON string or an array of value strings (value before /

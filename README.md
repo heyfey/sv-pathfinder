@@ -46,6 +46,26 @@ Then you can open the `.uhdm` in sv-pathfinder.
 
 ![](https://github.com/heyfey/sv-pathfinder/blob/main/readme_assets/instances.gif?raw=true)
 
+### Interactive schematic (preview)
+
+Right-click a scope in the Hierarchy view (or in the editor) and pick **Show Schematic**
+to see the RTL structure of that instance — ports, sub-instances (as boxes), logic, and
+wires — rendered with [digitaljs](https://github.com/tilk/digitaljs).
+
+- Click a cell or instance to jump to its RTL source; click a wire to jump to the signal
+  declaration. Boxes navigate to the module declaration.
+- The schematic is elaborated with the instance's actual parameter values.
+- RTL view is the default; the `RTL`/`GLS` button toggles a gate-level view.
+- With a waveform open in VaporView, moving the marker annotates schematic wires with
+  signal values at the cursor time (`z` is shown as `x`).
+
+Requires [Yosys](https://github.com/YosysHQ/yosys). The recommended setup is
+[OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build), which bundles Yosys with
+the [yosys-slang](https://github.com/povik/yosys-slang) SystemVerilog frontend — set
+`"sv-pathfinder.ossCadSuitePath"` to the installation directory. Without it, `yosys`
+from PATH (limited SystemVerilog support) or `pip install yowasp-yosys` (zero-install)
+are used as fallbacks for simple designs.
+
 ## Waveform Integration
 
 sv-pathfinder is seamlessly integrated with VaporView – [Download](https://marketplace.visualstudio.com/items?itemName=lramseyer.vaporview)
@@ -67,6 +87,7 @@ sv-pathfinder is seamlessly integrated with VaporView – [Download](https://mar
 - `"sv-pathfinder.surelogPath": string`, Path to the Surelog executable. If empty, 'surelog' will be resolved from your system PATH.
 - `"sv-pathfinder.showInstancesView": boolean`, Show the instances view. Need to reload window to take effect.
     - Default: `true`
+- `"sv-pathfinder.ossCadSuitePath": string`, Path to the OSS CAD Suite installation directory (the folder containing `bin/yosys`), used by the schematic feature. If empty, `yosys` is resolved from PATH, then `yowasp-yosys`.
 
 ## Requirements
 

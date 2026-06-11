@@ -62,6 +62,33 @@ function clearValues() {
     }
 }
 
+// Yosys uniquifies child module names: slang emits `mod$top.path.inst`, the native
+// frontend emits `$paramod\mod\PARAM=...`. Display (and report) the plain module name.
+// (Keep in sync with the copy in schematic_view.ts — separate bundles.)
+function cleanModuleName(celltype) {
+    if (!celltype) { return celltype; }
+    if (celltype.startsWith('$paramod\\')) {
+        const parts = celltype.split('\\');
+        return parts[1] || celltype;
+    }
+    const i = celltype.indexOf('$');
+    return i > 0 ? celltype.slice(0, i) : celltype;
+}
+
+// retitle subcircuit box captions with the plain module name, recursively
+function cleanSubcircuitCaptions(index) {
+    for (const dev of Object.values(index.devices)) {
+        const celltype = dev.get('celltype');
+        if (celltype) {
+            const clean = cleanModuleName(celltype);
+            if (clean !== celltype) { dev.attr('type/text', clean); }
+        }
+    }
+    for (const sub of Object.values(index.subcircuits)) {
+        cleanSubcircuitCaptions(sub);
+    }
+}
+
 // ---- cross-nav click handlers (Spike 2 source_nav.md) ----
 function emitClick(model) {
     const isLink = typeof model.isLink === 'function' && model.isLink();
@@ -92,6 +119,7 @@ function loadSchematic(msg) {
     circuit = new Circuit(msg.circuit, { layoutEngine: 'elkjs' });
     paper = circuit.displayOn(paperDiv());
     labelIndex = circuit.getLabelIndex();
+    cleanSubcircuitCaptions(labelIndex);
 
     // never start the engine — external values only
     paper.on('cell:pointerclick', (cellView) => emitClick(cellView.model));
