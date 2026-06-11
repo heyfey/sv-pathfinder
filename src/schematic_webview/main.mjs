@@ -97,7 +97,8 @@ function emitClick(model) {
     post({
         type: 'elementClick',
         kind: isLink ? 'wire' : (celltype ? 'subcircuit' : 'device'),
-        leafName: isLink ? model.get('netname') : model.get('label'),
+        // IO port devices carry the port name in 'net' (no 'label')
+        leafName: isLink ? model.get('netname') : (model.get('label') || model.get('net')),
         celltype,
         sourcePositions: model.get('source_positions') || [],
         action: 'source',
