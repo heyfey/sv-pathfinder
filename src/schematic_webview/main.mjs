@@ -126,13 +126,21 @@ function loadSchematic(msg) {
 
     // never start the engine — external values only
     paper.on('cell:pointerclick', (cellView) => emitClick(cellView.model));
-    // ELK runs asynchronously AFTER displayOn returns, re-rendering when done — keep
-    // auto-fitting on each render pass until the user takes over the zoom.
+    // ELK runs asynchronously AFTER displayOn returns and applies all cell positions in
+    // one batch when done. Fit once after that batch settles, then DISARM — fitting on
+    // every render:done oscillates the viewport on mouse hover (hover artifacts trigger
+    // render passes, and the fit itself triggers another render: feedback loop).
     autoFit = true;
-    paper.on('render:done', () => {
+    paper.once('render:done', () => { if (autoFit) { fitToView(); } });
+    labelIndex.graph.on('change:position change:vertices', () => {
         if (!autoFit) { return; }
         clearTimeout(fitTimer);
-        fitTimer = setTimeout(() => { if (autoFit) { fitToView(); } }, 150);
+        fitTimer = setTimeout(() => {
+            if (autoFit) {
+                fitToView();
+                autoFit = false;
+            }
+        }, 300);
     });
 
     setStatus(`${Object.keys(labelIndex.wires).length} named nets, ` +
@@ -168,8 +176,10 @@ function fitToView() {
     } catch (e) {
         // older JointJS without transformToFitContent: fall back to 1:1
         paper.scale(1);
-        paper.fitToContent({ padding: 30, allowNewOrigin: 'any' });
     }
+    // digitaljs re-runs fitToContent({padding: 30}) on EVERY render:done (hover included);
+    // end with the identical call so those refits are idempotent and the view never jumps.
+    paper.fitToContent({ padding: 30, allowNewOrigin: 'any' });
 }
 document.getElementById('zoom-in').addEventListener('click', () => zoomBy(1.25));
 document.getElementById('zoom-out').addEventListener('click', () => zoomBy(0.8));
