@@ -195,9 +195,10 @@ export class SchematicViewProvider {
                 return;
             }
         }
-        // FALLBACK: leaf name + active scope (the norm for wires under the slang frontend)
+        // FALLBACK: leaf name + active scope (the norm for wires under the slang frontend);
+        // msg.path carries enclosing subcircuit instances for clicks inside popup windows
         if (msg.leafName) {
-            const fullName = `${shown.ctx.instancePath}.${msg.leafName}`;
+            const fullName = [shown.ctx.instancePath, ...(msg.path ?? []), msg.leafName].join('.');
             const item = await shown.design.findTreeItem(fullName);
             if (item) {
                 const loc = await shown.design.getDefinitionFileLocation(item);

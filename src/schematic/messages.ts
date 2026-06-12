@@ -13,6 +13,7 @@ export interface ElementClickMessage {
     kind: 'wire' | 'device' | 'subcircuit';
     leafName?: string;       // netname for wires, label for devices/instances
     celltype?: string;       // for subcircuit boxes: (uniquified) module name
+    path?: string[];         // enclosing subcircuit instance labels (clicks inside popup windows)
     sourcePositions: SourcePosition[];
     action: 'source' | 'declaration'; // plain click = source; e.g. dblclick = declaration
 }

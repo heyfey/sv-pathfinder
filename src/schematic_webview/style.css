@@ -58,10 +58,12 @@ html, body {
     border-top: 1px solid var(--vscode-editorWidget-border, #444);
 }
 
-/* ---- digitaljs SVG theming ---- */
+/* ---- digitaljs SVG theming ----
+ * Scoped to .djs (digitaljs adds it to EVERY paper element it creates), so the
+ * subcircuit popup windows are themed the same as the main paper. */
 
 /* paper background follows the editor; the svg has its own white default */
-#paper svg {
+.djs svg {
     background: var(--vscode-editor-background) !important;
 }
 
@@ -70,25 +72,54 @@ html, body {
 }
 
 /* gate bodies / boxes */
-#paper .joint-cell [joint-selector="body"],
-#paper .joint-cell rect.body, #paper .joint-cell circle.body,
-#paper .joint-cell polygon.body, #paper .joint-cell path.body {
+.djs .joint-cell [joint-selector="body"],
+.djs .joint-cell rect.body, .djs .joint-cell circle.body,
+.djs .joint-cell polygon.body, .djs .joint-cell path.body {
     fill: var(--vscode-editorWidget-background, #252526);
     stroke: var(--vscode-editor-foreground, #cccccc);
 }
 
 /* text labels (cell names, port labels, wire netnames) */
-#paper .joint-cell text,
-#paper .joint-link text {
+.djs .joint-cell text,
+.djs .joint-link text {
     fill: var(--vscode-editor-foreground, #cccccc);
 }
 
 /* default (undriven / multi-bit) wires */
-#paper .joint-link path.connection {
+.djs .joint-link path.connection {
     stroke: var(--vscode-editorWidget-border, #888888);
 }
 
 /* value-driven wire colors — digitaljs toggles classes on signal change;
  * keep them vivid and theme-independent for at-a-glance debug */
-#paper .joint-link.live path.connection { stroke: #4cc24c; }
-#paper .joint-link.low  path.connection { stroke: #6a9ddf; }
+.djs .joint-link.live path.connection { stroke: #4cc24c; }
+.djs .joint-link.low  path.connection { stroke: #6a9ddf; }
+
+/* ---- subcircuit popup window (jquery-ui dialog) theming ---- */
+.ui-dialog {
+    background: var(--vscode-editorWidget-background, #252526);
+    border: 1px solid var(--vscode-editorWidget-border, #454545);
+    color: var(--vscode-editor-foreground, #cccccc);
+}
+
+.ui-dialog .ui-dialog-titlebar {
+    background: var(--vscode-editorWidget-background, #252526);
+    color: var(--vscode-editor-foreground, #cccccc);
+    border: none;
+    border-bottom: 1px solid var(--vscode-editorWidget-border, #454545);
+    font-family: var(--vscode-editor-font-family, monospace);
+}
+
+.ui-dialog .ui-dialog-content {
+    background: var(--vscode-editor-background, #1e1e1e);
+}
+
+.ui-dialog .btn {
+    background: var(--vscode-button-secondaryBackground, #3a3d41);
+    color: var(--vscode-button-secondaryForeground, #ffffff);
+    border: 1px solid var(--vscode-editorWidget-border, transparent);
+    border-radius: 3px;
+    padding: 2px 8px;
+    margin-right: 4px;
+    cursor: pointer;
+}

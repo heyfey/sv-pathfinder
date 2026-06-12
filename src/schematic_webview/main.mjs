@@ -91,6 +91,21 @@ function cleanSubcircuitCaptions(index) {
 }
 
 // ---- cross-nav click handlers (Spike 2 source_nav.md) ----
+
+// Hierarchical path of subcircuit instance labels enclosing a model's graph; [] for the
+// top paper. Lets clicks inside child popup windows resolve against the right instance.
+function graphPath(model) {
+    const path = [];
+    let graph = model.graph;
+    while (graph) {
+        const sc = graph.get('subcircuit');
+        if (!sc || sc === true || typeof sc.get !== 'function' || !sc.has('label')) { break; }
+        path.unshift(sc.get('label'));
+        graph = sc.graph;
+    }
+    return path;
+}
+
 function emitClick(model) {
     const isLink = typeof model.isLink === 'function' && model.isLink();
     const celltype = model.get('celltype');
@@ -100,6 +115,7 @@ function emitClick(model) {
         // IO port devices carry the port name in 'net' (no 'label')
         leafName: isLink ? model.get('netname') : (model.get('label') || model.get('net')),
         celltype,
+        path: graphPath(model),
         sourcePositions: model.get('source_positions') || [],
         action: 'source',
     });
@@ -118,14 +134,27 @@ function loadSchematic(msg) {
     const container = document.getElementById('paper-container');
     container.innerHTML = '<div id="paper"></div>';
 
-    // subcircuitButtons/windowCallback defaults use jquery-ui dialogs; fine inside the webview
-    circuit = new Circuit(msg.circuit, { layoutEngine: 'elkjs' });
+    // default windowCallback uses jquery-ui dialogs (fine inside the webview); wrap it
+    // only to clean uniquified module names out of the dialog title
+    circuit = new Circuit(msg.circuit, {
+        layoutEngine: 'elkjs',
+        windowCallback: function (type, div, closingCallback) {
+            const title = div.attr('title');
+            if (title) {
+                div.attr('title', title.split(' ').map(cleanModuleName).join(' '));
+            }
+            Circuit.prototype._defaultWindowCallback.call(this, type, div, closingCallback);
+        },
+    });
+    // 'new:paper' fires for the main paper AND each subcircuit popup paper — bind the
+    // cross-nav click handler on all of them (must be registered before displayOn).
+    circuit.on('new:paper', (p) => {
+        p.on('cell:pointerclick', (cellView) => emitClick(cellView.model));
+    });
     paper = circuit.displayOn(paperDiv());
     labelIndex = circuit.getLabelIndex();
     cleanSubcircuitCaptions(labelIndex);
-
     // never start the engine — external values only
-    paper.on('cell:pointerclick', (cellView) => emitClick(cellView.model));
     // ELK runs asynchronously AFTER displayOn returns and applies all cell positions in
     // one batch when done. Fit once after that batch settles, then DISARM — fitting on
     // every render:done oscillates the viewport on mouse hover (hover artifacts trigger
