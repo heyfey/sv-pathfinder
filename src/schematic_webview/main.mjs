@@ -41,6 +41,14 @@ cells.IOView.prototype._calculateBoxWidth = function () {
     return 20;
 };
 
+// Drop the wire hover-tools (delete-wire ✕, monitor 🔍, endpoint reconnect, reshape) —
+// these are digitaljs editor/simulator affordances inappropriate for a read-only viewer
+// (the ✕ deletes a wire from the schematic; the 🔍 routes to digitaljs's own waveform
+// monitor, which we don't use — VaporView is the waveform). WireView.mouseenter calls
+// addTools() then _addTooltip() independently, so no-opping addTools keeps the useful
+// value-on-hover tooltip while removing the toolset.
+cells.WireView.prototype.addTools = function () { return this; };
+
 const vscode = acquireVsCodeApi();
 
 let circuit = null;
