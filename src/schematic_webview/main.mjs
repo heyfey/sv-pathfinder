@@ -1,10 +1,22 @@
 // Schematic webview script: hosts digitaljs (current stock, JointJS/ELK) and bridges
 // to the extension. The simulation engine is constructed but NEVER started — wire
 // values are driven externally from VaporView data (Spike 2 recipe).
-import { Circuit } from 'digitaljs';
+import { Circuit, cells } from 'digitaljs';
 import { Vector3vl } from '3vl';
 // our overrides must come after digitaljs's own CSS (pulled in by the import above)
 import './style.css';
+
+// Make input ports non-interactive: digitaljs renders Input cells as clickable
+// buttons / typable fields whose handlers toggle or set the input's own value. That's
+// a *simulator* control, but this is a read-only viewer — the engine never runs, so a
+// hand-set input wouldn't propagate, and it would fight the VaporView value annotation
+// (two sources of truth on one wire). Neutralize the value-edit handlers; cross-nav
+// (paper 'cell:pointerclick') is a separate, paper-level event and is unaffected.
+// Button/NumEntry === Input and ButtonView/NumEntryView === InputView in digitaljs,
+// so patching InputView covers every interactive input variant, on the main paper and
+// every subcircuit popup paper (all papers share this cellViewNamespace).
+cells.InputView.prototype._onButton = function () { };
+cells.InputView.prototype._onNumEntry = function () { };
 
 const vscode = acquireVsCodeApi();
 
