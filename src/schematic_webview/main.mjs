@@ -28,9 +28,9 @@ import './style.css';
 // height (digitaljs's Subcircuit uses 16px/row in cells/subcircuit.js; override that to ~28).
 // Widths stay name-driven; only heights change, so runtime value updates are pure text swaps.
 const SPACING = {
-    compact:     { nodeNode: 24, betweenLayers: 36, edgeNode: 12, edgeEdge: 10, edgeLabel: 3, labelPad: 6,  labelH: 14, boxGap: 44, ioPad: 18, netChannel: 0.5 },
-    comfortable: { nodeNode: 34, betweenLayers: 56, edgeNode: 22, edgeEdge: 16, edgeLabel: 4, labelPad: 14, labelH: 16, boxGap: 56, ioPad: 24, netChannel: 0.85 },
-    spacious:    { nodeNode: 44, betweenLayers: 80, edgeNode: 30, edgeEdge: 24, edgeLabel: 5, labelPad: 24, labelH: 18, boxGap: 70, ioPad: 30, netChannel: 1.0 },
+    compact:     { nodeNode: 24, betweenLayers: 36, edgeNode: 12, edgeEdge: 10, edgeLabel: 3, labelPad: 6,  labelH: 14, boxGap: 56, ioPad: 26, netChannel: 0.5 },
+    comfortable: { nodeNode: 34, betweenLayers: 56, edgeNode: 22, edgeEdge: 16, edgeLabel: 4, labelPad: 14, labelH: 16, boxGap: 70, ioPad: 34, netChannel: 0.85 },
+    spacious:    { nodeNode: 44, betweenLayers: 80, edgeNode: 30, edgeEdge: 24, edgeLabel: 5, labelPad: 24, labelH: 18, boxGap: 84, ioPad: 42, netChannel: 1.0 },
 };
 let spacing = SPACING.compact;
 
@@ -67,7 +67,7 @@ cells.IOView.prototype._calculateBoxWidth = function () {
     // Estimate from the model net name (textWidth), not the DOM: at sizing time the paper is
     // frozen so the text isn't laid out (getBBox ~0). estimate = name*charPx + tier padding.
     const net = this.model.get('net') || '';
-    return net ? Math.ceil(textWidth(net)) + spacing.ioPad : 20;
+    return net ? Math.ceil(boxTextWidth(net)) + spacing.ioPad : 20;
 };
 
 // Size child-instance (and dff/fsm/memory) boxes to fit their port-name labels. digitaljs's
@@ -81,7 +81,7 @@ cells.BoxView.prototype._calculateBoxWidth = function () {
     let lw = -5, rw = -5; // digitaljs's empty-side fixup
     for (const p of this.model.getPorts()) {
         if (!p.labelled) { continue; }
-        const w = textWidth('portlabel' in p ? p.portlabel : p.id);
+        const w = boxTextWidth('portlabel' in p ? p.portlabel : p.id);
         if (p.group === 'out') { rw = Math.max(rw, w); } else if (p.group === 'in') { lw = Math.max(lw, w); }
     }
     return Math.ceil(lw + rw) + spacing.boxGap;
@@ -161,6 +161,11 @@ ELK.prototype.layout = function (graph, opts) {
 // the first real labels (see calibrateCharPx), so popups and later renders track it exactly.
 let charPx = 6.6;
 const textWidth = (s) => (s ? String(s).length : 0) * charPx;
+// Boxes reserve more than the bare text so port/instance names sit inside with margin (and
+// to stay safe when the font is wider than the estimate). Applied to box sizing only — NOT to
+// the net-name channel, so wires don't get longer.
+const BOX_TEXT_FUDGE = 1.3;
+const boxTextWidth = (s) => textWidth(s) * BOX_TEXT_FUDGE;
 // After a paper unfreezes, real label geometry is valid — measure a few labels once to learn
 // this environment's per-char advance, so subsequent layouts (popups, reloads) size exactly.
 let _calibrated = false;
