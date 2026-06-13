@@ -54,10 +54,15 @@ wires — rendered with [digitaljs](https://github.com/tilk/digitaljs).
 
 - Click a cell or instance to jump to its RTL source; click a wire to jump to the signal
   declaration. Boxes navigate to the module declaration.
+- Hovering any cell/instance/port/wire highlights it and names it in the status bar.
 - The schematic is elaborated with the instance's actual parameter values.
+- Navigate the hierarchy with the **↰ go-to-parent** button; child instances are filled
+  with an accent color so they're easy to spot.
+- Pan by dragging the canvas; zoom with **Ctrl+scroll** (or the toolbar buttons).
 - RTL view is the default; the `RTL`/`GLS` button toggles a gate-level view.
 - With a waveform open in VaporView, moving the marker annotates schematic wires with
-  signal values at the cursor time (`z` is shown as `x`).
+  signal values at the cursor time (green = 1, red = 0, gray = x/undriven; `z` shown as `x`).
+- It is a read-only viewer (no editing/simulation of the schematic).
 
 Requires [Yosys](https://github.com/YosysHQ/yosys). The recommended setup is
 [OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build), which bundles Yosys with
@@ -88,6 +93,7 @@ sv-pathfinder is seamlessly integrated with VaporView – [Download](https://mar
 - `"sv-pathfinder.showInstancesView": boolean`, Show the instances view. Need to reload window to take effect.
     - Default: `true`
 - `"sv-pathfinder.ossCadSuitePath": string`, Path to the OSS CAD Suite installation directory (the folder containing `bin/yosys`), used by the schematic feature. If empty, `yosys` is resolved from PATH, then `yowasp-yosys`.
+- `"sv-pathfinder.schematicAccentColor": string`, Accent color for the schematic (child-instance fills and hover highlights). Any CSS color; empty uses a theme-aware default.
 
 ## Requirements
 
