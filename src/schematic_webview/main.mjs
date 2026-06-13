@@ -214,16 +214,20 @@ function loadSchematic(msg) {
             Circuit.prototype._defaultWindowCallback.call(this, type, div, closingCallback);
         },
     });
-    // 'new:paper' fires for the main paper AND each subcircuit popup paper — bind the
-    // cross-nav click handler on all of them (must be registered before displayOn).
+    // 'new:paper' fires for the main paper AND each subcircuit popup paper — bind click,
+    // hover, and navigation (wheel zoom/pan + drag pan) on all of them so popup windows
+    // behave like the main canvas. (Registered before displayOn.)
     circuit.on('new:paper', (p) => {
         p.on('cell:pointerclick', (cellView) => emitClick(cellView.model));
         bindHover(p);
+        attachNav(p);
+        if (document.getElementById('paper-container').contains(p.el)) {
+            setupMainPaper(p);
+        }
     });
     paper = circuit.displayOn(paperDiv());
     labelIndex = circuit.getLabelIndex();
     cleanSubcircuitCaptions(labelIndex);
-    attachPan(paper); // drag blank canvas to pan
     // never start the engine — external values only
     // ELK runs asynchronously AFTER displayOn returns and applies all cell positions in
     // one batch when done. Fit once after that batch settles, then DISARM — fitting on
@@ -288,56 +292,63 @@ function bindHover(p) {
     });
 }
 
-// ---- toolbar ----
-function zoomBy(factor) {
-    if (!paper) { return; }
-    autoFit = false;
-    const s = Math.min(Math.max(paper.scale().sx * factor, 0.05), 10);
-    paper.scale(s);
-    paper.fitToContent({ padding: 30, allowNewOrigin: 'any' });
+// ---- pan / zoom (fully transform-based) ----
+// The view is driven entirely by the paper's transform (scale + translate). We do NOT use
+// digitaljs's content-sizing (it resizes the SVG to the content on every render, which
+// breaks transform pan/zoom and wheel-scroll range). Instead the main paper is sized to
+// the container, and all navigation moves the transform. Works identically on the main
+// paper and on subcircuit popup papers.
+
+let mainResizeObs = null;
+
+// Make a paper fill its container and stop digitaljs from resizing it to the content.
+function setupMainPaper(p) {
+    p.fitToContent = function () { return this; }; // neutralize digitaljs render:done auto-resize
+    const c = document.getElementById('paper-container');
+    p.setDimensions(c.clientWidth, c.clientHeight);
+    if (mainResizeObs) { mainResizeObs.disconnect(); }
+    mainResizeObs = new ResizeObserver(() => {
+        p.setDimensions(c.clientWidth, c.clientHeight);
+        if (autoFit) { fitToView(); }
+    });
+    mainResizeObs.observe(c);
 }
 
-function fitToView() {
-    if (!paper) { return; }
-    const container = document.getElementById('paper-container');
-    try {
-        paper.transformToFitContent({
-            padding: 20,
-            minScale: 0.05,
-            maxScale: 1,
-            fittingBBox: { x: 0, y: 0, width: container.clientWidth, height: container.clientHeight },
-        });
-    } catch (e) {
-        // older JointJS without transformToFitContent: fall back to 1:1
-        paper.scale(1);
-    }
-    // digitaljs re-runs fitToContent({padding: 30}) on EVERY render:done (hover included);
-    // end with the identical call so those refits are idempotent and the view never jumps.
-    paper.fitToContent({ padding: 30, allowNewOrigin: 'any' });
-}
-
-// Zoom keeping the point under the cursor fixed (ctrl+wheel). Unlike zoomBy, this does NOT
-// refit — it scales then translates so the local point beneath (clientX, clientY) stays put.
-function zoomAround(factor, clientX, clientY) {
-    if (!paper) { return; }
+// Scale a paper around a client point, keeping that point fixed under the cursor.
+function zoomAround(p, factor, clientX, clientY) {
     autoFit = false;
-    const s0 = paper.scale().sx;
-    const s1 = Math.min(Math.max(s0 * factor, 0.05), 10);
+    const s0 = p.scale().sx;
+    const s1 = Math.min(Math.max(s0 * factor, 0.02), 10);
     if (s1 === s0) { return; }
-    const rect = paperDiv().getBoundingClientRect();
+    const rect = p.el.getBoundingClientRect();
     const px = clientX - rect.left;
     const py = clientY - rect.top;
-    const t = paper.translate();
+    const t = p.translate();
     const lx = (px - t.tx) / s0; // graph-local point under the cursor
     const ly = (py - t.ty) / s0;
-    paper.scale(s1);
-    paper.translate(px - lx * s1, py - ly * s1);
+    p.scale(s1);
+    p.translate(px - lx * s1, py - ly * s1);
 }
 
-// Drag the blank canvas to pan (cell drags still move the cell). Attached per paper.
-function attachPan(p) {
-    let panning = false;
-    let startX = 0, startY = 0, startT = null;
+// Wheel + drag navigation, attached to every paper (main + popups):
+//   ctrl+wheel  -> zoom around the cursor
+//   plain wheel -> pan (scroll up/down; shift = left/right; trackpads use deltaX directly)
+//   drag blank  -> pan (cell drags still move the cell)
+function attachNav(p) {
+    p.el.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        if (e.ctrlKey) {
+            zoomAround(p, e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX, e.clientY);
+        } else {
+            autoFit = false;
+            let dx = e.deltaX, dy = e.deltaY;
+            if (e.shiftKey && dx === 0) { dx = dy; dy = 0; }
+            const t = p.translate();
+            p.translate(t.tx - dx, t.ty - dy);
+        }
+    }, { passive: false });
+
+    let panning = false, startX = 0, startY = 0, startT = null;
     p.on('blank:pointerdown', (evt) => {
         panning = true;
         autoFit = false;
@@ -346,28 +357,40 @@ function attachPan(p) {
         startT = p.translate();
         p.el.style.cursor = 'grabbing';
     });
-    const move = (evt) => {
+    document.addEventListener('pointermove', (evt) => {
         if (!panning) { return; }
         p.translate(startT.tx + (evt.clientX - startX), startT.ty + (evt.clientY - startY));
-    };
-    const up = () => {
+    });
+    document.addEventListener('pointerup', () => {
         if (!panning) { return; }
         panning = false;
         p.el.style.cursor = '';
-    };
-    document.addEventListener('pointermove', move);
-    document.addEventListener('pointerup', up);
+    });
+}
+
+// Fit content into the (container-sized) main paper by adjusting the transform only.
+function fitToView() {
+    if (!paper) { return; }
+    const c = document.getElementById('paper-container');
+    paper.setDimensions(c.clientWidth, c.clientHeight);
+    try {
+        paper.transformToFitContent({ padding: 24, minScale: 0.02, maxScale: 1, useModelGeometry: true });
+    } catch (e) {
+        paper.scale(1);
+        paper.translate(24, 24);
+    }
+}
+
+// Toolbar zoom buttons: zoom the main paper around the viewport center.
+function zoomBy(factor) {
+    if (!paper) { return; }
+    const r = document.getElementById('paper-container').getBoundingClientRect();
+    zoomAround(paper, factor, r.left + r.width / 2, r.top + r.height / 2);
 }
 
 document.getElementById('zoom-in').addEventListener('click', () => zoomBy(1.25));
 document.getElementById('zoom-out').addEventListener('click', () => zoomBy(0.8));
 document.getElementById('zoom-fit').addEventListener('click', fitToView);
-// ctrl+wheel zooms around the cursor; plain wheel keeps native container scrolling
-document.getElementById('paper-container').addEventListener('wheel', (e) => {
-    if (!e.ctrlKey) { return; }
-    e.preventDefault();
-    zoomAround(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX, e.clientY);
-}, { passive: false });
 document.getElementById('refresh').addEventListener('click', () => post({ type: 'refresh' }));
 document.getElementById('go-parent').addEventListener('click', () => post({ type: 'goToParent' }));
 const presetButton = document.getElementById('preset-toggle');

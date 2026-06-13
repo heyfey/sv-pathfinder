@@ -47,7 +47,13 @@ html, body {
 
 #paper-container {
     flex: 1 1 auto;
-    overflow: auto;
+    overflow: hidden; /* navigation is transform-based (drag / wheel pan); no native scroll */
+    position: relative;
+}
+
+#paper {
+    width: 100%;
+    height: 100%;
 }
 
 #status {
