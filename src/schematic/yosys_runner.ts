@@ -93,8 +93,10 @@ function buildScript(backend: Backend, ctx: ScopeContext, preset: SchematicPrese
     if (backend.slang) {
         // -G applies resolved instance params at elaboration; --keep-hierarchy keeps
         // children as boxes (without it yosys-slang inlines everything).
+        // --ignore-timing: delays (`a = #1 b;`) are sim-only and otherwise hard errors
+        // in slang's synthesis path — common in legacy RTL; irrelevant to structure.
         const gFlags = ctx.resolvedParams.map(p => `-G ${p.name}=${p.verilogLiteral}`).join(' ');
-        read = `read_slang --keep-hierarchy ${gFlags} --top ${ctx.moduleName} ${files}`;
+        read = `read_slang --keep-hierarchy --ignore-timing ${gFlags} --top ${ctx.moduleName} ${files}`;
     } else {
         read = `read_verilog -sv -DSYNTHESIS ${files}`;
         chparam = ctx.resolvedParams.map(p => ` -chparam ${p.name} ${p.verilogLiteral}`).join('');
