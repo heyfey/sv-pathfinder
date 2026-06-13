@@ -224,7 +224,7 @@ function loadSchematic(msg) {
         attachNav(p);
         // ELK positions cells asynchronously; drop the cached content bbox while it changes
         // so clamping/overviews recompute from the final layout, not a pre-layout box.
-        p.model.on('change:position change:size add remove', () => invalidateArea(p));
+        watchAreaInvalidation(p.model);
         if (document.getElementById('paper-container').contains(p.el)) {
             setupMainPaper(p);          // main: minimap or scrollbars per setting
         } else {
@@ -308,20 +308,30 @@ function bindHover(p) {
 let mainResizeObs = null;
 let overviewMode = 'scrollbars'; // 'scrollbars' | 'minimap' (main); from the setting per load
 
-// Content bounding box (graph-local), cached per paper. getContentArea is O(N); cache it
-// so pan-clamping stays O(1) per frame, but INVALIDATE on layout changes — ELK lays the
-// graph out asynchronously, so the first reads happen before cells are positioned. Without
-// invalidation a stale (tiny, top-left) box gets cached and the clamp locks the view to the
-// wrong region (can't pan to the far/bottom-right edges).
-const _area = new WeakMap();
-function invalidateArea(p) { _area.delete(p); }
+// Content bounding box (graph-local), cached per GRAPH. It's a property of the cell
+// positions, not the paper, so re-opened popup papers that share a subgraph reuse the
+// correct cache. getContentArea is O(N); caching keeps pan-clamping O(1) per frame. The
+// cache is INVALIDATED on layout changes — ELK lays the graph out asynchronously, so the
+// first reads happen before cells are positioned; without this a stale (tiny, top-left)
+// box gets cached and the clamp locks the view to the wrong region.
+const _area = new WeakMap();          // graph -> content area
+const _areaListened = new WeakSet();  // graphs that already have the invalidation listener
 function contentAreaOf(p) {
-    let a = _area.get(p);
+    const g = p.model;
+    let a = _area.get(g);
     if (!a) {
         a = p.getContentArea({ useModelGeometry: true });
-        if (a && a.width && a.height) { _area.set(p, a); }
+        if (a && a.width && a.height) { _area.set(g, a); }
     }
     return a;
+}
+// Invalidate a graph's cached bbox when its layout changes — once per graph, so reopening
+// the same subcircuit popup doesn't stack duplicate listeners (which would also retain the
+// disposed popup papers). WeakSet/WeakMap drop the graph entry when the graph is GC'd.
+function watchAreaInvalidation(g) {
+    if (_areaListened.has(g)) { return; }
+    _areaListened.add(g);
+    g.on('change:position change:size add remove', () => _area.delete(g));
 }
 
 // Clamp a translate so the viewport can't pan off the content into infinite emptiness.
