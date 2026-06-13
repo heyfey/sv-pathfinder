@@ -97,6 +97,13 @@ html, body {
     fill: var(--vscode-editor-foreground, #cccccc);
 }
 
+/* hover highlight: accent glow on the hovered cell/wire (class toggled from JS).
+ * A drop-shadow outlines any shape without overriding the wire's value stroke color. */
+.djs .sv-hover {
+    filter: drop-shadow(0 0 3px var(--sv-accent, var(--vscode-charts-blue)))
+            drop-shadow(0 0 1px var(--sv-accent, var(--vscode-charts-blue)));
+}
+
 /* NOTE: wire value colors are NOT set here. digitaljs colors the wire's `line` selector
  * by signal value via SVG attributes (high/low/def/undef); a CSS `stroke` rule on the
  * connection path overrides those attributes and would flatten every wire to one color.

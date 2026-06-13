@@ -213,6 +213,7 @@ function loadSchematic(msg) {
     // cross-nav click handler on all of them (must be registered before displayOn).
     circuit.on('new:paper', (p) => {
         p.on('cell:pointerclick', (cellView) => emitClick(cellView.model));
+        bindHover(p);
     });
     paper = circuit.displayOn(paperDiv());
     labelIndex = circuit.getLabelIndex();
@@ -243,8 +244,43 @@ function loadSchematic(msg) {
     window.__schematic = { circuit, paper, labelIndex };
 }
 
+let baseStatus = ''; // persistent status (load / value count); hover overlays it transiently
 function setStatus(text) {
+    baseStatus = text;
     document.getElementById('status').textContent = text;
+}
+
+// One-line identity of a hovered model, shown in the status bar.
+function describe(model) {
+    if (typeof model.isLink === 'function' && model.isLink()) {
+        const name = model.get('netname');
+        const bits = model.get('bits') || 1;
+        return name ? `net: ${name} [${bits} bit${bits > 1 ? 's' : ''}]` : `net [${bits} bit${bits > 1 ? 's' : ''}]`;
+    }
+    const celltype = model.get('celltype');
+    if (celltype) { return `instance: ${model.get('label')} (${cleanModuleName(celltype)})`; }
+    const type = model.get('type');
+    if (type === 'Input' || type === 'Output') { return `port: ${model.get('net')} (${type.toLowerCase()})`; }
+    return `${type}: ${model.get('label') || ''}`.trim();
+}
+
+// Hover: glow the element/wire in the accent color (CSS drop-shadow on the cell's <g>)
+// and name it in the status bar. A class toggle avoids fighting the wire value colors and
+// any duplicate-JointJS-instance issues with the highlighter API. Bound per paper (main +
+// popups). Reuses the wire value tooltip digitaljs already shows.
+let hovered = null;
+function bindHover(p) {
+    p.on('cell:mouseenter', (cv) => {
+        if (hovered) { hovered.classList.remove('sv-hover'); }
+        hovered = cv.el;
+        hovered.classList.add('sv-hover');
+        document.getElementById('status').textContent = describe(cv.model);
+    });
+    p.on('cell:mouseleave', (cv) => {
+        cv.el.classList.remove('sv-hover');
+        if (hovered === cv.el) { hovered = null; }
+        document.getElementById('status').textContent = baseStatus;
+    });
 }
 
 // ---- toolbar ----
