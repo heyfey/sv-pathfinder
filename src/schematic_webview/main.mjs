@@ -222,6 +222,9 @@ function loadSchematic(msg) {
         p.on('cell:pointerclick', (cellView) => emitClick(cellView.model));
         bindHover(p);
         attachNav(p);
+        // ELK positions cells asynchronously; drop the cached content bbox while it changes
+        // so clamping/overviews recompute from the final layout, not a pre-layout box.
+        p.model.on('change:position change:size add remove', () => invalidateArea(p));
         if (document.getElementById('paper-container').contains(p.el)) {
             setupMainPaper(p);          // main: minimap or scrollbars per setting
         } else {
@@ -306,8 +309,12 @@ let mainResizeObs = null;
 let overviewMode = 'scrollbars'; // 'scrollbars' | 'minimap' (main); from the setting per load
 
 // Content bounding box (graph-local), cached per paper. getContentArea is O(N); cache it
-// once a valid (laid-out) box is available so pan-clamping stays O(1) per frame.
+// so pan-clamping stays O(1) per frame, but INVALIDATE on layout changes — ELK lays the
+// graph out asynchronously, so the first reads happen before cells are positioned. Without
+// invalidation a stale (tiny, top-left) box gets cached and the clamp locks the view to the
+// wrong region (can't pan to the far/bottom-right edges).
 const _area = new WeakMap();
+function invalidateArea(p) { _area.delete(p); }
 function contentAreaOf(p) {
     let a = _area.get(p);
     if (!a) {
@@ -330,10 +337,11 @@ function clampTranslate(p, tx, ty) {
     const cL = a.x * s, cR = (a.x + a.width) * s, cT = a.y * s, cB = (a.y + a.height) * s;
     // For one axis: content spans [c0, cEnd] in screen px at translate 0; viewport is [0, view].
     const axis = (c0, cEnd, view, m) => {
-        let lo = view - cEnd - m;   // pan limit: content right edge no further left than view-m
-        let hi = -c0 + m;           // pan limit: content left edge no further right than m
-        if (lo > hi) { const mid = (view - (cEnd - c0)) / 2 - c0; lo = mid - m; hi = mid + m; } // fits: center ±m
-        return [lo, hi];
+        if (cEnd - c0 <= view) {                 // content fits this axis: center it, ±m wiggle
+            const mid = (view - (cEnd - c0)) / 2 - c0;
+            return [mid - m, mid + m];
+        }
+        return [view - cEnd - m, -c0 + m];       // larger than viewport: pan across, ≤ m past an edge
     };
     const [txLo, txHi] = axis(cL, cR, W, mX);
     const [tyLo, tyHi] = axis(cT, cB, H, mY);
