@@ -2,6 +2,7 @@
 // to the extension. The simulation engine is constructed but NEVER started — wire
 // values are driven externally from VaporView data (Spike 2 recipe).
 import { Circuit, cells } from 'digitaljs';
+import ELK from 'elkjs/lib/elk.bundled.js';
 import { Vector3vl } from '3vl';
 // our overrides must come after digitaljs's own CSS (pulled in by the import above)
 import './style.css';
@@ -53,6 +54,55 @@ cells.WireView.prototype.addTools = function () { return this; };
 // on those cells). Subcircuit 🔍 navigation is a different handler and stays.
 cells.MemoryView.prototype._displayEditor = function () { };
 cells.FSMView.prototype._displayEditor = function () { };
+
+// ELK layout: roomier spacing + reserve a clear channel for each wire's net-name label.
+// digitaljs feeds ELK a tight, fixed option set (lib/elkjs.js) and never tells it about the
+// net-name labels it draws at every wire's midpoint — so on dense levels boxes pack
+// together and those labels collide with box edges and with one another. We can't reach
+// digitaljs's private to_elkjs(), but (a) every Wire carries its netname at construction and
+// (b) every layout runs through ELK.layout(elkGraph). So: record each wire's label size by
+// id, and just before ELK runs, widen the spacing and attach each edge's label so ELK
+// reserves room for it. digitaljs still draws the label itself (we ignore ELK's label
+// position); we only buy it space. This is the readability fix for crowding/label overlap;
+// value annotation is color-only, so it adds no extra text and won't compound it.
+const _wireLabelDims = new Map(); // wire/link id -> { width, height, text }
+const _measureCtx = (() => {
+    const c = document.createElement('canvas').getContext('2d');
+    if (c) { c.font = '10.6px sans-serif'; } // ≈ digitaljs's 8pt net-name label
+    return c;
+})();
+function netLabelDims(text) {
+    const w = _measureCtx ? _measureCtx.measureText(text).width : text.length * 5.5;
+    return { width: Math.ceil(w) + 6, height: 14, text };
+}
+const _origWireInit = cells.Wire.prototype.initialize;
+cells.Wire.prototype.initialize = function () {
+    _origWireInit.apply(this, arguments);
+    const nm = this.get('netname');
+    if (nm) { _wireLabelDims.set(this.id, netLabelDims(nm)); }
+};
+const _origElkLayout = ELK.prototype.layout;
+ELK.prototype.layout = function (graph, opts) {
+    // only touch digitaljs's schematic graphs (the 'root' graph with the props it sets)
+    if (graph && graph.id === 'root' && graph.properties && Array.isArray(graph.edges)) {
+        Object.assign(graph.properties, {
+            'elk.spacing.nodeNode': 28,                       // siblings within a column (ELK default 20)
+            'elk.layered.spacing.nodeNodeBetweenLayers': 50,  // column gap (digitaljs default 40)
+            'elk.spacing.edgeNode': 18,                       // wire-to-box clearance
+            'elk.spacing.edgeEdge': 12,
+            'elk.layered.spacing.edgeNodeBetweenLayers': 18,
+            'elk.layered.spacing.edgeEdgeBetweenLayers': 12,
+            'org.eclipse.elk.edgeLabels.inline': true,        // labels sit on the wire, as digitaljs draws them
+            'elk.spacing.edgeLabel': 3,
+        });
+        for (const e of graph.edges) {
+            if (e.labels) { continue; }
+            const d = _wireLabelDims.get(e.id);
+            if (d) { e.labels = [{ id: e.id + ':netlabel', text: d.text, width: d.width, height: d.height }]; }
+        }
+    }
+    return _origElkLayout.call(this, graph, opts);
+};
 
 // Don't open more than one popup for the same child instance. Gate the subcircuit zoom
 // handler: if a popup for this instance is already open, raise it instead of opening a
@@ -216,6 +266,7 @@ function loadSchematic(msg) {
     }
     _openSubKeys.clear();      // popups from the previous schematic are gone
     _openSubDialogs.clear();
+    _wireLabelDims.clear();    // net-label sizes are re-recorded as this design's wires build
     document.getElementById('breadcrumb').textContent = `${msg.scopePath}  (${msg.moduleName})`;
     document.getElementById('go-parent').disabled = !msg.hasParent;
     overviewMode = msg.overview === 'minimap' ? 'minimap' : 'scrollbars'; // main-paper overview
