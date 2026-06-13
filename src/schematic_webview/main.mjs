@@ -49,6 +49,11 @@ cells.IOView.prototype._calculateBoxWidth = function () {
 // value-on-hover tooltip while removing the toolset.
 cells.WireView.prototype.addTools = function () { return this; };
 
+// Read-only viewer: don't open digitaljs's editable Memory / FSM content editors (the 🔍
+// on those cells). Subcircuit 🔍 navigation is a different handler and stays.
+cells.MemoryView.prototype._displayEditor = function () { };
+cells.FSMView.prototype._displayEditor = function () { };
+
 // Theme-aware wire value palette. digitaljs colors wires by signal value via the `line`
 // selector attrs (hard-coded greens/reds); replace them with VS Code theme colors so the
 // schematic harmonizes with the editor and VaporView. undef stays a muted neutral — most
