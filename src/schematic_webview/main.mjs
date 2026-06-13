@@ -16,12 +16,17 @@ import './style.css';
 //   boxGap  — clearance between a block's left-side and right-side port labels (digitaljs
 //             hard-codes 25, which lets long names collide in the middle).
 //   ioPad   — horizontal padding inside a top-level IO box so its name doesn't touch the edge.
+//   netChannel — how much of each net-name label's width ELK reserves as a clear lane on the
+//             wire (0..1). The reserved lane plus the betweenLayers margins on both sides set
+//             the minimum wire length, so this is the main lever on how long/empty wires look.
+//             compact reserves little (short wires; a label may sit closer to a box); roomier
+//             tiers reserve the full label so names never touch a box.
 // When value annotation later renders a value next to/under a label, give it room here:
-// bump `labelH`/`labelPad` (wire labels) and `boxGap`/`ioPad` (in-box port labels).
+// bump `labelH`/`labelPad`/`netChannel` (wire labels) and `boxGap`/`ioPad` (in-box names).
 const SPACING = {
-    compact:     { nodeNode: 28, betweenLayers: 50, edgeNode: 18, edgeEdge: 12, edgeLabel: 3, labelPad: 6,  labelH: 14, boxGap: 44, ioPad: 18 },
-    comfortable: { nodeNode: 36, betweenLayers: 64, edgeNode: 24, edgeEdge: 18, edgeLabel: 4, labelPad: 16, labelH: 16, boxGap: 56, ioPad: 24 },
-    spacious:    { nodeNode: 44, betweenLayers: 80, edgeNode: 30, edgeEdge: 24, edgeLabel: 5, labelPad: 24, labelH: 18, boxGap: 70, ioPad: 30 },
+    compact:     { nodeNode: 24, betweenLayers: 36, edgeNode: 12, edgeEdge: 10, edgeLabel: 3, labelPad: 6,  labelH: 14, boxGap: 44, ioPad: 18, netChannel: 0.5 },
+    comfortable: { nodeNode: 34, betweenLayers: 56, edgeNode: 22, edgeEdge: 16, edgeLabel: 4, labelPad: 14, labelH: 16, boxGap: 56, ioPad: 24, netChannel: 0.85 },
+    spacious:    { nodeNode: 44, betweenLayers: 80, edgeNode: 30, edgeEdge: 24, edgeLabel: 5, labelPad: 24, labelH: 18, boxGap: 70, ioPad: 30, netChannel: 1.0 },
 };
 let spacing = SPACING.compact;
 
@@ -135,7 +140,10 @@ const _wireLabelDims = new Map(); // wire/link id -> { width, height, text }
 // bump `height` (value on a second line) or `width` (value alongside) — and ELK will widen
 // the channel to fit it; nothing else here needs to change.
 function netLabelDims(text) {
-    return { width: Math.ceil(measureLabel(text)) + spacing.labelPad, height: spacing.labelH, text };
+    // Reserve only `netChannel` of the label width so compact tiers keep wires short; ELK
+    // still inserts a lane (≥ this) that the betweenLayers margins pad out from the boxes.
+    const w = measureLabel(text) * spacing.netChannel + spacing.labelPad;
+    return { width: Math.max(1, Math.ceil(w)), height: spacing.labelH, text };
 }
 const _origWireInit = cells.Wire.prototype.initialize;
 cells.Wire.prototype.initialize = function () {
