@@ -71,9 +71,15 @@ const _measureCtx = (() => {
     if (c) { c.font = '10.6px sans-serif'; } // ≈ digitaljs's 8pt net-name label
     return c;
 })();
+// Reserved size of the channel ELK keeps clear for a net-name label. width = measured text
+// (long names get their full width) + generous side padding so the next box never abuts the
+// label end. height drives how far ELK spreads parallel labeled wires apart.
+// NOTE: when value annotation later renders the value under/next to the name, grow this —
+// bump `height` (value on a second line) or `width` (value alongside) — and ELK will widen
+// the channel to fit it; nothing else here needs to change.
 function netLabelDims(text) {
     const w = _measureCtx ? _measureCtx.measureText(text).width : text.length * 5.5;
-    return { width: Math.ceil(w) + 6, height: 14, text };
+    return { width: Math.ceil(w) + 16, height: 16, text };
 }
 const _origWireInit = cells.Wire.prototype.initialize;
 cells.Wire.prototype.initialize = function () {
@@ -86,14 +92,14 @@ ELK.prototype.layout = function (graph, opts) {
     // only touch digitaljs's schematic graphs (the 'root' graph with the props it sets)
     if (graph && graph.id === 'root' && graph.properties && Array.isArray(graph.edges)) {
         Object.assign(graph.properties, {
-            'elk.spacing.nodeNode': 28,                       // siblings within a column (ELK default 20)
-            'elk.layered.spacing.nodeNodeBetweenLayers': 50,  // column gap (digitaljs default 40)
-            'elk.spacing.edgeNode': 18,                       // wire-to-box clearance
-            'elk.spacing.edgeEdge': 12,
-            'elk.layered.spacing.edgeNodeBetweenLayers': 18,
-            'elk.layered.spacing.edgeEdgeBetweenLayers': 12,
+            'elk.spacing.nodeNode': 36,                       // siblings within a column (ELK default 20)
+            'elk.layered.spacing.nodeNodeBetweenLayers': 64,  // column gap (digitaljs default 40)
+            'elk.spacing.edgeNode': 24,                       // wire-to-box clearance
+            'elk.spacing.edgeEdge': 18,
+            'elk.layered.spacing.edgeNodeBetweenLayers': 24,
+            'elk.layered.spacing.edgeEdgeBetweenLayers': 18,
             'org.eclipse.elk.edgeLabels.inline': true,        // labels sit on the wire, as digitaljs draws them
-            'elk.spacing.edgeLabel': 3,
+            'elk.spacing.edgeLabel': 4,
         });
         for (const e of graph.edges) {
             if (e.labels) { continue; }
