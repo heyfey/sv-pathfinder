@@ -49,6 +49,24 @@ cells.IOView.prototype._calculateBoxWidth = function () {
 // value-on-hover tooltip while removing the toolset.
 cells.WireView.prototype.addTools = function () { return this; };
 
+// Theme-aware wire value palette. digitaljs colors wires by signal value via the `line`
+// selector attrs (hard-coded greens/reds); replace them with VS Code theme colors so the
+// schematic harmonizes with the editor and VaporView. undef stays a muted neutral — most
+// wires are undef when no waveform is loaded, so it must NOT be an alarm color.
+function cssVar(name, fallback) {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fallback;
+}
+function applyWireValuePalette() {
+    // the signal-color table lives on the WireView (read by its _updateSignal), not the model
+    cells.WireView.prototype.attrs.signal = {
+        high:  { line: { stroke: cssVar('--vscode-charts-green', '#2fb344') } }, // 1
+        low:   { line: { stroke: cssVar('--vscode-charts-red', '#f14c4c') } },   // 0
+        def:   { line: { stroke: cssVar('--vscode-charts-blue', '#4a9cff') } },  // defined bus
+        undef: { line: { stroke: cssVar('--vscode-disabledForeground', '#888888') } }, // x / no data
+    };
+}
+
 const vscode = acquireVsCodeApi();
 
 let circuit = null;
@@ -174,6 +192,7 @@ function loadSchematic(msg) {
     }
     document.getElementById('breadcrumb').textContent = `${msg.scopePath}  (${msg.moduleName})`;
     document.getElementById('go-parent').disabled = !msg.hasParent;
+    applyWireValuePalette(); // theme-aware value colors (re-read each load to track theme)
     setStatus('laying out schematic…');
     const container = document.getElementById('paper-container');
     container.innerHTML = '<div id="paper"></div>';

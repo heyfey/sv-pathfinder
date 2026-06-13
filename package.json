@@ -68,6 +68,11 @@
           "type": "string",
           "default": "",
           "markdownDescription": "Path to the [OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build) installation directory (the folder containing `bin/yosys`). OSS CAD Suite bundles Yosys with the [yosys-slang](https://github.com/povik/yosys-slang) SystemVerilog frontend, which the schematic feature uses as its primary backend. If empty, `yosys` is resolved from PATH; `yowasp-yosys` (`pip install yowasp-yosys`) is the zero-install fallback for simple designs."
+        },
+        "sv-pathfinder.schematicAccentColor": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Accent color for the schematic viewer (child-instance fills and hover highlights). Any CSS color (e.g. `#4cc2ff`, `dodgerblue`). If empty, a theme-aware color is used (`--vscode-charts-blue`)."
         }
       }
     },

@@ -161,6 +161,10 @@ export class SchematicViewProvider {
         const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'schematic_webview.js'));
         const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'schematic_webview.css'));
         const nonce = Array.from({ length: 32 }, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 36)]).join('');
+        // single configurable accent (instance fills + hover highlight); empty → theme color.
+        // sanitize to a conservative CSS-color charset so it can't break out of the rule.
+        const rawAccent = vscode.workspace.getConfiguration('sv-pathfinder').get<string>('schematicAccentColor', '').trim();
+        const accent = /^[#A-Za-z0-9(),.%\s]+$/.test(rawAccent) && rawAccent ? rawAccent : 'var(--vscode-charts-blue)';
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -168,6 +172,7 @@ export class SchematicViewProvider {
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} data:; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource} data:; script-src 'nonce-${nonce}';">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link href="${styleUri}" rel="stylesheet">
+<style>:root { --sv-accent: ${accent}; }</style>
 <title>Schematic</title>
 </head>
 <body>

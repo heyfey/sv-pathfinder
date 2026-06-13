@@ -79,21 +79,29 @@ html, body {
     stroke: var(--vscode-editor-foreground, #cccccc);
 }
 
+/* Child-instance (subcircuit) boxes filled with the configurable accent so they stand out
+ * at a glance (the "single accent color" setting). A light tint keeps the name + port
+ * labels readable; the accent stroke makes the boundary clear. JointJS tags these element
+ * views with .joint-type-subcircuit. --sv-accent is injected from the setting (falls back
+ * to the theme's chart blue). */
+.djs .joint-type-subcircuit [joint-selector="body"],
+.djs .joint-type-subcircuit rect.body {
+    fill: color-mix(in srgb, var(--sv-accent, var(--vscode-charts-blue)) 16%, var(--vscode-editorWidget-background, #252526));
+    stroke: var(--sv-accent, var(--vscode-charts-blue));
+    stroke-width: 1.5px;
+}
+
 /* text labels (cell names, port labels, wire netnames) */
 .djs .joint-cell text,
 .djs .joint-link text {
     fill: var(--vscode-editor-foreground, #cccccc);
 }
 
-/* default (undriven / multi-bit) wires */
-.djs .joint-link path.connection {
-    stroke: var(--vscode-editorWidget-border, #888888);
-}
-
-/* value-driven wire colors — digitaljs toggles classes on signal change;
- * keep them vivid and theme-independent for at-a-glance debug */
-.djs .joint-link.live path.connection { stroke: #4cc24c; }
-.djs .joint-link.low  path.connection { stroke: #6a9ddf; }
+/* NOTE: wire value colors are NOT set here. digitaljs colors the wire's `line` selector
+ * by signal value via SVG attributes (high/low/def/undef); a CSS `stroke` rule on the
+ * connection path overrides those attributes and would flatten every wire to one color.
+ * The theme-aware value palette is installed on cells.Wire.prototype.attrs.signal in
+ * main.mjs instead. */
 
 /* ---- subcircuit popup window (jquery-ui dialog) theming ---- */
 .ui-dialog {
