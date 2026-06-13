@@ -18,6 +18,29 @@ import './style.css';
 cells.InputView.prototype._onButton = function () { };
 cells.InputView.prototype._onNumEntry = function () { };
 
+// Render top-level IO ports as labeled boxes showing the net name — like the ports of a
+// subcircuit (the look the user asked for) — instead of interactive button / number-entry
+// / lamp widgets. We must NOT force the in-subcircuit "mode 0": that flag means "this IO
+// is a subcircuit boundary," and the circuit-level signal handler forwards a mode-0 IO's
+// value to its enclosing subcircuit (null at top level → crash during value annotation).
+// So keep digitaljs's natural mode (correct signal semantics) and change only RENDERING:
+//   - swap the markup to the box+ioname (net-name) markup, whatever the mode;
+//   - no-op the views' value-widget update (our markup has no button/lamp/number field);
+//   - size the box to the net name (the in-subcircuit width rule).
+const origIOCheckMode = cells.IO.prototype._checkMode;
+cells.IO.prototype._checkMode = function () {
+    const mode = origIOCheckMode.call(this); // keep correct mode + side effects
+    this.set('markup', this.markupInSubcircuit);
+    return mode;
+};
+cells.InputView.prototype._updateView = function () { };
+cells.OutputView.prototype._updateView = function () { };
+cells.IOView.prototype._calculateBoxWidth = function () {
+    const text = this.selectors['ioname'];
+    if (text && text.getAttribute('display') !== 'none') { return text.getBBox().width + 10; }
+    return 20;
+};
+
 const vscode = acquireVsCodeApi();
 
 let circuit = null;
