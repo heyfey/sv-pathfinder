@@ -374,7 +374,10 @@ function fitToView() {
     const c = document.getElementById('paper-container');
     paper.setDimensions(c.clientWidth, c.clientHeight);
     try {
-        paper.transformToFitContent({ padding: 24, minScale: 0.02, maxScale: 1, useModelGeometry: true });
+        paper.transformToFitContent({
+            padding: 24, minScale: 0.02, maxScale: 1, useModelGeometry: true,
+            verticalAlign: 'middle', horizontalAlign: 'middle', // center content in the viewport
+        });
     } catch (e) {
         paper.scale(1);
         paper.translate(24, 24);
