@@ -54,6 +54,25 @@ cells.WireView.prototype.addTools = function () { return this; };
 cells.MemoryView.prototype._displayEditor = function () { };
 cells.FSMView.prototype._displayEditor = function () { };
 
+// Don't open more than one popup for the same child instance. Gate the subcircuit zoom
+// handler: if a popup for this instance is already open, raise it instead of opening a
+// duplicate. The key is the dialog title digitaljs uses (celltype + ' ' + label), unique
+// per instance. open/close is tracked in the windowCallback wrapper below.
+const _openSubKeys = new Set();     // instance keys with an open popup
+const _openSubDialogs = new Map();  // key -> jquery-ui dialog div (to raise on re-click)
+cells.SubcircuitView.prototype.zoomInCircuit = function (evt) {
+    evt.stopPropagation();
+    const key = this.model.get('celltype') + ' ' + this.model.get('label');
+    if (_openSubKeys.has(key)) {
+        const dlg = _openSubDialogs.get(key);
+        if (dlg) { try { dlg.dialog('moveToTop'); } catch (e) { /* dialog not ready yet */ } }
+        return false;
+    }
+    _openSubKeys.add(key);                            // mark before trigger (guards fast double-clicks)
+    this.paper.trigger('open:subcircuit', this.model);
+    return false;
+};
+
 // Theme-aware wire value palette. digitaljs colors wires by signal value via the `line`
 // selector attrs (hard-coded greens/reds); replace them with VS Code theme colors so the
 // schematic harmonizes with the editor and VaporView. undef stays a muted neutral — most
@@ -190,11 +209,13 @@ function emitClick(model) {
 // ---- schematic load ----
 function loadSchematic(msg) {
     if (circuit) {
-        try { circuit.shutdown(); } catch (e) { /* ignore */ }
+        try { circuit.shutdown(); } catch (e) { /* ignore */ } // closes any open popups
         circuit = null;
         paper = null;
         labelIndex = null;
     }
+    _openSubKeys.clear();      // popups from the previous schematic are gone
+    _openSubDialogs.clear();
     document.getElementById('breadcrumb').textContent = `${msg.scopePath}  (${msg.moduleName})`;
     document.getElementById('go-parent').disabled = !msg.hasParent;
     overviewMode = msg.overview === 'minimap' ? 'minimap' : 'scrollbars'; // main-paper overview
@@ -208,11 +229,18 @@ function loadSchematic(msg) {
     circuit = new Circuit(msg.circuit, {
         layoutEngine: 'elkjs',
         windowCallback: function (type, div, closingCallback) {
-            const title = div.attr('title');
-            if (title) {
-                div.attr('title', title.split(' ').map(cleanModuleName).join(' '));
+            // raw title (= celltype + ' ' + label) is the per-instance key; clean it for display
+            const key = div.attr('title') || '';
+            if (key) {
+                div.attr('title', key.split(' ').map(cleanModuleName).join(' '));
+                _openSubDialogs.set(key, div);
             }
-            Circuit.prototype._defaultWindowCallback.call(this, type, div, closingCallback);
+            const wrappedClose = () => {
+                _openSubKeys.delete(key);
+                _openSubDialogs.delete(key);
+                closingCallback();
+            };
+            Circuit.prototype._defaultWindowCallback.call(this, type, div, wrappedClose);
         },
     });
     // 'new:paper' fires for the main paper AND each subcircuit popup paper — bind click,
