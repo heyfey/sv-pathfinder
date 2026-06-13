@@ -82,6 +82,7 @@ export class SchematicViewProvider {
                 circuit: digitalJsJson,
                 scopePath: ctx.instancePath,
                 moduleName: ctx.moduleName,
+                hasParent: findParentScope(instance) !== undefined,
             });
             // push current waveform values onto the fresh schematic
             this.debouncePushValues();
@@ -130,6 +131,14 @@ export class SchematicViewProvider {
                         this.render(this.current.design, this.current.instance, this.current.preset, true);
                     }
                     break;
+                case 'goToParent':
+                    if (this.current) {
+                        const parent = findParentScope(this.current.instance);
+                        if (parent) {
+                            this.render(this.current.design, parent, this.current.preset);
+                        }
+                    }
+                    break;
             }
         });
         this.panel.onDidDispose(() => {
@@ -165,6 +174,7 @@ export class SchematicViewProvider {
 <div id="toolbar">
   <span id="breadcrumb"></span>
   <span id="toolbar-right">
+    <button id="go-parent" title="Go to parent scope" disabled>↰</button>
     <button id="zoom-out" title="Zoom out">−</button>
     <button id="zoom-in" title="Zoom in">+</button>
     <button id="zoom-fit" title="Fit">⊡</button>
@@ -298,6 +308,18 @@ function cleanModuleName(celltype: string): string {
     }
     const i = celltype.indexOf('$');
     return i > 0 ? celltype.slice(0, i) : celltype;
+}
+
+// Nearest ancestor scope instance of a rendered scope, for "go to parent". The schematic's
+// top is always a scopeItem; walk .parent past any scopearray/instancearray wrappers to the
+// next scopeItem. Top-level modules have no parent (returns undefined → button disabled).
+function findParentScope(instance: NetlistItem): NetlistItem | undefined {
+    let p = instance.parent;
+    while (p) {
+        if (p.contextValue === 'scopeItem') { return p; }
+        p = p.parent;
+    }
+    return undefined;
 }
 
 // VaporView returns either a JSON string or an array of value strings (value before /

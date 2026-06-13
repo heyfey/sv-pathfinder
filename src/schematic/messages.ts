@@ -22,7 +22,11 @@ export interface WebviewReadyMessage {
     type: 'ready';
 }
 
-export type FromWebviewMessage = ElementClickMessage | WebviewReadyMessage;
+export interface GoToParentMessage {
+    type: 'goToParent';
+}
+
+export type FromWebviewMessage = ElementClickMessage | WebviewReadyMessage | GoToParentMessage;
 
 // extension -> webview
 export interface LoadSchematicMessage {
@@ -30,6 +34,7 @@ export interface LoadSchematicMessage {
     circuit: any;            // DigitalJS JSON (TopModule)
     scopePath: string;       // breadcrumb, e.g. top.cpu.alu
     moduleName: string;
+    hasParent: boolean;      // whether a parent scope exists (enables the "go to parent" button)
 }
 
 export interface SetValuesMessage {

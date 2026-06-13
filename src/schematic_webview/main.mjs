@@ -173,6 +173,7 @@ function loadSchematic(msg) {
         labelIndex = null;
     }
     document.getElementById('breadcrumb').textContent = `${msg.scopePath}  (${msg.moduleName})`;
+    document.getElementById('go-parent').disabled = !msg.hasParent;
     setStatus('laying out schematic…');
     const container = document.getElementById('paper-container');
     container.innerHTML = '<div id="paper"></div>';
@@ -308,6 +309,7 @@ document.getElementById('paper-container').addEventListener('wheel', (e) => {
     zoomAround(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX, e.clientY);
 }, { passive: false });
 document.getElementById('refresh').addEventListener('click', () => post({ type: 'refresh' }));
+document.getElementById('go-parent').addEventListener('click', () => post({ type: 'goToParent' }));
 const presetButton = document.getElementById('preset-toggle');
 presetButton.addEventListener('click', () => {
     const next = presetButton.textContent === 'RTL' ? 'GLS' : 'RTL';
