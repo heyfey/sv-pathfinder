@@ -79,6 +79,17 @@
           "enum": ["scrollbars", "minimap"],
           "default": "scrollbars",
           "markdownDescription": "Overview affordance for the main schematic: `scrollbars` or a `minimap` (corner overview with a draggable viewport). Subcircuit popup windows always use scrollbars."
+        },
+        "sv-pathfinder.schematicSpacing": {
+          "type": "string",
+          "enum": ["compact", "comfortable", "spacious"],
+          "enumDescriptions": [
+            "Tightest layout — smallest canvas, densest packing.",
+            "More room between blocks and around signal names.",
+            "Most generous spacing — easiest to read, largest canvas."
+          ],
+          "default": "compact",
+          "markdownDescription": "Layout density for the schematic: controls block spacing, the clearance reserved around wire net-name labels, and box padding so signal names fit. Applies on the next render (reopen or refresh the schematic)."
         }
       }
     },

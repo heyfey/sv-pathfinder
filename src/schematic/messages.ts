@@ -36,6 +36,7 @@ export interface LoadSchematicMessage {
     moduleName: string;
     hasParent: boolean;      // whether a parent scope exists (enables the "go to parent" button)
     overview: 'minimap' | 'scrollbars'; // main-paper overview style (popups always use scrollbars)
+    spacing: 'compact' | 'comfortable' | 'spacious'; // layout density (ELK spacing + box padding)
 }
 
 export interface SetValuesMessage {
