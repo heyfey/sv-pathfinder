@@ -35,6 +35,7 @@ export interface LoadSchematicMessage {
     scopePath: string;       // breadcrumb, e.g. top.cpu.alu
     moduleName: string;
     hasParent: boolean;      // whether a parent scope exists (enables the "go to parent" button)
+    overview: 'minimap' | 'scrollbars'; // main-paper overview style (popups always use scrollbars)
 }
 
 export interface SetValuesMessage {

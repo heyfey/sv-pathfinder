@@ -56,6 +56,37 @@ html, body {
     height: 100%;
 }
 
+/* ---- overlay scrollbars (popups; and main when selected) ---- */
+.sv-scrollbar {
+    position: absolute;
+    z-index: 6;
+    background: transparent;
+}
+.sv-scrollbar.sv-h { left: 0; right: 10px; bottom: 0; height: 9px; }
+.sv-scrollbar.sv-v { top: 0; bottom: 10px; right: 0; width: 9px; }
+.sv-scrollthumb {
+    position: absolute;
+    background: var(--vscode-scrollbarSlider-background, rgba(120, 120, 120, 0.4));
+    border-radius: 4px;
+}
+.sv-scrollbar.sv-h .sv-scrollthumb { top: 1.5px; height: 6px; min-width: 16px; }
+.sv-scrollbar.sv-v .sv-scrollthumb { left: 1.5px; width: 6px; min-height: 16px; }
+.sv-scrollthumb:hover { background: var(--vscode-scrollbarSlider-hoverBackground, rgba(120, 120, 120, 0.6)); }
+.sv-scrollthumb:active { background: var(--vscode-scrollbarSlider-activeBackground, rgba(120, 120, 120, 0.8)); }
+
+/* ---- minimap (main paper) ---- */
+#sv-minimap {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    z-index: 6;
+    border: 1px solid var(--vscode-editorWidget-border, #454545);
+    border-radius: 3px;
+    cursor: pointer;
+    opacity: 0.9;
+}
+#sv-minimap:hover { opacity: 1; }
+
 #status {
     flex: 0 0 auto;
     padding: 2px 8px;

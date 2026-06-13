@@ -73,6 +73,12 @@
           "type": "string",
           "default": "",
           "markdownDescription": "Accent color for the schematic viewer (child-instance fills and hover highlights). Any CSS color (e.g. `#4cc2ff`, `dodgerblue`). If empty, a theme-aware color is used (`--vscode-charts-blue`)."
+        },
+        "sv-pathfinder.schematicOverview": {
+          "type": "string",
+          "enum": ["minimap", "scrollbars"],
+          "default": "minimap",
+          "markdownDescription": "Overview affordance for the main schematic: a `minimap` (corner overview with a draggable viewport) or `scrollbars`. Subcircuit popup windows always use scrollbars."
         }
       }
     },

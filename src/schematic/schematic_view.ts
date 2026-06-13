@@ -77,12 +77,15 @@ export class SchematicViewProvider {
 
             this.createOrRevealPanel();
             this.panel!.title = `Schematic: ${ctx.instancePath}`;
+            const overview = vscode.workspace.getConfiguration('sv-pathfinder')
+                .get<string>('schematicOverview', 'minimap') === 'scrollbars' ? 'scrollbars' : 'minimap';
             this.postMessage({
                 type: 'loadSchematic',
                 circuit: digitalJsJson,
                 scopePath: ctx.instancePath,
                 moduleName: ctx.moduleName,
                 hasParent: findParentScope(instance) !== undefined,
+                overview,
             });
             // push current waveform values onto the fresh schematic
             this.debouncePushValues();

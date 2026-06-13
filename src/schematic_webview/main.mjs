@@ -197,6 +197,7 @@ function loadSchematic(msg) {
     }
     document.getElementById('breadcrumb').textContent = `${msg.scopePath}  (${msg.moduleName})`;
     document.getElementById('go-parent').disabled = !msg.hasParent;
+    overviewMode = msg.overview === 'scrollbars' ? 'scrollbars' : 'minimap'; // main-paper overview
     applyWireValuePalette(); // theme-aware value colors (re-read each load to track theme)
     setStatus('laying out schematic…');
     const container = document.getElementById('paper-container');
@@ -222,7 +223,9 @@ function loadSchematic(msg) {
         bindHover(p);
         attachNav(p);
         if (document.getElementById('paper-container').contains(p.el)) {
-            setupMainPaper(p);
+            setupMainPaper(p);          // main: minimap or scrollbars per setting
+        } else {
+            setupPopupPaper(p);         // subcircuit popup: fixed window + scrollbars
         }
     });
     paper = circuit.displayOn(paperDiv());
@@ -300,10 +303,32 @@ function bindHover(p) {
 // paper and on subcircuit popup papers.
 
 let mainResizeObs = null;
+let overviewMode = 'minimap'; // 'minimap' (main) | 'scrollbars'; from the setting per load
 
-// Make a paper fill its container and stop digitaljs from resizing it to the content.
+// Stop digitaljs from resizing a paper's SVG to its content on every render (that
+// content-sizing fights transform-based pan/zoom). The paper then keeps whatever
+// dimensions we set; the view is driven purely by the transform.
+function neutralizeAutoResize(p) {
+    p.fitToContent = function () { return this; };
+}
+
+// Fit a paper's content into a pixel size, centered, transform-only.
+function fitPaper(p, w, h) {
+    p.setDimensions(w, h);
+    try {
+        p.transformToFitContent({
+            padding: 24, minScale: 0.02, maxScale: 1, useModelGeometry: true,
+            verticalAlign: 'middle', horizontalAlign: 'middle',
+        });
+    } catch (e) {
+        p.scale(1);
+        p.translate(24, 24);
+    }
+}
+
+// Main paper: fill the container, keep synced on resize, attach the chosen overview.
 function setupMainPaper(p) {
-    p.fitToContent = function () { return this; }; // neutralize digitaljs render:done auto-resize
+    neutralizeAutoResize(p);
     const c = document.getElementById('paper-container');
     p.setDimensions(c.clientWidth, c.clientHeight);
     if (mainResizeObs) { mainResizeObs.disconnect(); }
@@ -312,6 +337,165 @@ function setupMainPaper(p) {
         if (autoFit) { fitToView(); }
     });
     mainResizeObs.observe(c);
+    if (overviewMode === 'scrollbars') { attachScrollbars(p, c); } else { attachMinimap(p, c); }
+}
+
+// Subcircuit popup paper: a fixed window sized to a fraction of the viewport (the jquery-ui
+// dialog auto-sizes to the paper element), transform-based like the main paper, with
+// overlay scrollbars.
+function setupPopupPaper(p) {
+    neutralizeAutoResize(p);
+    const w = Math.min(900, Math.round(window.innerWidth * 0.7));
+    const h = Math.min(600, Math.round(window.innerHeight * 0.7));
+    p.setDimensions(w, h);
+    const fit = () => fitPaper(p, w, h);
+    p.once('render:done', fit);
+    setTimeout(fit, 200); // catch async ELK layout of the child
+    attachScrollbars(p, p.el);
+}
+
+// Visible region of a paper in graph-local coordinates (from transform + viewport size).
+function visibleRegion(p, viewW, viewH) {
+    const s = p.scale().sx, t = p.translate();
+    return { x: -t.tx / s, y: -t.ty / s, w: viewW / s, h: viewH / s, s };
+}
+
+// ---- overlay scrollbars (popups; and main when the setting selects them) ----
+// Thin bars over `host` that reflect and drive the paper transform. O(1) per frame; the
+// content bbox is cached (recomputed lazily / after layout), so no per-pan O(N) cost.
+function attachScrollbars(p, host) {
+    if (getComputedStyle(host).position === 'static') { host.style.position = 'relative'; }
+    const make = (cls) => {
+        const bar = document.createElement('div');
+        bar.className = 'sv-scrollbar ' + cls;
+        const thumb = document.createElement('div');
+        thumb.className = 'sv-scrollthumb';
+        bar.appendChild(thumb);
+        host.appendChild(bar);
+        return { bar, thumb, tot: { off: 0, len: 1 } };
+    };
+    const hb = make('sv-h'), vb = make('sv-v');
+    let area = null;
+    const getArea = () => (area = area || p.getContentArea({ useModelGeometry: true }));
+
+    function update() {
+        const a = getArea();
+        if (!a) { return; }
+        const v = visibleRegion(p, host.clientWidth, host.clientHeight);
+        const totL = Math.min(a.x, v.x), totR = Math.max(a.x + a.width, v.x + v.w);
+        const totT = Math.min(a.y, v.y), totB = Math.max(a.y + a.height, v.y + v.h);
+        const totW = totR - totL, totH = totB - totT;
+        hb.tot = { off: totL, len: totW };
+        vb.tot = { off: totT, len: totH };
+        if (v.w >= totW - 1) { hb.bar.style.display = 'none'; } else {
+            hb.bar.style.display = '';
+            hb.thumb.style.left = ((v.x - totL) / totW * 100) + '%';
+            hb.thumb.style.width = (v.w / totW * 100) + '%';
+        }
+        if (v.h >= totH - 1) { vb.bar.style.display = 'none'; } else {
+            vb.bar.style.display = '';
+            vb.thumb.style.top = ((v.y - totT) / totH * 100) + '%';
+            vb.thumb.style.height = (v.h / totH * 100) + '%';
+        }
+    }
+
+    const drag = (obj, axis) => obj.thumb.addEventListener('pointerdown', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const start = axis === 'x' ? e.clientX : e.clientY;
+        const s = p.scale().sx, t0 = p.translate();
+        const track = axis === 'x' ? obj.bar.clientWidth : obj.bar.clientHeight;
+        const tot = obj.tot.len;
+        const move = (ev) => {
+            autoFit = false;
+            const dLocal = ((axis === 'x' ? ev.clientX : ev.clientY) - start) / track * tot;
+            if (axis === 'x') { p.translate(t0.tx - dLocal * s, t0.ty); }
+            else { p.translate(t0.tx, t0.ty - dLocal * s); }
+        };
+        const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+        document.addEventListener('pointermove', move);
+        document.addEventListener('pointerup', up);
+    });
+    drag(hb, 'x'); drag(vb, 'y');
+
+    p.on('transform', update);
+    p.on('resize', update);
+    setTimeout(() => { area = null; update(); }, 300); // after async layout settles
+    update();
+}
+
+// ---- minimap (main paper only) ----
+// A small canvas overview in the corner. The structural overview (one rect per cell) is
+// drawn ONCE to an offscreen canvas; per pan/zoom only the viewport rectangle redraws, so
+// it stays cheap on large designs and value scrubbing never touches it.
+function attachMinimap(p, host) {
+    const MW = 200, MH = 150;
+    const canvas = document.createElement('canvas');
+    canvas.id = 'sv-minimap';
+    canvas.width = MW; canvas.height = MH;
+    host.appendChild(canvas);
+    const ctx = canvas.getContext('2d');
+    let overview = null, area = null, mscale = 1, offX = 0, offY = 0;
+
+    function build() {
+        area = p.getContentArea({ useModelGeometry: true });
+        if (!area || !area.width) { return false; }
+        const pad = 6;
+        mscale = Math.min((MW - 2 * pad) / area.width, (MH - 2 * pad) / area.height);
+        offX = pad - area.x * mscale + (MW - 2 * pad - area.width * mscale) / 2;
+        offY = pad - area.y * mscale + (MH - 2 * pad - area.height * mscale) / 2;
+        overview = document.createElement('canvas'); overview.width = MW; overview.height = MH;
+        const o = overview.getContext('2d');
+        const accent = cssVar('--sv-accent', '#4a9cff');
+        const neutral = cssVar('--vscode-editorWidget-border', '#888888');
+        for (const el of p.model.getElements()) {
+            const b = el.getBBox();
+            o.fillStyle = el.get('type') === 'Subcircuit' ? accent : neutral;
+            o.globalAlpha = el.get('type') === 'Subcircuit' ? 0.55 : 0.3;
+            o.fillRect(b.x * mscale + offX, b.y * mscale + offY,
+                Math.max(1, b.width * mscale), Math.max(1, b.height * mscale));
+        }
+        o.globalAlpha = 1;
+        return true;
+    }
+    function draw() {
+        if (!overview && !build()) { return; }
+        ctx.fillStyle = cssVar('--vscode-editorWidget-background', '#252526');
+        ctx.fillRect(0, 0, MW, MH);
+        ctx.drawImage(overview, 0, 0);
+        // viewport rectangle (outline only — a fill washes the whole minimap when zoomed
+        // out on a large design). Dim the area OUTSIDE the viewport instead, so the visible
+        // region reads as the bright part.
+        const v = visibleRegion(p, host.clientWidth, host.clientHeight);
+        const rx = Math.max(0, v.x * mscale + offX), ry = Math.max(0, v.y * mscale + offY);
+        const rw = Math.min(MW, v.x * mscale + offX + v.w * mscale) - rx;
+        const rh = Math.min(MH, v.y * mscale + offY + v.h * mscale) - ry;
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.fillRect(0, 0, MW, ry);                       // above
+        ctx.fillRect(0, ry + rh, MW, MH - (ry + rh));     // below
+        ctx.fillRect(0, ry, rx, rh);                      // left
+        ctx.fillRect(rx + rw, ry, MW - (rx + rw), rh);    // right
+        ctx.strokeStyle = cssVar('--sv-accent', '#4a9cff');
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(rx, ry, rw, rh);
+    }
+    function recenter(ev) {
+        const r = canvas.getBoundingClientRect();
+        const lx = (ev.clientX - r.left - offX) / mscale;
+        const ly = (ev.clientY - r.top - offY) / mscale;
+        const s = p.scale().sx;
+        autoFit = false;
+        p.translate(host.clientWidth / 2 - lx * s, host.clientHeight / 2 - ly * s);
+    }
+    canvas.addEventListener('pointerdown', (e) => {
+        e.preventDefault(); recenter(e);
+        const move = (ev) => recenter(ev);
+        const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+        document.addEventListener('pointermove', move);
+        document.addEventListener('pointerup', up);
+    });
+    p.on('transform', draw);
+    setTimeout(() => { overview = null; draw(); }, 300); // rebuild after async layout
+    draw();
 }
 
 // Scale a paper around a client point, keeping that point fixed under the cursor.
@@ -372,16 +556,7 @@ function attachNav(p) {
 function fitToView() {
     if (!paper) { return; }
     const c = document.getElementById('paper-container');
-    paper.setDimensions(c.clientWidth, c.clientHeight);
-    try {
-        paper.transformToFitContent({
-            padding: 24, minScale: 0.02, maxScale: 1, useModelGeometry: true,
-            verticalAlign: 'middle', horizontalAlign: 'middle', // center content in the viewport
-        });
-    } catch (e) {
-        paper.scale(1);
-        paper.translate(24, 24);
-    }
+    fitPaper(paper, c.clientWidth, c.clientHeight);
 }
 
 // Toolbar zoom buttons: zoom the main paper around the viewport center.
