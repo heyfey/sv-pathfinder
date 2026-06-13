@@ -197,7 +197,7 @@ function loadSchematic(msg) {
     }
     document.getElementById('breadcrumb').textContent = `${msg.scopePath}  (${msg.moduleName})`;
     document.getElementById('go-parent').disabled = !msg.hasParent;
-    overviewMode = msg.overview === 'scrollbars' ? 'scrollbars' : 'minimap'; // main-paper overview
+    overviewMode = msg.overview === 'minimap' ? 'minimap' : 'scrollbars'; // main-paper overview
     applyWireValuePalette(); // theme-aware value colors (re-read each load to track theme)
     setStatus('laying out schematic…');
     const container = document.getElementById('paper-container');
@@ -303,7 +303,7 @@ function bindHover(p) {
 // paper and on subcircuit popup papers.
 
 let mainResizeObs = null;
-let overviewMode = 'minimap'; // 'minimap' (main) | 'scrollbars'; from the setting per load
+let overviewMode = 'scrollbars'; // 'scrollbars' | 'minimap' (main); from the setting per load
 
 // Stop digitaljs from resizing a paper's SVG to its content on every render (that
 // content-sizing fights transform-based pan/zoom). The paper then keeps whatever

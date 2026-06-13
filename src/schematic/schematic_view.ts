@@ -78,7 +78,7 @@ export class SchematicViewProvider {
             this.createOrRevealPanel();
             this.panel!.title = `Schematic: ${ctx.instancePath}`;
             const overview = vscode.workspace.getConfiguration('sv-pathfinder')
-                .get<string>('schematicOverview', 'minimap') === 'scrollbars' ? 'scrollbars' : 'minimap';
+                .get<string>('schematicOverview', 'scrollbars') === 'minimap' ? 'minimap' : 'scrollbars';
             this.postMessage({
                 type: 'loadSchematic',
                 circuit: digitalJsJson,

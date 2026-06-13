@@ -76,9 +76,9 @@
         },
         "sv-pathfinder.schematicOverview": {
           "type": "string",
-          "enum": ["minimap", "scrollbars"],
-          "default": "minimap",
-          "markdownDescription": "Overview affordance for the main schematic: a `minimap` (corner overview with a draggable viewport) or `scrollbars`. Subcircuit popup windows always use scrollbars."
+          "enum": ["scrollbars", "minimap"],
+          "default": "scrollbars",
+          "markdownDescription": "Overview affordance for the main schematic: `scrollbars` or a `minimap` (corner overview with a draggable viewport). Subcircuit popup windows always use scrollbars."
         }
       }
     },

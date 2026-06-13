@@ -59,7 +59,7 @@ wires — rendered with [digitaljs](https://github.com/tilk/digitaljs).
 - Navigate the hierarchy with the **↰ go-to-parent** button; child instances are filled
   with an accent color so they're easy to spot.
 - Pan by dragging the canvas or scrolling the wheel; zoom with **Ctrl+scroll** (or the
-  toolbar buttons). A minimap (or scrollbars, configurable) shows where you are.
+  toolbar buttons). Scrollbars (or a minimap, configurable) show where you are.
 - RTL view is the default; the `RTL`/`GLS` button toggles a gate-level view.
 - With a waveform open in VaporView, moving the marker annotates schematic wires with
   signal values at the cursor time (green = 1, red = 0, gray = x/undriven; `z` shown as `x`).
@@ -95,8 +95,8 @@ sv-pathfinder is seamlessly integrated with VaporView – [Download](https://mar
     - Default: `true`
 - `"sv-pathfinder.ossCadSuitePath": string`, Path to the OSS CAD Suite installation directory (the folder containing `bin/yosys`), used by the schematic feature. If empty, `yosys` is resolved from PATH, then `yowasp-yosys`.
 - `"sv-pathfinder.schematicAccentColor": string`, Accent color for the schematic (child-instance fills and hover highlights). Any CSS color; empty uses a theme-aware default.
-- `"sv-pathfinder.schematicOverview": "minimap" | "scrollbars"`, Overview affordance for the main schematic. Popups always use scrollbars.
-    - Default: `minimap`
+- `"sv-pathfinder.schematicOverview": "scrollbars" | "minimap"`, Overview affordance for the main schematic. Popups always use scrollbars.
+    - Default: `scrollbars`
 
 ## Requirements
 
