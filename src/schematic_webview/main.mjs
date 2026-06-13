@@ -253,7 +253,7 @@ function loadSchematic(msg) {
               `${Object.keys(labelIndex.devices).length} devices`);
 
     // debug/test handle (also used by the headless webview test)
-    window.__schematic = { circuit, paper, labelIndex };
+    window.__schematic = { circuit, paper, labelIndex, fit: fitToView };
 }
 
 let baseStatus = ''; // persistent status (load / value count); hover overlays it transiently
@@ -304,6 +304,47 @@ function bindHover(p) {
 
 let mainResizeObs = null;
 let overviewMode = 'scrollbars'; // 'scrollbars' | 'minimap' (main); from the setting per load
+
+// Content bounding box (graph-local), cached per paper. getContentArea is O(N); cache it
+// once a valid (laid-out) box is available so pan-clamping stays O(1) per frame.
+const _area = new WeakMap();
+function contentAreaOf(p) {
+    let a = _area.get(p);
+    if (!a) {
+        a = p.getContentArea({ useModelGeometry: true });
+        if (a && a.width && a.height) { _area.set(p, a); }
+    }
+    return a;
+}
+
+// Clamp a translate so the viewport can't pan off the content into infinite emptiness.
+// Zoomed in (content larger than the viewport) you can pan across all of it, with at most
+// `margin` px of empty space past an edge. Zoomed out (content fits) it center-locks ±margin.
+function clampTranslate(p, tx, ty) {
+    const a = contentAreaOf(p);
+    if (!a) { return [tx, ty]; }
+    const s = p.scale().sx;
+    const sz = p.getComputedSize();
+    const W = sz.width, H = sz.height;
+    const mX = Math.min(W * 0.5, 250), mY = Math.min(H * 0.5, 250);
+    const cL = a.x * s, cR = (a.x + a.width) * s, cT = a.y * s, cB = (a.y + a.height) * s;
+    // For one axis: content spans [c0, cEnd] in screen px at translate 0; viewport is [0, view].
+    const axis = (c0, cEnd, view, m) => {
+        let lo = view - cEnd - m;   // pan limit: content right edge no further left than view-m
+        let hi = -c0 + m;           // pan limit: content left edge no further right than m
+        if (lo > hi) { const mid = (view - (cEnd - c0)) / 2 - c0; lo = mid - m; hi = mid + m; } // fits: center ±m
+        return [lo, hi];
+    };
+    const [txLo, txHi] = axis(cL, cR, W, mX);
+    const [tyLo, tyHi] = axis(cT, cB, H, mY);
+    return [Math.min(Math.max(tx, txLo), txHi), Math.min(Math.max(ty, tyLo), tyHi)];
+}
+
+// Translate a paper with clamping (all pan paths funnel through here).
+function panTo(p, tx, ty) {
+    const [cx, cy] = clampTranslate(p, tx, ty);
+    p.translate(cx, cy);
+}
 
 // Stop digitaljs from resizing a paper's SVG to its content on every render (that
 // content-sizing fights transform-based pan/zoom). The paper then keeps whatever
@@ -375,11 +416,9 @@ function attachScrollbars(p, host) {
         return { bar, thumb, tot: { off: 0, len: 1 } };
     };
     const hb = make('sv-h'), vb = make('sv-v');
-    let area = null;
-    const getArea = () => (area = area || p.getContentArea({ useModelGeometry: true }));
 
     function update() {
-        const a = getArea();
+        const a = contentAreaOf(p);
         if (!a) { return; }
         const v = visibleRegion(p, host.clientWidth, host.clientHeight);
         const totL = Math.min(a.x, v.x), totR = Math.max(a.x + a.width, v.x + v.w);
@@ -408,8 +447,8 @@ function attachScrollbars(p, host) {
         const move = (ev) => {
             autoFit = false;
             const dLocal = ((axis === 'x' ? ev.clientX : ev.clientY) - start) / track * tot;
-            if (axis === 'x') { p.translate(t0.tx - dLocal * s, t0.ty); }
-            else { p.translate(t0.tx, t0.ty - dLocal * s); }
+            if (axis === 'x') { panTo(p, t0.tx - dLocal * s, t0.ty); }
+            else { panTo(p, t0.tx, t0.ty - dLocal * s); }
         };
         const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
         document.addEventListener('pointermove', move);
@@ -419,7 +458,7 @@ function attachScrollbars(p, host) {
 
     p.on('transform', update);
     p.on('resize', update);
-    setTimeout(() => { area = null; update(); }, 300); // after async layout settles
+    setTimeout(update, 300); // after async layout settles (content area is cached centrally)
     update();
 }
 
@@ -437,7 +476,7 @@ function attachMinimap(p, host) {
     let overview = null, area = null, mscale = 1, offX = 0, offY = 0;
 
     function build() {
-        area = p.getContentArea({ useModelGeometry: true });
+        area = contentAreaOf(p);
         if (!area || !area.width) { return false; }
         const pad = 6;
         mscale = Math.min((MW - 2 * pad) / area.width, (MH - 2 * pad) / area.height);
@@ -484,7 +523,7 @@ function attachMinimap(p, host) {
         const ly = (ev.clientY - r.top - offY) / mscale;
         const s = p.scale().sx;
         autoFit = false;
-        p.translate(host.clientWidth / 2 - lx * s, host.clientHeight / 2 - ly * s);
+        panTo(p, host.clientWidth / 2 - lx * s, host.clientHeight / 2 - ly * s);
     }
     canvas.addEventListener('pointerdown', (e) => {
         e.preventDefault(); recenter(e);
@@ -510,6 +549,9 @@ function zoomAround(p, factor, clientX, clientY) {
     const t = p.translate();
     const lx = (px - t.tx) / s0; // graph-local point under the cursor
     const ly = (py - t.ty) / s0;
+    // Don't clamp zoom: zooming around the cursor keeps that point fixed, so it can't push
+    // content off into emptiness. Only pan is clamped (below). This preserves cursor-fixed
+    // zoom even when the content is smaller than the viewport.
     p.scale(s1);
     p.translate(px - lx * s1, py - ly * s1);
 }
@@ -528,7 +570,7 @@ function attachNav(p) {
             let dx = e.deltaX, dy = e.deltaY;
             if (e.shiftKey && dx === 0) { dx = dy; dy = 0; }
             const t = p.translate();
-            p.translate(t.tx - dx, t.ty - dy);
+            panTo(p, t.tx - dx, t.ty - dy);
         }
     }, { passive: false });
 
@@ -543,7 +585,7 @@ function attachNav(p) {
     });
     document.addEventListener('pointermove', (evt) => {
         if (!panning) { return; }
-        p.translate(startT.tx + (evt.clientX - startX), startT.ty + (evt.clientY - startY));
+        panTo(p, startT.tx + (evt.clientX - startX), startT.ty + (evt.clientY - startY));
     });
     document.addEventListener('pointerup', () => {
         if (!panning) { return; }
