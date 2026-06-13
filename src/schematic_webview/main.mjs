@@ -197,6 +197,7 @@ function loadSchematic(msg) {
     paper = circuit.displayOn(paperDiv());
     labelIndex = circuit.getLabelIndex();
     cleanSubcircuitCaptions(labelIndex);
+    attachPan(paper); // drag blank canvas to pan
     // never start the engine — external values only
     // ELK runs asynchronously AFTER displayOn returns and applies all cell positions in
     // one batch when done. Fit once after that batch settles, then DISARM — fitting on
@@ -253,9 +254,59 @@ function fitToView() {
     // end with the identical call so those refits are idempotent and the view never jumps.
     paper.fitToContent({ padding: 30, allowNewOrigin: 'any' });
 }
+
+// Zoom keeping the point under the cursor fixed (ctrl+wheel). Unlike zoomBy, this does NOT
+// refit — it scales then translates so the local point beneath (clientX, clientY) stays put.
+function zoomAround(factor, clientX, clientY) {
+    if (!paper) { return; }
+    autoFit = false;
+    const s0 = paper.scale().sx;
+    const s1 = Math.min(Math.max(s0 * factor, 0.05), 10);
+    if (s1 === s0) { return; }
+    const rect = paperDiv().getBoundingClientRect();
+    const px = clientX - rect.left;
+    const py = clientY - rect.top;
+    const t = paper.translate();
+    const lx = (px - t.tx) / s0; // graph-local point under the cursor
+    const ly = (py - t.ty) / s0;
+    paper.scale(s1);
+    paper.translate(px - lx * s1, py - ly * s1);
+}
+
+// Drag the blank canvas to pan (cell drags still move the cell). Attached per paper.
+function attachPan(p) {
+    let panning = false;
+    let startX = 0, startY = 0, startT = null;
+    p.on('blank:pointerdown', (evt) => {
+        panning = true;
+        autoFit = false;
+        startX = evt.clientX;
+        startY = evt.clientY;
+        startT = p.translate();
+        p.el.style.cursor = 'grabbing';
+    });
+    const move = (evt) => {
+        if (!panning) { return; }
+        p.translate(startT.tx + (evt.clientX - startX), startT.ty + (evt.clientY - startY));
+    };
+    const up = () => {
+        if (!panning) { return; }
+        panning = false;
+        p.el.style.cursor = '';
+    };
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
+}
+
 document.getElementById('zoom-in').addEventListener('click', () => zoomBy(1.25));
 document.getElementById('zoom-out').addEventListener('click', () => zoomBy(0.8));
 document.getElementById('zoom-fit').addEventListener('click', fitToView);
+// ctrl+wheel zooms around the cursor; plain wheel keeps native container scrolling
+document.getElementById('paper-container').addEventListener('wheel', (e) => {
+    if (!e.ctrlKey) { return; }
+    e.preventDefault();
+    zoomAround(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX, e.clientY);
+}, { passive: false });
 document.getElementById('refresh').addEventListener('click', () => post({ type: 'refresh' }));
 const presetButton = document.getElementById('preset-toggle');
 presetButton.addEventListener('click', () => {
