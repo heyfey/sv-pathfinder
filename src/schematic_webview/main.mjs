@@ -21,39 +21,18 @@ import './style.css';
 //             the minimum wire length, so this is the main lever on how long/empty wires look.
 //             compact reserves little (short wires; a label may sit closer to a box); roomier
 //             tiers reserve the full label so names never touch a box.
-// When value annotation later renders a value next to/under a label, give it room here:
-// bump `labelH`/`labelPad`/`netChannel` (wire labels) and `boxGap`/`ioPad` (in-box names).
+// VALUE ANNOTATION (planned): values render UNDER the name, not beside it — so the reserved
+// room grows VERTICALLY, not horizontally. Reserve it here up front (never resize at runtime,
+// which would force a re-layout): bump `labelH` for a value line under each wire net-name; for
+// child-instance boxes, reserve a value line under EACH port name — i.e. grow the per-port row
+// height (digitaljs's Subcircuit uses 16px/row in cells/subcircuit.js; override that to ~28).
+// Widths stay name-driven; only heights change, so runtime value updates are pure text swaps.
 const SPACING = {
     compact:     { nodeNode: 24, betweenLayers: 36, edgeNode: 12, edgeEdge: 10, edgeLabel: 3, labelPad: 6,  labelH: 14, boxGap: 44, ioPad: 18, netChannel: 0.5 },
     comfortable: { nodeNode: 34, betweenLayers: 56, edgeNode: 22, edgeEdge: 16, edgeLabel: 4, labelPad: 14, labelH: 16, boxGap: 56, ioPad: 24, netChannel: 0.85 },
     spacious:    { nodeNode: 44, betweenLayers: 80, edgeNode: 30, edgeEdge: 24, edgeLabel: 5, labelPad: 24, labelH: 18, boxGap: 70, ioPad: 30, netChannel: 1.0 },
 };
 let spacing = SPACING.compact;
-
-// Approximate label width for the net-name channel reserved during the FIRST layout, which
-// runs before the paper unfreezes (so the real labels aren't laid out yet and their getBBox
-// reads ~0). A persistent off-screen SVG <text> in the same `.djs` font context is always
-// measurable; it can under-read the on-canvas width in some font environments, but the net
-// channel only needs to be roughly right (the spacing options do most of the separation, and
-// labels sit mid-wire with slack). Boxes, which must fit exactly, are instead corrected from
-// the real in-place getBBox after unfreeze (see correctBoxesAndRelayout). 8pt, family from
-// `.djs *` (the editor monospace) to match digitaljs's labels.
-const measureLabel = (() => {
-    let textEl = null;
-    return (s) => {
-        if (!textEl) {
-            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            svg.setAttribute('class', 'djs'); // inherit the `.djs *` font-family
-            svg.style.cssText = 'position:absolute;left:-9999px;top:0;width:0;height:0;overflow:hidden';
-            textEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            textEl.setAttribute('font-size', '8pt');
-            svg.appendChild(textEl);
-            document.body.appendChild(svg);
-        }
-        textEl.textContent = s;
-        return textEl.getBBox().width;
-    };
-})();
 
 // Make input ports non-interactive: digitaljs renders Input cells as clickable
 // buttons / typable fields whose handlers toggle or set the input's own value. That's
@@ -85,26 +64,26 @@ cells.IO.prototype._checkMode = function () {
 cells.InputView.prototype._updateView = function () { };
 cells.OutputView.prototype._updateView = function () { };
 cells.IOView.prototype._calculateBoxWidth = function () {
-    const text = this.selectors['ioname'];
-    if (text && text.getAttribute('display') !== 'none') { return Math.ceil(text.getBBox().width) + spacing.ioPad; }
-    return 20;
+    // Estimate from the model net name (textWidth), not the DOM: at sizing time the paper is
+    // frozen so the text isn't laid out (getBBox ~0). estimate = name*charPx + tier padding.
+    const net = this.model.get('net') || '';
+    return net ? Math.ceil(textWidth(net)) + spacing.ioPad : 20;
 };
 
-// Size child-instance (and dff/fsm/memory) boxes to actually fit their port-name labels.
-// Two problems with digitaljs's version (BoxView._calculateBoxWidth = leftMax + rightMax + 25):
-//   1. it measures labels with getBBox() during the initial render, but the text isn't laid
-//      out yet then, so on large designs it reads ~0 and locks the box too narrow — long
-//      left- and right-side names then collide in the middle of the box (the bug in the
-//      screenshot). We measure with canvas measureText instead, which needs no layout pass
-//      and so is correct at render time (before ELK reads box sizes).
-//   2. the fixed 25px middle gap is cramped. We use a tier-scaled gap (room for in-box
-//      values later, too). measureText uses the label's real computed font, so it tracks
-//      whatever font the environment renders (monospace here).
+// Size child-instance (and dff/fsm/memory) boxes to fit their port-name labels. digitaljs's
+// version (leftLabelMax + rightLabelMax + 25) measures labels with getBBox() during the
+// frozen initial render — the text isn't laid out then, so it reads ~0 and the box locks too
+// narrow, letting long left/right port names collide in the middle (the screenshot bug). We
+// estimate from the MODEL ports (label = port.portlabel ?? port.id) with textWidth instead —
+// no layout needed, so it's right while the paper is still frozen — and use a tier-scaled
+// middle gap (boxGap), with headroom for in-box values later.
 cells.BoxView.prototype._calculateBoxWidth = function () {
-    const fixup = (x) => (x === -Infinity ? -5 : x);
-    const widths = (sel) => Array.from(this.el.querySelectorAll(sel)).map((x) => x.getBBox().width);
-    const lw = fixup(Math.max(...widths('[port-group=in] > text.iolabel')));
-    const rw = fixup(Math.max(...widths('[port-group=out] > text.iolabel')));
+    let lw = -5, rw = -5; // digitaljs's empty-side fixup
+    for (const p of this.model.getPorts()) {
+        if (!p.labelled) { continue; }
+        const w = textWidth('portlabel' in p ? p.portlabel : p.id);
+        if (p.group === 'out') { rw = Math.max(rw, w); } else if (p.group === 'in') { lw = Math.max(lw, w); }
+    }
     return Math.ceil(lw + rw) + spacing.boxGap;
 };
 
@@ -132,17 +111,15 @@ cells.FSMView.prototype._displayEditor = function () { };
 // position); we only buy it space. This is the readability fix for crowding/label overlap;
 // value annotation is color-only, so it adds no extra text and won't compound it.
 const _wireLabelDims = new Map(); // wire/link id -> { width, height, text }
-// Reserved size of the channel ELK keeps clear for a net-name label. width = measured text
-// (long names get their full width) + tier side padding so the next box never abuts the
-// label end. height drives how far ELK spreads parallel labeled wires apart. Measured before
-// any DOM exists (Wire construction), so we use the known render font directly.
-// NOTE: when value annotation later renders the value under/next to the name, grow this —
-// bump `height` (value on a second line) or `width` (value alongside) — and ELK will widen
-// the channel to fit it; nothing else here needs to change.
+// Reserved size of the channel ELK keeps clear for a net-name label. width = estimated text
+// width (textWidth) + tier side padding; height drives how far ELK spreads parallel labeled
+// wires apart. Computed at Wire construction (no DOM yet), so it uses the textWidth estimate.
+// NOTE (value annotation): we will show the value UNDER the name, so reserve VERTICAL room —
+// bump `labelH` (a second line) here; ELK widens the channel to fit. Width stays the name.
 function netLabelDims(text) {
     // Reserve only `netChannel` of the label width so compact tiers keep wires short; ELK
     // still inserts a lane (≥ this) that the betweenLayers margins pad out from the boxes.
-    const w = measureLabel(text) * spacing.netChannel + spacing.labelPad;
+    const w = textWidth(text) * spacing.netChannel + spacing.labelPad;
     return { width: Math.max(1, Math.ceil(w)), height: spacing.labelH, text };
 }
 const _origWireInit = cells.Wire.prototype.initialize;
@@ -174,89 +151,27 @@ ELK.prototype.layout = function (graph, opts) {
     return _origElkLayout.call(this, graph, opts);
 };
 
-// Box sizing needs valid label geometry, but digitaljs sizes (and lays out) boxes while the
-// paper is FROZEN — the label text isn't laid out then, so getBBox reads ~0 and boxes lock
-// too narrow, letting long port names collide inside the box (the screenshot bug). The only
-// reliable measurement is the real, in-place label getBBox AFTER unfreeze. So once a paper
-// has settled we recompute every auto-resizing box's width (now correct), and if anything
-// changed, re-run the layout so positions account for the new sizes. Layout is replicated
-// from digitaljs's elkjs.js (we can't import it — package `exports` blocks the deep path);
-// spacing + net-name labels are still injected by the ELK.layout wrapper above.
-function toElkGraph(graph) {
-    const elk = {
-        id: 'root',
-        properties: {
-            algorithm: 'layered', 'elk.edgeRouting': 'ORTHOGONAL',
-            'elk.layered.nodePlacement.favorStraightEdges': true,
-        },
-        children: [], edges: [],
-    };
-    for (const cell of graph.getCells()) {
-        if (cell.isLink()) {
-            const s = cell.get('source'), t = cell.get('target');
-            if (!s.id || !t.id) { continue; }
-            elk.edges.push({ id: cell.id, sources: [s.id + '.' + s.port], targets: [t.id + '.' + t.port] });
-        } else {
-            const size = cell.getLayoutSize();
-            const ppos = {};
-            const ports = cell.getPorts().map((p, i) => {
-                if (!ppos[p.group]) { ppos[p.group] = cell.getPortsPositions(p.group); }
-                return {
-                    id: cell.id + '.' + p.id, x: ppos[p.group][p.id].x, y: ppos[p.group][p.id].y,
-                    properties: { 'port.side': p.group === 'in' ? 'WEST' : p.group === 'in2' ? 'NORTH' : 'EAST', 'port.borderOffset': 30, 'port.index': -i },
-                };
-            });
-            const layerConstraint = (cell instanceof cells.Input || cell instanceof cells.Clock) ? 'FIRST'
-                : (cell instanceof cells.Output) ? 'LAST' : 'NONE';
-            elk.children.push({ id: cell.id, width: size.width, height: size.height, ports, properties: { portConstraints: 'FIXED_POS', layerConstraint } });
-        }
+// Per-character advance used to size boxes/labels BEFORE layout. Boxes must be sized while
+// digitaljs lays the graph out, but that happens with the paper frozen — the label text
+// isn't laid out yet, so getBBox reads ~0 (the box-too-small bug). We can't measure then, so
+// we estimate width = textLength * charPx (labels render in a fixed-width font). This makes
+// digitaljs's single layout already account for the box size — no second pass, and it can't
+// break (if the estimate is off a box is just slightly tight/loose). charPx starts at the
+// 8pt-monospace advance (~0.6em) and self-calibrates to the user's actual editor font from
+// the first real labels (see calibrateCharPx), so popups and later renders track it exactly.
+let charPx = 6.6;
+const textWidth = (s) => (s ? String(s).length : 0) * charPx;
+// After a paper unfreezes, real label geometry is valid — measure a few labels once to learn
+// this environment's per-char advance, so subsequent layouts (popups, reloads) size exactly.
+let _calibrated = false;
+function calibrateCharPx(paper) {
+    if (_calibrated) { return; }
+    let sumW = 0, sumN = 0;
+    for (const el of paper.el.querySelectorAll('text.iolabel, .joint-link text.label')) {
+        const n = (el.textContent || '').length;
+        if (n >= 3) { const w = el.getBBox().width; if (w > 0) { sumW += w; sumN += n; } }
     }
-    return elk;
-}
-function fromElkGraph(graph, elk) {
-    graph.startBatch('layout');
-    for (const child of elk.children) {
-        const cell = graph.getCell(child.id);
-        if (cell) { cell.setLayoutPosition({ x: child.x, y: child.y, width: child.width, height: child.height }); }
-    }
-    const cd = 10; // split each corner into two points so JointJS has room for rounded corners
-    for (const edge of elk.edges) {
-        const cell = graph.getCell(edge.id);
-        const sec = edge.sections && edge.sections[0];
-        if (!cell) { continue; }
-        if (!sec || !sec.bendPoints) { cell.vertices([]); continue; }
-        let isFirst = true, last = sec.startPoint;
-        const verts = [];
-        const add = (bp, isLast) => {
-            if (bp.x === last.x) {
-                const len = Math.abs(bp.y - last.y), sh = bp.y > last.y ? cd : -cd;
-                if (len > 2 * cd) { isFirst || verts.push({ x: last.x, y: last.y + sh }); isLast || verts.push({ x: bp.x, y: bp.y - sh }); }
-            } else if (bp.y === last.y) {
-                const len = Math.abs(bp.x - last.x), sh = bp.x > last.x ? cd : -cd;
-                if (len > 2 * cd) { isFirst || verts.push({ x: last.x + sh, y: last.y }); isLast || verts.push({ x: bp.x - sh, y: bp.y }); }
-            } else if (!isLast) { verts.push({ x: bp.x, y: bp.y }); }
-            last = bp; isFirst = false;
-        };
-        for (const bp of sec.bendPoints) { add(bp, false); }
-        add(sec.endPoint, true);
-        cell.vertices(verts);
-    }
-    graph.stopBatch('layout');
-}
-const _settled = new WeakSet(); // graphs whose boxes have been corrected + re-laid-out once
-function correctBoxesAndRelayout(p) {
-    const graph = p.model;
-    if (_settled.has(graph)) { return; }
-    _settled.add(graph);
-    let changed = false;
-    for (const cell of graph.getCells()) {
-        if (cell.isLink()) { continue; }
-        const view = p.findViewByModel(cell);
-        if (!view || !view._autoResizeBox || typeof view._calculateBoxWidth !== 'function') { continue; }
-        const w = view._calculateBoxWidth(); // real getBBox now that the paper is unfrozen
-        if (w > 0 && Math.abs(w - cell.size().width) > 1) { cell.prop('size/width', w); changed = true; }
-    }
-    if (changed) { new ELK().layout(toElkGraph(graph)).then((g) => fromElkGraph(graph, g)).catch(() => { /* layout best-effort */ }); }
+    if (sumN > 0) { charPx = sumW / sumN; _calibrated = true; }
 }
 
 // Don't open more than one popup for the same child instance. Gate the subcircuit zoom
@@ -457,9 +372,9 @@ function loadSchematic(msg) {
         p.on('cell:pointerclick', (cellView) => emitClick(cellView.model));
         bindHover(p);
         attachNav(p);
-        // After the paper unfreezes (render:done), box labels finally have valid geometry —
-        // recompute box widths and re-layout so long port names fit (main paper + popups).
-        p.once('render:done', () => correctBoxesAndRelayout(p));
+        // After the paper unfreezes, real label geometry is valid — learn this environment's
+        // per-char width once so later layouts (popups, reloads) size boxes/labels exactly.
+        p.once('render:done', () => calibrateCharPx(p));
         // ELK positions cells asynchronously; drop the cached content bbox while it changes
         // so clamping/overviews recompute from the final layout, not a pre-layout box.
         watchAreaInvalidation(p.model);
