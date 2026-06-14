@@ -11,7 +11,7 @@ import { DesignItem, NetlistItem, HierarchyTreeProvider, replaceFilePathIfNeeded
 import { resolveScope, scopeCacheKey, ScopeContext } from './scope_resolver';
 import { runYosys, SchematicPreset } from './yosys_runner';
 import { convertToDigitalJs } from './converter';
-import { FromWebviewMessage, ToWebviewMessage, ElementClickMessage, ContextActionMessage, ExportContentMessage, SourcePosition } from './messages';
+import { FromWebviewMessage, ToWebviewMessage, ElementClickMessage, ContextActionMessage, ExportRequestMessage, ExportContentMessage, SourcePosition } from './messages';
 
 interface ShownSchematic {
     design: DesignItem;
@@ -129,7 +129,7 @@ export class SchematicViewProvider {
                     this.handleContextAction(msg as ContextActionMessage);
                     break;
                 case 'export':
-                    this.handleExportRequest();
+                    this.handleExportRequest(msg as ExportRequestMessage);
                     break;
                 case 'exportContent':
                     this.handleExportContent(msg as ExportContentMessage);
@@ -305,7 +305,7 @@ export class SchematicViewProvider {
     // dialog's file-type filters: the simple input-box dialog (used on remote/WSL) shows no
     // filter dropdown, so it would silently keep the first format.
     private pendingExportUri?: vscode.Uri;
-    private async handleExportRequest() {
+    private async handleExportRequest(msg: ExportRequestMessage) {
         const shown = this.current;
         if (!shown) { return; }
         const pick = await vscode.window.showQuickPick(
@@ -318,7 +318,7 @@ export class SchematicViewProvider {
         );
         if (!pick) { return; }
         const ext = pick.ext;
-        const base = (shown.ctx.instancePath || shown.ctx.moduleName || 'schematic').replace(/[^\w.-]+/g, '_');
+        const base = (msg.name || shown.ctx.instancePath || shown.ctx.moduleName || 'schematic').replace(/[^\w.-]+/g, '_');
         // Save next to the design by default (ctx.workDir is the design's source dir, always a
         // real path); fall back to the workspace folder, then home. Use an ABSOLUTE path so the
         // dialog doesn't resolve a bare filename at the filesystem root.

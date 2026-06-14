@@ -302,6 +302,21 @@ function addZoomTooltips(div) {
         b.title = (b.textContent || '').trim() === '+' ? 'Zoom in' : 'Zoom out';
     }
 }
+// Add an export (⤓) button to the popup's button group so this child view can be exported too.
+function addPopupExport(div) {
+    const root = div && div.get ? div.get(0) : null;
+    if (!root) { return; }
+    const group = root.querySelector('.btn-group');
+    const p = root.__svPaper;
+    if (!group || !p || group.querySelector('.sv-popup-export')) { return; }
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-secondary sv-popup-export';
+    btn.title = 'Export this view (SVG / PNG / JSON)';
+    btn.textContent = '⤓';
+    btn.addEventListener('click', () => { _exportPaper = p; post({ type: 'export', name: paperHierName(p) }); });
+    group.appendChild(btn);
+}
 function clearTaskbar() {
     for (const tab of _taskbarTabs.values()) { tab.remove(); }
     _taskbarTabs.clear(); _subMinimized.clear(); _subShort.clear();
@@ -520,6 +535,7 @@ function loadSchematic(msg) {
             Circuit.prototype._defaultWindowCallback.call(this, type, div, wrappedClose);
             constrainDialog(div); // keep it within the canvas, off the status bar
             addZoomTooltips(div); // tooltips on the – / + zoom buttons
+            addPopupExport(div);  // per-popup export (⤓) button
             // a taskbar tab (switch between many popups) + a titlebar minimize button
             if (key) { addTaskbarTab(key); addMinimizeButton(div, key); }
             // jquery-ui autofocuses the first button (the zoom "−"), showing a focus ring on
@@ -846,6 +862,7 @@ function setupPopupPaper(p) {
     // p.el = the .joint-paper container div; its parent is the jquery-ui dialog content
     // (gets class `ui-dialog-content` once the dialog is created on render:done).
     const content = p.el.parentElement;
+    if (content) { content.__svPaper = p; } // so the popup's export button can target this paper
     // initial fit (centered) once the dialog + child layout exist
     const fit = () => { const s = popupAvailSize(content, w, h); fitPaper(p, s.w, s.h); };
     p.once('render:done', fit);
@@ -1102,11 +1119,23 @@ function inlineComputedStyles(live, clone) {
     const lk = live.children, ck = clone.children;
     for (let i = 0; i < lk.length && i < ck.length; i++) { inlineComputedStyles(lk[i], ck[i]); }
 }
+// Which paper an export targets: a popup's paper if its export button was clicked, else main.
+let _exportPaper = null;
+function exportTarget() { return _exportPaper || paper; }
+// Hierarchical name of the paper's scope (a popup → its subcircuit instance path; main → scope).
+function paperHierName(p) {
+    const sub = p.model.get('subcircuit');
+    if (sub && sub !== true && typeof sub.get === 'function') {
+        return [currentScopePath, ...graphPath(sub), sub.get('label')].filter(Boolean).join('.');
+    }
+    return currentScopePath;
+}
 function buildSvgExport() {
-    const live = paper.el.querySelector('svg');
+    const tp = exportTarget();
+    const live = tp.el.querySelector('svg');
     if (!live) { return ''; }
     const clone = live.cloneNode(true);
-    const a = paper.getContentArea({ useModelGeometry: true });
+    const a = tp.getContentArea({ useModelGeometry: true });
     const pad = 20;
     const x = Math.round(a.x - pad), y = Math.round(a.y - pad);
     const w = Math.round(a.width + 2 * pad), h = Math.round(a.height + 2 * pad);
@@ -1136,7 +1165,7 @@ function buildJsonExport() {
 // styles inlined, so the canvas isn't tainted. Render at ~2× for crispness, capped so very
 // large schematics don't produce an enormous bitmap.
 function buildPngExport() {
-    const a = paper.getContentArea({ useModelGeometry: true });
+    const a = exportTarget().getContentArea({ useModelGeometry: true });
     const pad = 20;
     const w = Math.max(1, Math.round(a.width + 2 * pad)), h = Math.max(1, Math.round(a.height + 2 * pad));
     const scale = Math.min(2, 6000 / Math.max(w, h));
@@ -1164,7 +1193,7 @@ document.getElementById('zoom-out').addEventListener('click', () => zoomBy(0.8))
 document.getElementById('zoom-fit').addEventListener('click', fitToView);
 document.getElementById('refresh').addEventListener('click', () => post({ type: 'refresh' }));
 document.getElementById('go-parent').addEventListener('click', () => post({ type: 'goToParent' }));
-document.getElementById('export').addEventListener('click', () => post({ type: 'export' }));
+document.getElementById('export').addEventListener('click', () => { _exportPaper = null; post({ type: 'export' }); });
 // RTL / Gate-Level slider toggle: left = RTL (unchecked), right = Gate-Level (checked).
 const presetSwitch = document.getElementById('preset-switch');
 const presetLabels = document.querySelectorAll('#preset-toggle .sv-seg-label');

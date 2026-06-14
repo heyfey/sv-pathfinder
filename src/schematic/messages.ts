@@ -39,9 +39,10 @@ export interface ContextActionMessage {
     value?: string; // current annotated value, for copyValue
 }
 
-// webview -> extension: user asked to export the schematic (toolbar button)
+// webview -> extension: user asked to export the schematic (main toolbar or a popup)
 export interface ExportRequestMessage {
     type: 'export';
+    name?: string; // suggested base filename (a popup's hierarchy path; absent = main scope)
 }
 
 // webview -> extension: the generated export content for the file the user chose
