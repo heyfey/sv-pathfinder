@@ -692,10 +692,16 @@ function setupMainPaper(p) {
 // back to the initial w×h.
 function popupAvailSize(content, w, h) {
     if (content && content.isConnected && content.classList.contains('ui-dialog-content')) {
+        // Use the content-box inner size: clientWidth/Height INCLUDE padding, and sizing the
+        // paper to that would make the auto-width dialog grow by the padding on each observer
+        // tick (inflating to maxWidth). Subtract padding (and the zoom toolbar) → stable.
+        const cs = getComputedStyle(content);
+        const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+        const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
         const btn = content.querySelector('.btn-group');
-        const aw = content.clientWidth;
-        const ah = content.clientHeight - (btn ? btn.offsetHeight : 0);
-        if (aw > 50 && ah > 50) { return { w: aw, h: ah }; }
+        const aw = content.clientWidth - padX;
+        const ah = content.clientHeight - padY - (btn ? btn.offsetHeight : 0);
+        if (aw > 50 && ah > 50) { return { w: Math.round(aw), h: Math.round(ah) }; }
     }
     return { w, h };
 }
@@ -707,17 +713,22 @@ function setupPopupPaper(p) {
     // p.el = the .joint-paper container div; its parent is the jquery-ui dialog content
     // (gets class `ui-dialog-content` once the dialog is created on render:done).
     const content = p.el.parentElement;
+    // initial fit (centered) once the dialog + child layout exist
     const fit = () => { const s = popupAvailSize(content, w, h); fitPaper(p, s.w, s.h); };
     p.once('render:done', fit);
     setTimeout(fit, 200); // catch async ELK layout of the child
     attachScrollbars(p, p.el);
-    // re-fit whenever the dialog is resized (the content box changes size). Self-disconnects
-    // when the popup closes (content detached). setDimensions (inside fitPaper) fires the
-    // paper 'resize' event, so the overlay scrollbars recompute too.
+    // Follow the dialog as it's resized WITHOUT re-fitting: grow/shrink the viewport to the
+    // new content area and keep the user's zoom, only re-clamping the pan so content stays in
+    // view. setDimensions fires the paper 'resize' event, so the overlay scrollbars recompute.
+    // Self-disconnects when the popup closes (content detached).
     if (content && typeof ResizeObserver !== 'undefined') {
         const ro = new ResizeObserver(() => {
             if (!content.isConnected) { ro.disconnect(); return; }
-            fit();
+            const s = popupAvailSize(content, w, h);
+            p.setDimensions(s.w, s.h);
+            const t = p.translate();
+            panTo(p, t.tx, t.ty); // re-clamp to the new viewport
         });
         ro.observe(content);
     }
