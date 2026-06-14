@@ -222,24 +222,37 @@ html, body {
 }
 .sv-tab.sv-tab-main:hover { background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.2)); }
 
-/* minimize button injected into the dialog titlebar, left of jquery-ui's close button */
-.sv-min-btn {
+/* titlebar buttons: our injected minimize, and jquery-ui's close restyled to match it
+ * (flat, transparent, same size/hover) instead of jquery-ui's bordered icon button. */
+.sv-min-btn,
+.ui-dialog .ui-dialog-titlebar-close {
     position: absolute;
-    right: 2.1em;
     top: 50%;
     transform: translateY(-50%);
     width: 20px;
     height: 20px;
+    padding: 0;
     background: transparent;
     color: var(--vscode-editor-foreground, #cccccc);
     border: none;
     border-radius: 3px;
     cursor: pointer;
-    font-size: 15px;
+    font-size: 14px;
     line-height: 1;
-    padding: 0;
+    text-indent: 0;
+    overflow: hidden;
 }
-.sv-min-btn:hover { background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.2)); }
+.sv-min-btn { right: 2.1em; }
+.ui-dialog .ui-dialog-titlebar-close { right: 0.4em; margin: 0; }
+.sv-min-btn:hover,
+.ui-dialog .ui-dialog-titlebar-close:hover {
+    background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.2));
+}
+/* hide jquery-ui's sprite icon and draw a clean ✕ glyph like the minimize "–" */
+.ui-dialog .ui-dialog-titlebar-close .ui-icon,
+.ui-dialog .ui-dialog-titlebar-close .ui-button-icon,
+.ui-dialog .ui-dialog-titlebar-close .ui-button-icon-space { display: none; }
+.ui-dialog .ui-dialog-titlebar-close::before { content: '✕'; font-size: 12px; }
 
 /* ---- right-click context menu ---- */
 #sv-ctxmenu {

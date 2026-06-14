@@ -294,6 +294,14 @@ function addMinimizeButton(div, key) {
     const close = titlebar.querySelector('.ui-dialog-titlebar-close');
     if (close) { titlebar.insertBefore(btn, close); } else { titlebar.appendChild(btn); }
 }
+// digitaljs's subcircuit zoom buttons (– / +) have no tooltips; add them.
+function addZoomTooltips(div) {
+    const root = div && div.get ? div.get(0) : null;
+    if (!root) { return; }
+    for (const b of root.querySelectorAll('.btn-group .btn')) {
+        b.title = (b.textContent || '').trim() === '+' ? 'Zoom in' : 'Zoom out';
+    }
+}
 function clearTaskbar() {
     for (const tab of _taskbarTabs.values()) { tab.remove(); }
     _taskbarTabs.clear(); _subMinimized.clear(); _subShort.clear();
@@ -511,6 +519,7 @@ function loadSchematic(msg) {
             };
             Circuit.prototype._defaultWindowCallback.call(this, type, div, wrappedClose);
             constrainDialog(div); // keep it within the canvas, off the status bar
+            addZoomTooltips(div); // tooltips on the – / + zoom buttons
             // a taskbar tab (switch between many popups) + a titlebar minimize button
             if (key) { addTaskbarTab(key); addMinimizeButton(div, key); }
             // jquery-ui autofocuses the first button (the zoom "−"), showing a focus ring on
