@@ -139,6 +139,14 @@ html, body {
  * right-click → Expand. (Wire value tooltips are on .joint-link, not .joint-cell.) */
 .djs .joint-cell .tooltip { display: none; }
 
+/* read-only cursors. digitaljs styles nodes with `cursor: move` and port magnets with
+ * `cursor: crosshair` + a hover dim, advertising drag/connect we've disabled. We don't use
+ * digitaljs's `fixed` class (its `.joint-link{pointer-events:none}` would kill our wire
+ * clicks), so neutralize those cursors here instead. Loaded after digitaljs's CSS → wins. */
+.djs .joint-element { cursor: default; }
+.djs:not(.fixed) [magnet=true]:not(.joint-element) { cursor: default; }
+.djs:not(.fixed) [magnet=true]:not(.joint-element):hover { opacity: 1; }
+
 /* hover highlight: accent glow on the hovered cell/wire (class toggled from JS).
  * A drop-shadow outlines any shape without overriding the wire's value stroke color. */
 .djs .sv-hover {

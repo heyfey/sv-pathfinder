@@ -232,6 +232,14 @@ let labelIndex = null;
 let autoFit = true;   // auto-fit after async ELK layout until the user zooms manually
 let fitTimer = null;
 let currentScopePath = ''; // breadcrumb root for this render; used to build popup hier titles
+// Read-only interactivity: disable every editing action (drag a node, start a wire from a
+// port magnet, move/add/remove a wire's vertices or endpoints) while KEEPING pointer events,
+// so click-to-highlight and the right-click menu still work on wires, ports, and instances.
+const READONLY = {
+    elementMove: false, addLinkFromMagnet: false, arrowheadMove: false,
+    vertexAdd: false, vertexMove: false, vertexRemove: false,
+    linkMove: false, labelMove: false, useLinkTools: false,
+};
 
 const paperDiv = () => document.getElementById('paper');
 
@@ -400,21 +408,19 @@ function loadSchematic(msg) {
     // hover, and navigation (wheel zoom/pan + drag pan) on all of them so popup windows
     // behave like the main canvas. (Registered before displayOn.)
     circuit.on('new:paper', (p) => {
+        p.options.interactive = READONLY; // new views inherit it (see READONLY below)
         p.on('cell:pointerclick', (cellView) => toggleSelect(cellView)); // latch highlight
         p.on('blank:pointerclick', () => clearSelection());              // click empty → clear
         bindHover(p);
         bindContextMenu(p);
         attachNav(p);
-        // After the paper unfreezes: make it read-only and learn this environment's per-char
-        // width once (so later layouts size exactly). digitaljs's fixed() = setInteractivity
-        // (false) + a `fixed` CSS class: it disables ALL editing — dragging nodes AND starting
-        // a new wire from a port magnet — and switches the move/crosshair cursors (and magnet
-        // hover) back to plain default. Blank-area pan and clicks/right-clicks are paper
-        // events, not "interactions", so they keep working.
-        p.once('render:done', () => {
-            if (typeof p.fixed === 'function') { p.fixed(true); }
-            calibrateCharPx(p);
-        });
+        // After the paper unfreezes: lock all editing on every view, and learn this env's
+        // per-char width once (so later layouts size exactly). We deliberately do NOT use
+        // digitaljs's fixed() — that adds a `fixed` class whose `.joint-link{pointer-events:
+        // none}` would swallow our click-to-highlight and right-click on wires. Instead we
+        // turn off the editing interactions (move/link/vertex) but keep pointer events, and
+        // neutralize the move/crosshair cursors in CSS.
+        p.once('render:done', () => { p.setInteractivity(READONLY); calibrateCharPx(p); });
         // ELK positions cells asynchronously; drop the cached content bbox while it changes
         // so clamping/overviews recompute from the final layout, not a pre-layout box.
         watchAreaInvalidation(p.model);
