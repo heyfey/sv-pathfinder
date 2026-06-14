@@ -167,12 +167,18 @@ html, body {
     background: var(--vscode-editor-background, #1e1e1e);
 }
 
+/* popup zoom toolbar (digitaljs prepends a .btn-group of − / + to the dialog) → right-align */
+.ui-dialog .btn-group {
+    display: flex;
+    justify-content: flex-end;
+}
+
 .ui-dialog .btn {
     background: var(--vscode-button-secondaryBackground, #3a3d41);
     color: var(--vscode-button-secondaryForeground, #ffffff);
     border: 1px solid var(--vscode-editorWidget-border, transparent);
     border-radius: 3px;
     padding: 2px 8px;
-    margin-right: 4px;
+    margin-left: 4px;
     cursor: pointer;
 }

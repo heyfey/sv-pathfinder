@@ -179,22 +179,30 @@ function calibrateCharPx(paper) {
     if (sumN > 0) { charPx = sumW / sumN; _calibrated = true; }
 }
 
-// Don't open more than one popup for the same child instance. Gate the subcircuit zoom
-// handler: if a popup for this instance is already open, raise it instead of opening a
-// duplicate. The key is the dialog title digitaljs uses (celltype + ' ' + label), unique
-// per instance. open/close is tracked in the windowCallback wrapper below.
+// Open a child instance in a popup ("Expand"). At most one popup per instance: if one's
+// already open, raise it instead of duplicating. The key is the dialog title digitaljs uses
+// (celltype + ' ' + label); open/close is tracked in the windowCallback wrapper below.
+// Also stash a breadcrumb-style title (full hierarchical instance path + module name) so the
+// popup titlebar matches the main page, instead of digitaljs's raw "celltype label".
 const _openSubKeys = new Set();     // instance keys with an open popup
 const _openSubDialogs = new Map();  // key -> jquery-ui dialog div (to raise on re-click)
-cells.SubcircuitView.prototype.zoomInCircuit = function (evt) {
-    evt.stopPropagation();
-    const key = this.model.get('celltype') + ' ' + this.model.get('label');
+const _subTitles = new Map();       // key -> "full.hier.path  (module)" for the titlebar
+function openSubcircuit(model, paper) {
+    const key = model.get('celltype') + ' ' + model.get('label');
     if (_openSubKeys.has(key)) {
         const dlg = _openSubDialogs.get(key);
         if (dlg) { try { dlg.dialog('moveToTop'); } catch (e) { /* dialog not ready yet */ } }
-        return false;
+        return;
     }
+    const hier = [currentScopePath, ...graphPath(model), model.get('label')].filter(Boolean).join('.');
+    _subTitles.set(key, `${hier}  (${cleanModuleName(model.get('celltype'))})`);
     _openSubKeys.add(key);                            // mark before trigger (guards fast double-clicks)
-    this.paper.trigger('open:subcircuit', this.model);
+    paper.trigger('open:subcircuit', model);
+}
+// digitaljs opens the popup from the subcircuit's zoom (🔍) icon; route it through our helper.
+cells.SubcircuitView.prototype.zoomInCircuit = function (evt) {
+    evt.stopPropagation();
+    openSubcircuit(this.model, this.paper);
     return false;
 };
 
@@ -223,6 +231,7 @@ let paper = null;
 let labelIndex = null;
 let autoFit = true;   // auto-fit after async ELK layout until the user zooms manually
 let fitTimer = null;
+let currentScopePath = ''; // breadcrumb root for this render; used to build popup hier titles
 
 const paperDiv = () => document.getElementById('paper');
 
@@ -350,6 +359,8 @@ function loadSchematic(msg) {
     }
     _openSubKeys.clear();      // popups from the previous schematic are gone
     _openSubDialogs.clear();
+    _subTitles.clear();
+    currentScopePath = msg.scopePath; // root for popup hierarchical titles
     spacing = SPACING[msg.spacing] || SPACING.compact; // density tier for this render (read by the patches below)
     _wireLabelDims.clear();    // net-label sizes are re-recorded as this design's wires build (at current tier)
     document.getElementById('breadcrumb').textContent = `${msg.scopePath}  (${msg.moduleName})`;
@@ -360,15 +371,16 @@ function loadSchematic(msg) {
     const container = document.getElementById('paper-container');
     container.innerHTML = '<div id="paper"></div>';
 
-    // default windowCallback uses jquery-ui dialogs (fine inside the webview); wrap it
-    // only to clean uniquified module names out of the dialog title
+    // default windowCallback uses jquery-ui dialogs (fine inside the webview); wrap it to give
+    // the popup a breadcrumb-style title (full hier path + module, set in openSubcircuit) and
+    // to blur the auto-focused zoom button so it doesn't open with a focus ring.
     circuit = new Circuit(msg.circuit, {
         layoutEngine: 'elkjs',
         windowCallback: function (type, div, closingCallback) {
-            // raw title (= celltype + ' ' + label) is the per-instance key; clean it for display
+            // raw title (= celltype + ' ' + label) is the per-instance key
             const key = div.attr('title') || '';
             if (key) {
-                div.attr('title', key.split(' ').map(cleanModuleName).join(' '));
+                div.attr('title', _subTitles.get(key) || key.split(' ').map(cleanModuleName).join(' '));
                 _openSubDialogs.set(key, div);
             }
             const wrappedClose = () => {
@@ -377,6 +389,9 @@ function loadSchematic(msg) {
                 closingCallback();
             };
             Circuit.prototype._defaultWindowCallback.call(this, type, div, wrappedClose);
+            // jquery-ui autofocuses the first button (the zoom "−"), showing a focus ring on
+            // open; drop it so the toolbar reads neutral until the user actually clicks.
+            setTimeout(() => { const a = document.activeElement; if (a && typeof a.blur === 'function') { a.blur(); } }, 0);
         },
     });
     // 'new:paper' fires for the main paper AND each subcircuit popup paper — bind click,
