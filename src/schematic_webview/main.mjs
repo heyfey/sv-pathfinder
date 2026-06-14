@@ -286,14 +286,23 @@ function cleanModuleName(celltype) {
     return i > 0 ? celltype.slice(0, i) : celltype;
 }
 
-// retitle subcircuit box captions with the plain module name, recursively
+// Caption a child-instance box as two centered lines ABOVE it:
+//     instance name          (digitaljs's `label`, normally at the bottom)
+//     (module name)          (digitaljs's `type` = celltype, normally the only top line)
+// digitaljs stacks module-on-top / instance-on-bottom; we want instance-on-top with the
+// module under it in parens (slightly smaller/dimmer). Reposition both via refY-from-top and
+// rewrite the module line to the cleaned name in parens. Recurses into subcircuit graphs.
 function cleanSubcircuitCaptions(index) {
     for (const dev of Object.values(index.devices)) {
         const celltype = dev.get('celltype');
-        if (celltype) {
-            const clean = cleanModuleName(celltype);
-            if (clean !== celltype) { dev.attr('type/text', clean); }
-        }
+        if (!celltype) { continue; }
+        const clean = cleanModuleName(celltype);
+        dev.removeAttr('label/refDy');       // stop measuring the instance name from the bottom
+        dev.attr('label/refY', -24);         // instance name → top line (above the box)
+        dev.attr('type/text', `(${clean})`); // module name → second line, in parens
+        dev.attr('type/refY', -11);          // just below the instance name, still above the box
+        dev.attr('type/font-size', '7pt');
+        dev.attr('type/opacity', 0.7);
     }
     for (const sub of Object.values(index.subcircuits)) {
         cleanSubcircuitCaptions(sub);
