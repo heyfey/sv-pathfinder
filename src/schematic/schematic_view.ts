@@ -6,6 +6,7 @@
 //   VaporView marker -> getValuesAtTime -> postMessage -> wire signals (C6)
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as os from 'os';
 import { DesignItem, NetlistItem, HierarchyTreeProvider, replaceFilePathIfNeeded, showTextDocumentLocation } from '../tree_view';
 import { resolveScope, scopeCacheKey, ScopeContext } from './scope_resolver';
 import { runYosys, SchematicPreset } from './yosys_runner';
@@ -305,10 +306,13 @@ export class SchematicViewProvider {
         const shown = this.current;
         if (!shown) { return; }
         const base = (shown.ctx.instancePath || shown.ctx.moduleName || 'schematic').replace(/[^\w.-]+/g, '_');
-        const dir = vscode.workspace.workspaceFolders?.[0]?.uri;
+        // Save next to the design by default (ctx.workDir is the design's source dir, always a
+        // real path); fall back to the workspace folder, then home. Use an ABSOLUTE path so the
+        // dialog doesn't resolve a bare filename at the filesystem root.
+        const dirPath = shown.ctx.workDir || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || os.homedir();
         const uri = await vscode.window.showSaveDialog({
             title: 'Export schematic',
-            defaultUri: dir ? vscode.Uri.joinPath(dir, `${base}.svg`) : vscode.Uri.file(`${base}.svg`),
+            defaultUri: vscode.Uri.file(path.join(dirPath, `${base}.svg`)),
             filters: { 'SVG image': ['svg'] },
         });
         if (!uri) { return; }
