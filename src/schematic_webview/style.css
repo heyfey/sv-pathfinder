@@ -209,6 +209,13 @@ html, body {
 }
 .sv-tab:hover { background: var(--vscode-button-secondaryHoverBackground, #45494e); }
 .sv-tab.sv-min { opacity: 0.55; font-style: italic; } /* minimized */
+/* main-page tab: always first, visually set apart, never minimized */
+.sv-tab.sv-tab-main {
+    background: transparent;
+    border-color: var(--sv-accent, var(--vscode-charts-blue));
+    margin-right: 6px;
+}
+.sv-tab.sv-tab-main:hover { background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.2)); }
 
 /* minimize button injected into the dialog titlebar, left of jquery-ui's close button */
 .sv-min-btn {

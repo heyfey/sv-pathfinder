@@ -211,10 +211,19 @@ cells.SubcircuitView.prototype.zoomInCircuit = function (evt) {
 const _taskbarTabs = new Map();  // key -> tab element
 const _subMinimized = new Set(); // keys whose popup is currently minimized
 let _taskbarEl = null;
+let _mainTab = null;
 function taskbar() {
     if (!_taskbarEl) {
         _taskbarEl = document.createElement('div');
         _taskbarEl.id = 'sv-taskbar';
+        // the main-page tab is always first and can't be minimized — a quick way to surface
+        // the main schematic (minimizes every open popup so nothing covers it).
+        _mainTab = document.createElement('div');
+        _mainTab.className = 'sv-tab sv-tab-main';
+        _mainTab.textContent = '⌂ ' + (currentMainName || 'main');
+        _mainTab.title = 'Show the main schematic (minimize all popups)';
+        _mainTab.addEventListener('click', focusMain);
+        _taskbarEl.appendChild(_mainTab);
         document.body.insertBefore(_taskbarEl, document.getElementById('status'));
     }
     return _taskbarEl;
@@ -223,6 +232,18 @@ function refreshTaskbar() { if (_taskbarEl) { _taskbarEl.style.display = _taskba
 function dialogWidget(key) {
     const div = _openSubDialogs.get(key);
     try { return div ? div.dialog('widget') : null; } catch (e) { return null; }
+}
+// Key of the visible popup currently on top (highest jquery-ui z-index), or null.
+function topmostPopupKey() {
+    let top = null, topZ = -1;
+    for (const key of _openSubKeys) {
+        if (_subMinimized.has(key)) { continue; }
+        const w = dialogWidget(key);
+        if (!w) { continue; }
+        const z = parseInt(getComputedStyle(w.get(0)).zIndex, 10) || 0;
+        if (z >= topZ) { topZ = z; top = key; }
+    }
+    return top;
 }
 function restorePopup(key) {
     if (_subMinimized.has(key)) {
@@ -238,13 +259,22 @@ function minimizePopup(key) {
     _subMinimized.add(key); w.hide();
     const tab = _taskbarTabs.get(key); if (tab) { tab.classList.add('sv-min'); }
 }
+// Windows-style tab click: minimized → restore+raise; on top (active) → minimize; else raise.
+function onPopupTabClick(key) {
+    if (_subMinimized.has(key)) { restorePopup(key); }
+    else if (key === topmostPopupKey()) { minimizePopup(key); }
+    else { restorePopup(key); }
+}
+function focusMain() {
+    for (const key of _openSubKeys) { if (!_subMinimized.has(key)) { minimizePopup(key); } }
+}
 function addTaskbarTab(key) {
     if (_taskbarTabs.has(key)) { return; }
     const tab = document.createElement('div');
     tab.className = 'sv-tab';
     tab.textContent = _subShort.get(key) || cleanModuleName((key.split(' ')[0] || ''));
     tab.title = _subTitles.get(key) || key;
-    tab.addEventListener('click', () => restorePopup(key));
+    tab.addEventListener('click', () => onPopupTabClick(key));
     taskbar().appendChild(tab);
     _taskbarTabs.set(key, tab);
     refreshTaskbar();
@@ -298,6 +328,7 @@ let labelIndex = null;
 let autoFit = true;   // auto-fit after async ELK layout until the user zooms manually
 let fitTimer = null;
 let currentScopePath = ''; // breadcrumb root for this render; used to build popup hier titles
+let currentMainName = '';  // main module name (label for the always-present main taskbar tab)
 // Read-only interactivity: disable every editing action (drag a node, start a wire from a
 // port magnet, move/add/remove a wire's vertices or endpoints) while KEEPING pointer events,
 // so click-to-highlight and the right-click menu still work on wires, ports, and instances.
@@ -438,6 +469,8 @@ function loadSchematic(msg) {
     clearTaskbar();            // popup tabs from the previous render
     clearSelection();          // highlights belong to the previous render
     currentScopePath = msg.scopePath; // root for popup hierarchical titles
+    currentMainName = msg.moduleName;
+    if (_mainTab) { _mainTab.textContent = '⌂ ' + currentMainName; }
     spacing = SPACING[msg.spacing] || SPACING.compact; // density tier for this render (read by the patches below)
     _wireLabelDims.clear();    // net-label sizes are re-recorded as this design's wires build (at current tier)
     document.getElementById('breadcrumb').textContent = `${msg.scopePath}  (${msg.moduleName})`;
