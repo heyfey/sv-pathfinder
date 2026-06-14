@@ -9,6 +9,7 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { ScopeContext } from './scope_resolver';
+import { absolutizeFlist } from '../flist';
 
 export type SchematicPreset = 'rtl' | 'gls';
 
@@ -95,8 +96,11 @@ function buildScript(backend: Backend, ctx: ScopeContext, preset: SchematicPrese
         // children as boxes (without it yosys-slang inlines everything).
         // --ignore-timing: delays (`a = #1 b;`) are sim-only and otherwise hard errors
         // in slang's synthesis path — common in legacy RTL; irrelevant to structure.
+        // -D SYNTHESIS: let designs guard sim-only code (e.g. $dumpvars with indexed
+        // selects, which slang rejects) behind `ifndef SYNTHESIS`, matching the
+        // native read_verilog path below.
         const gFlags = ctx.resolvedParams.map(p => `-G ${p.name}=${p.verilogLiteral}`).join(' ');
-        read = `read_slang --keep-hierarchy --ignore-timing ${gFlags} --top ${ctx.moduleName} ${files}`;
+        read = `read_slang --keep-hierarchy --ignore-timing -D SYNTHESIS ${gFlags} --top ${ctx.moduleName} ${files}`;
     } else {
         read = `read_verilog -sv -DSYNTHESIS ${files}`;
         chparam = ctx.resolvedParams.map(p => ` -chparam ${p.name} ${p.verilogLiteral}`).join('');
@@ -130,9 +134,18 @@ export async function runYosys(ctx: ScopeContext, preset: SchematicPreset): Prom
         }
     }
 
+    // read_slang resolves relative .f entries (and nested -f/-F/-C includes)
+    // against the yosys CWD, not each command file's own directory, so nested or
+    // workDir-relative paths fail to load. Rewrite the .f (recursively) with
+    // absolute paths first; absolute paths resolve regardless of CWD.
+    let effectiveCtx = ctx;
+    if (backend.slang && ctx.dotF) {
+        effectiveCtx = { ...ctx, dotF: await absolutizeFlist(ctx.dotF) };
+    }
+
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sv-pathfinder-schematic-'));
     const outJson = path.join(tmpDir, 'schematic.json');
-    const script = buildScript(backend, ctx, preset, outJson);
+    const script = buildScript(backend, effectiveCtx, preset, outJson);
 
     const log = await new Promise<string>((resolve, reject) => {
         const proc = cp.spawn(backend.command, ['-p', script], { cwd: ctx.workDir });
