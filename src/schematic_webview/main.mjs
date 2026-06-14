@@ -1128,6 +1128,36 @@ function buildSvgExport() {
     clone.insertBefore(rect, clone.firstChild);
     return '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
 }
+// digitaljs circuit JSON (with the current ELK layout baked in) — re-loadable into a Circuit.
+function buildJsonExport() {
+    return JSON.stringify(circuit.toJSON(), null, 2);
+}
+// Rasterize the export SVG to a PNG (base64). The SVG already has foreignObjects stripped and
+// styles inlined, so the canvas isn't tainted. Render at ~2× for crispness, capped so very
+// large schematics don't produce an enormous bitmap.
+function buildPngExport() {
+    const a = paper.getContentArea({ useModelGeometry: true });
+    const pad = 20;
+    const w = Math.max(1, Math.round(a.width + 2 * pad)), h = Math.max(1, Math.round(a.height + 2 * pad));
+    const scale = Math.min(2, 6000 / Math.max(w, h));
+    const svg = buildSvgExport();
+    const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.max(1, Math.round(w * scale));
+                canvas.height = Math.max(1, Math.round(h * scale));
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                resolve(canvas.toDataURL('image/png').split(',')[1]);
+            } catch (e) { reject(e); }
+        };
+        img.onerror = () => reject(new Error('SVG failed to rasterize for PNG export'));
+        img.src = url;
+    });
+}
 
 document.getElementById('zoom-in').addEventListener('click', () => zoomBy(1.25));
 document.getElementById('zoom-out').addEventListener('click', () => zoomBy(0.8));
@@ -1172,12 +1202,16 @@ window.addEventListener('message', (event) => {
             setStatus('values cleared');
             break;
         case 'buildExport':
-            try {
-                if (msg.format === 'svg') { post({ type: 'exportContent', format: 'svg', text: buildSvgExport() }); }
-            } catch (e) {
-                setStatus('Export failed: ' + (e && e.message ? e.message : e));
-                console.error(e);
-            }
+            (async () => {
+                try {
+                    if (msg.format === 'svg') { post({ type: 'exportContent', format: 'svg', text: buildSvgExport() }); }
+                    else if (msg.format === 'json') { post({ type: 'exportContent', format: 'json', text: buildJsonExport() }); }
+                    else if (msg.format === 'png') { post({ type: 'exportContent', format: 'png', base64: await buildPngExport() }); }
+                } catch (e) {
+                    setStatus('Export failed: ' + (e && e.message ? e.message : e));
+                    console.error(e);
+                }
+            })();
             break;
     }
 });

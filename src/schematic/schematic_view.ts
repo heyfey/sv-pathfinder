@@ -206,7 +206,7 @@ export class SchematicViewProvider {
       <span class="sv-seg-label" data-side="gls">Gate-Level</span>
     </span>
     <button id="refresh" title="Re-run Yosys">↻</button>
-    <button id="export" title="Export as SVG">⤓</button>
+    <button id="export" title="Export (SVG / PNG / JSON)">⤓</button>
   </span>
 </div>
 <div id="paper-container"><div id="paper"></div></div>
@@ -313,7 +313,7 @@ export class SchematicViewProvider {
         const uri = await vscode.window.showSaveDialog({
             title: 'Export schematic',
             defaultUri: vscode.Uri.file(path.join(dirPath, `${base}.svg`)),
-            filters: { 'SVG image': ['svg'] },
+            filters: { 'SVG image': ['svg'], 'PNG image': ['png'], 'digitaljs JSON': ['json'] },
         });
         if (!uri) { return; }
         this.pendingExportUri = uri;
