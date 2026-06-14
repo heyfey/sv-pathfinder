@@ -10,7 +10,7 @@ import { DesignItem, NetlistItem, HierarchyTreeProvider, replaceFilePathIfNeeded
 import { resolveScope, scopeCacheKey, ScopeContext } from './scope_resolver';
 import { runYosys, SchematicPreset } from './yosys_runner';
 import { convertToDigitalJs } from './converter';
-import { FromWebviewMessage, ToWebviewMessage, ElementClickMessage, SourcePosition } from './messages';
+import { FromWebviewMessage, ToWebviewMessage, ElementClickMessage, ContextActionMessage, SourcePosition } from './messages';
 
 interface ShownSchematic {
     design: DesignItem;
@@ -124,6 +124,9 @@ export class SchematicViewProvider {
                 case 'elementClick':
                     this.handleElementClick(msg as ElementClickMessage);
                     break;
+                case 'contextAction':
+                    this.handleContextAction(msg as ContextActionMessage);
+                    break;
                 case 'setPreset': {
                     const preset = (msg as any).preset === 'gls' ? 'gls' : 'rtl';
                     if (this.current && preset !== this.current.preset) {
@@ -232,13 +235,55 @@ export class SchematicViewProvider {
         }
         // celltype = (uniquified) module name of a child box -> module declaration
         if (msg.celltype) {
-            const moduleName = cleanModuleName(msg.celltype);
-            const moduleDef = shown.design.getModuleInstances().find(m => m.moduleName === moduleName || m.fullName === moduleName);
-            if (moduleDef && moduleDef.sourceFile) {
-                await showTextDocumentLocation(moduleDef.sourceFile, moduleDef.lineNumber, moduleDef.columnNumber, shown.design.isExample);
-            }
+            await this.gotoModuleDefinition(msg.celltype);
         }
         // neither source positions nor a resolvable name: silently non-navigable (by design)
+    }
+
+    // Open the source file of a child module's definition (from its uniquified celltype).
+    private async gotoModuleDefinition(celltype: string) {
+        const shown = this.current;
+        if (!shown) { return; }
+        const moduleName = cleanModuleName(celltype);
+        const moduleDef = shown.design.getModuleInstances().find(m => m.moduleName === moduleName || m.fullName === moduleName);
+        if (moduleDef && moduleDef.sourceFile) {
+            await showTextDocumentLocation(moduleDef.sourceFile, moduleDef.lineNumber, moduleDef.columnNumber, shown.design.isExample);
+        }
+    }
+
+    // Right-click context-menu actions. Reuses the existing tree commands by resolving the
+    // clicked element back to a NetlistItem (findTreeItem on its full hierarchical name).
+    private async handleContextAction(msg: ContextActionMessage) {
+        const shown = this.current;
+        if (!shown) { return; }
+        const fullName = [shown.ctx.instancePath, ...(msg.path ?? []), msg.leafName].filter(Boolean).join('.');
+        switch (msg.action) {
+            case 'copyName':
+                await vscode.env.clipboard.writeText(fullName);
+                vscode.window.setStatusBarMessage(`Copied ${fullName}`, 2000);
+                return;
+            case 'copyValue':
+                if (msg.value !== undefined && msg.value !== '') {
+                    await vscode.env.clipboard.writeText(msg.value);
+                    vscode.window.setStatusBarMessage(`Copied value ${msg.value}`, 2000);
+                }
+                return;
+            case 'gotoSource':
+                // reuse the precise source nav (Yosys source_positions → declaration fallback)
+                await this.handleElementClick({ ...msg, type: 'elementClick', action: 'source' } as ElementClickMessage);
+                return;
+            case 'gotoDefinition': {
+                if (msg.kind === 'subcircuit' && msg.celltype) { await this.gotoModuleDefinition(msg.celltype); return; }
+                const item = await shown.design.findTreeItem(fullName);
+                if (item) { await vscode.commands.executeCommand('sv-pathfinder.gotoDefinition', item); }
+                return;
+            }
+            case 'addToWaveform': {
+                const item = await shown.design.findTreeItem(fullName);
+                if (item) { await vscode.commands.executeCommand('sv-pathfinder.addToWaveform', item); }
+                return;
+            }
+        }
     }
 
     private async pickSourcePosition(positions: SourcePosition[]): Promise<SourcePosition | undefined> {

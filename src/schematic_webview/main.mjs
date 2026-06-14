@@ -405,6 +405,7 @@ function loadSchematic(msg) {
         p.options.interactive = { elementMove: false };
         p.on('cell:pointerclick', (cellView) => emitClick(cellView.model));
         bindHover(p);
+        bindContextMenu(p);
         attachNav(p);
         // After the paper unfreezes: lock cell dragging on every view, and learn this
         // environment's per-char width once so later layouts (popups, reloads) size exactly.
@@ -473,6 +474,9 @@ function describe(model) {
 let hovered = null;
 function bindHover(p) {
     p.on('cell:mouseenter', (cv) => {
+        // Child instances get no hover affordance (the user drills in via right-click → Expand,
+        // not by hovering); their name is already the box caption.
+        if (cv.model.get('celltype')) { return; }
         if (hovered) { hovered.classList.remove('sv-hover'); }
         hovered = cv.el;
         hovered.classList.add('sv-hover');
@@ -483,6 +487,88 @@ function bindHover(p) {
         if (hovered === cv.el) { hovered = null; }
         document.getElementById('status').textContent = baseStatus;
     });
+}
+
+// ---- right-click context menu ----
+// One floating menu (appended to <body> so it works over the main paper AND popup dialogs).
+// Items are filtered to what applies to the clicked element. "Expand" opens the child popup
+// in-webview; every other action posts a contextAction to the extension (which reuses the
+// existing tree commands). Left-click stays separate (cross-nav / highlight).
+function elementInfo(model) {
+    const isLink = typeof model.isLink === 'function' && model.isLink();
+    const celltype = model.get('celltype');
+    const type = model.get('type');
+    return {
+        model, isLink, celltype,
+        isSub: !!celltype,
+        isIO: type === 'Input' || type === 'Output',
+        kind: isLink ? 'wire' : (celltype ? 'subcircuit' : 'device'),
+        leafName: isLink ? model.get('netname') : (model.get('label') || model.get('net')),
+    };
+}
+// Current annotated value as a copyable string, or undefined when there's no real value
+// (no waveform loaded → all-x). Wires carry the signal; an IO/gate's value is on its output.
+function currentValue(model) {
+    let sig = model.get('signal');
+    if (!sig) { const outs = model.get('outputSignals'); if (outs) { sig = Object.values(outs)[0]; } }
+    if (sig && typeof sig.toBin === 'function') {
+        const bin = sig.toBin();
+        if (/^x+$/i.test(bin)) { return undefined; } // unannotated
+        return (typeof sig.toHex === 'function' && bin.length > 4) ? '0x' + sig.toHex() : bin;
+    }
+    return undefined;
+}
+const CTX_ITEMS = [
+    { label: 'Expand', applies: (i) => i.isSub, expand: true },
+    { label: 'Go to source', applies: () => true, action: 'gotoSource' },
+    { label: 'Go to definition', applies: (i) => i.isSub || i.isLink || i.isIO, action: 'gotoDefinition' },
+    { sep: true },
+    { label: 'Copy hierarchy name', applies: (i) => !!i.leafName, action: 'copyName' },
+    { label: 'Copy value', applies: (i) => currentValue(i.model) !== undefined, action: 'copyValue' },
+    { label: 'Add to waveform', applies: (i) => i.isLink || i.isIO || i.isSub, action: 'addToWaveform' },
+];
+let _ctxMenu = null;
+function hideContextMenu() { if (_ctxMenu) { _ctxMenu.style.display = 'none'; } }
+function showContextMenu(cellView, clientX, clientY) {
+    if (!_ctxMenu) { _ctxMenu = document.createElement('div'); _ctxMenu.id = 'sv-ctxmenu'; document.body.appendChild(_ctxMenu); }
+    const info = elementInfo(cellView.model);
+    _ctxMenu.innerHTML = '';
+    for (const item of CTX_ITEMS) {
+        if (item.sep) {
+            if (!_ctxMenu.lastChild || _ctxMenu.lastChild.className === 'sv-ctxsep') { continue; } // no leading/double sep
+            const s = document.createElement('div'); s.className = 'sv-ctxsep'; _ctxMenu.appendChild(s); continue;
+        }
+        if (!item.applies(info)) { continue; }
+        const row = document.createElement('div');
+        row.className = 'sv-ctxitem';
+        row.textContent = item.label;
+        row.addEventListener('click', () => {
+            hideContextMenu();
+            if (item.expand) { openSubcircuit(info.model, cellView.paper); return; }
+            post({
+                type: 'contextAction', action: item.action, kind: info.kind,
+                leafName: info.leafName, celltype: info.celltype, path: graphPath(info.model),
+                sourcePositions: info.model.get('source_positions') || [],
+                value: item.action === 'copyValue' ? currentValue(info.model) : undefined,
+            });
+        });
+        _ctxMenu.appendChild(row);
+    }
+    while (_ctxMenu.lastChild && _ctxMenu.lastChild.className === 'sv-ctxsep') { _ctxMenu.removeChild(_ctxMenu.lastChild); }
+    _ctxMenu.style.display = 'block';
+    const mw = _ctxMenu.offsetWidth, mh = _ctxMenu.offsetHeight;
+    _ctxMenu.style.left = Math.max(2, Math.min(clientX, window.innerWidth - mw - 4)) + 'px';
+    _ctxMenu.style.top = Math.max(2, Math.min(clientY, window.innerHeight - mh - 4)) + 'px';
+}
+// dismiss on any outside interaction
+document.addEventListener('pointerdown', (e) => { if (_ctxMenu && _ctxMenu.style.display !== 'none' && !_ctxMenu.contains(e.target)) { hideContextMenu(); } }, true);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { hideContextMenu(); } });
+window.addEventListener('blur', hideContextMenu);
+// suppress the native (VS Code) context menu inside the schematic webview
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+function bindContextMenu(p) {
+    p.on('cell:contextmenu', (cellView, evt) => { showContextMenu(cellView, evt.clientX, evt.clientY); });
+    p.on('blank:contextmenu', () => hideContextMenu());
 }
 
 // ---- pan / zoom (fully transform-based) ----

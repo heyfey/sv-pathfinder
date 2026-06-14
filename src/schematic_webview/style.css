@@ -135,6 +135,10 @@ html, body {
     fill: var(--vscode-editor-foreground, #cccccc);
 }
 
+/* read-only viewer: hide the box zoom (🔍) affordance; child instances open via
+ * right-click → Expand. (Wire value tooltips are on .joint-link, not .joint-cell.) */
+.djs .joint-cell .tooltip { display: none; }
+
 /* hover highlight: accent glow on the hovered cell/wire (class toggled from JS).
  * A drop-shadow outlines any shape without overriding the wire's value stroke color. */
 .djs .sv-hover {
@@ -147,6 +151,35 @@ html, body {
  * connection path overrides those attributes and would flatten every wire to one color.
  * The theme-aware value palette is installed on cells.Wire.prototype.attrs.signal in
  * main.mjs instead. */
+
+/* ---- right-click context menu ---- */
+#sv-ctxmenu {
+    position: fixed;
+    z-index: 1000;
+    min-width: 168px;
+    padding: 4px 0;
+    background: var(--vscode-menu-background, var(--vscode-editorWidget-background, #252526));
+    color: var(--vscode-menu-foreground, var(--vscode-editor-foreground, #cccccc));
+    border: 1px solid var(--vscode-menu-border, var(--vscode-editorWidget-border, #454545));
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    font-size: var(--vscode-font-size);
+    user-select: none;
+}
+.sv-ctxitem {
+    padding: 4px 18px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.sv-ctxitem:hover {
+    background: var(--vscode-menu-selectionBackground, var(--vscode-list-activeSelectionBackground, #094771));
+    color: var(--vscode-menu-selectionForeground, var(--vscode-list-activeSelectionForeground, #ffffff));
+}
+.sv-ctxsep {
+    height: 1px;
+    margin: 4px 0;
+    background: var(--vscode-menu-separatorBackground, var(--vscode-editorWidget-border, #454545));
+}
 
 /* ---- subcircuit popup window (jquery-ui dialog) theming ---- */
 .ui-dialog {

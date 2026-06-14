@@ -26,7 +26,20 @@ export interface GoToParentMessage {
     type: 'goToParent';
 }
 
-export type FromWebviewMessage = ElementClickMessage | WebviewReadyMessage | GoToParentMessage;
+// webview -> extension: a right-click context-menu action on an element. Expand (open popup)
+// is handled entirely in the webview and does NOT come through here.
+export interface ContextActionMessage {
+    type: 'contextAction';
+    action: 'gotoSource' | 'gotoDefinition' | 'copyName' | 'addToWaveform' | 'copyValue';
+    kind: 'wire' | 'device' | 'subcircuit';
+    leafName?: string;
+    celltype?: string;
+    path?: string[];
+    sourcePositions: SourcePosition[];
+    value?: string; // current annotated value, for copyValue
+}
+
+export type FromWebviewMessage = ElementClickMessage | WebviewReadyMessage | GoToParentMessage | ContextActionMessage;
 
 // extension -> webview
 export interface LoadSchematicMessage {
