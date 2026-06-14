@@ -666,7 +666,7 @@ const CTX_ITEMS = [
     { label: 'Go to source', applies: (i) => sourceNavigable(i), action: 'gotoSource' },
     { label: 'Go to definition', applies: (i) => i.isSub || realName(i), action: 'gotoDefinition' },
     { sep: true },
-    { label: 'Copy hierarchy name', applies: (i) => !!i.leafName, action: 'copyName' },
+    { label: 'Copy name', applies: (i) => !!i.leafName, action: 'copyName' },
     { label: 'Copy value', applies: (i) => currentValue(i.model) !== undefined, action: 'copyValue' },
     { label: 'Add to waveform', applies: (i) => i.isSub || realName(i), action: 'addToWaveform' },
 ];
@@ -698,6 +698,7 @@ function showContextMenu(cellView, clientX, clientY) {
         _ctxMenu.appendChild(row);
     }
     while (_ctxMenu.lastChild && _ctxMenu.lastChild.className === 'sv-ctxsep') { _ctxMenu.removeChild(_ctxMenu.lastChild); }
+    if (!_ctxMenu.querySelector('.sv-ctxitem')) { hideContextMenu(); return; } // nothing applies → no menu
     _ctxMenu.style.display = 'block';
     const mw = _ctxMenu.offsetWidth, mh = _ctxMenu.offsetHeight;
     _ctxMenu.style.left = Math.max(2, Math.min(clientX, window.innerWidth - mw - 4)) + 'px';
