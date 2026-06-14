@@ -318,6 +318,7 @@ html, body {
     border: none;
     border-radius: 3px;
     cursor: pointer;
+    text-indent: 0; /* counter jquery-ui's .ui-button-icon-only text-indent:-9999px (hides the codicon) */
 }
 .sv-min-btn { right: 2.1em; }
 /* jquery-ui pins this button at right:0, so nudge it left toward the minimize with margin */
