@@ -61,10 +61,10 @@ export class WaveformValueAnnotationProvider {
         if (api && api.onDidSetMarker) {
             // Subscribe to the event and return the Disposable
             const disposable = api.onDidSetMarker((data: any) => {
-                // Check is interested waveform file
-                // TODO: change to data.uri
-                // if (data.uri !== this.hierarchyTreeProvider.getActiveDesign()?.getActiveWaveform()?.resourceUri.toString()) {
-                if (data.uri.fsPath !== this.hierarchyTreeProvider.getActiveDesign()?.getActiveWaveform()?.resourceUri.fsPath) {
+                // Check is interested waveform file.
+                // Note: vaporview's MarkerSetEvent.uri is a string, not a vscode.Uri,
+                // so parse it before comparing fsPath.
+                if (vscode.Uri.parse(data.uri).fsPath !== this.hierarchyTreeProvider.getActiveDesign()?.getActiveWaveform()?.resourceUri.fsPath) {
                     return;
                 }
                 // Check if the timestamp has changed
