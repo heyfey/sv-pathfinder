@@ -299,6 +299,18 @@ function clearTaskbar() {
     _taskbarTabs.clear(); _subMinimized.clear(); _subShort.clear();
     refreshTaskbar();
 }
+// Confine a popup to the canvas area (#paper-container, between the toolbar and the status
+// bar) so it can't be dragged or resized over the status bar — the status bar sits above the
+// dialogs (z-index) to keep its tabs clickable, so an overlapping popup gets clipped by it.
+function constrainDialog(div) {
+    const pc = document.getElementById('paper-container');
+    try {
+        const widget = div.dialog('widget');
+        try { widget.draggable('option', 'containment', pc); } catch (e) { /* not draggable */ }
+        try { widget.resizable('option', 'containment', pc); } catch (e) { /* not resizable */ }
+        div.dialog('option', { maxWidth: pc.clientWidth, maxHeight: pc.clientHeight });
+    } catch (e) { /* dialog not ready */ }
+}
 
 // Theme-aware wire value palette. digitaljs colors wires by signal value via the `line`
 // selector attrs (hard-coded greens/reds); replace them with VS Code theme colors so the
@@ -498,6 +510,7 @@ function loadSchematic(msg) {
                 closingCallback();
             };
             Circuit.prototype._defaultWindowCallback.call(this, type, div, wrappedClose);
+            constrainDialog(div); // keep it within the canvas, off the status bar
             // a taskbar tab (switch between many popups) + a titlebar minimize button
             if (key) { addTaskbarTab(key); addMinimizeButton(div, key); }
             // jquery-ui autofocuses the first button (the zoom "−"), showing a focus ring on
