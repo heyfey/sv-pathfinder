@@ -374,12 +374,17 @@ function loadSchematic(msg) {
     // hover, and navigation (wheel zoom/pan + drag pan) on all of them so popup windows
     // behave like the main canvas. (Registered before displayOn.)
     circuit.on('new:paper', (p) => {
+        // Read-only viewer: lock node positions (no dragging cells around). Blank-area drag
+        // still pans (attachNav), and clicks/right-clicks still fire — only element move is off.
+        // Set the paper option now (new views inherit it) AND setInteractivity after render
+        // (propagates to already-created cell views, whose cached `interactive` `can()` reads).
+        p.options.interactive = { elementMove: false };
         p.on('cell:pointerclick', (cellView) => emitClick(cellView.model));
         bindHover(p);
         attachNav(p);
-        // After the paper unfreezes, real label geometry is valid — learn this environment's
-        // per-char width once so later layouts (popups, reloads) size boxes/labels exactly.
-        p.once('render:done', () => calibrateCharPx(p));
+        // After the paper unfreezes: lock cell dragging on every view, and learn this
+        // environment's per-char width once so later layouts (popups, reloads) size exactly.
+        p.once('render:done', () => { p.setInteractivity({ elementMove: false }); calibrateCharPx(p); });
         // ELK positions cells asynchronously; drop the cached content bbox while it changes
         // so clamping/overviews recompute from the final layout, not a pre-layout box.
         watchAreaInvalidation(p.model);
@@ -789,11 +794,12 @@ document.getElementById('zoom-out').addEventListener('click', () => zoomBy(0.8))
 document.getElementById('zoom-fit').addEventListener('click', fitToView);
 document.getElementById('refresh').addEventListener('click', () => post({ type: 'refresh' }));
 document.getElementById('go-parent').addEventListener('click', () => post({ type: 'goToParent' }));
+// RTL / Gate-Level toggle. The button shows the CURRENT view; clicking switches.
 const presetButton = document.getElementById('preset-toggle');
 presetButton.addEventListener('click', () => {
-    const next = presetButton.textContent === 'RTL' ? 'GLS' : 'RTL';
-    presetButton.textContent = next;
-    post({ type: 'setPreset', preset: next.toLowerCase() });
+    const toGls = presetButton.textContent === 'RTL';
+    presetButton.textContent = toGls ? 'Gate-Level' : 'RTL';
+    post({ type: 'setPreset', preset: toGls ? 'gls' : 'rtl' });
 });
 
 // ---- messages from the extension ----

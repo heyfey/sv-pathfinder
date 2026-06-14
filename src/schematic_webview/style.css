@@ -92,6 +92,7 @@ html, body {
     padding: 2px 8px;
     font-size: 0.85em;
     opacity: 0.75;
+    text-align: right;
     border-top: 1px solid var(--vscode-editorWidget-border, #444);
 }
 

@@ -190,7 +190,7 @@ export class SchematicViewProvider {
     <button id="zoom-out" title="Zoom out">−</button>
     <button id="zoom-in" title="Zoom in">+</button>
     <button id="zoom-fit" title="Fit">⊡</button>
-    <button id="preset-toggle" title="Toggle RTL / gate-level view">RTL</button>
+    <button id="preset-toggle" title="Toggle RTL / Gate-Level view">RTL</button>
     <button id="refresh" title="Re-run Yosys">↻</button>
   </span>
 </div>
