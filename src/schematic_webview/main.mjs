@@ -683,18 +683,44 @@ function setupMainPaper(p) {
     if (overviewMode === 'scrollbars') { attachScrollbars(p, c); } else { attachMinimap(p, c); }
 }
 
-// Subcircuit popup paper: a fixed window sized to a fraction of the viewport (the jquery-ui
-// dialog auto-sizes to the paper element), transform-based like the main paper, with
-// overlay scrollbars.
+// Subcircuit popup paper: opens at a fraction of the viewport, then FOLLOWS the jquery-ui
+// dialog as the user resizes it (the canvas was previously frozen at its initial size, so a
+// resized popup left dead space). Transform-based like the main paper, with overlay scrollbars.
+//
+// Available paper size = the dialog content area minus the zoom toolbar. Before jquery-ui has
+// wrapped the content (it does so on render:done, after this runs), or when detached, fall
+// back to the initial w×h.
+function popupAvailSize(content, w, h) {
+    if (content && content.isConnected && content.classList.contains('ui-dialog-content')) {
+        const btn = content.querySelector('.btn-group');
+        const aw = content.clientWidth;
+        const ah = content.clientHeight - (btn ? btn.offsetHeight : 0);
+        if (aw > 50 && ah > 50) { return { w: aw, h: ah }; }
+    }
+    return { w, h };
+}
 function setupPopupPaper(p) {
     neutralizeAutoResize(p);
     const w = Math.min(900, Math.round(window.innerWidth * 0.7));
     const h = Math.min(600, Math.round(window.innerHeight * 0.7));
     p.setDimensions(w, h);
-    const fit = () => fitPaper(p, w, h);
+    // p.el = the .joint-paper container div; its parent is the jquery-ui dialog content
+    // (gets class `ui-dialog-content` once the dialog is created on render:done).
+    const content = p.el.parentElement;
+    const fit = () => { const s = popupAvailSize(content, w, h); fitPaper(p, s.w, s.h); };
     p.once('render:done', fit);
     setTimeout(fit, 200); // catch async ELK layout of the child
     attachScrollbars(p, p.el);
+    // re-fit whenever the dialog is resized (the content box changes size). Self-disconnects
+    // when the popup closes (content detached). setDimensions (inside fitPaper) fires the
+    // paper 'resize' event, so the overlay scrollbars recompute too.
+    if (content && typeof ResizeObserver !== 'undefined') {
+        const ro = new ResizeObserver(() => {
+            if (!content.isConnected) { ro.disconnect(); return; }
+            fit();
+        });
+        ro.observe(content);
+    }
 }
 
 // Visible region of a paper in graph-local coordinates (from transform + viewport size).
