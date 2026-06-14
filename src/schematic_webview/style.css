@@ -243,8 +243,9 @@ html, body {
     overflow: hidden;
 }
 .sv-min-btn { right: 2.1em; }
-/* font-size:0 hides jquery-ui's "Close" label text node; the ✕ comes from ::before below */
-.ui-dialog .ui-dialog-titlebar-close { right: 0.4em; margin: 0; font-size: 0; }
+/* font-size:0 hides jquery-ui's "Close" label text node; the ✕ comes from ::before below.
+ * jquery-ui pins this button at right:0, so nudge it left toward the minimize with margin. */
+.ui-dialog .ui-dialog-titlebar-close { right: 0; margin: 0 4px 0 0; font-size: 0; }
 .sv-min-btn:hover,
 .ui-dialog .ui-dialog-titlebar-close:hover {
     background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.2));
