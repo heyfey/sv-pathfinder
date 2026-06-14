@@ -281,8 +281,16 @@ export class SchematicViewProvider {
                 }
                 return;
             case 'stepInto': {
-                // re-render the MAIN page at the child instance's scope (like go-to-parent, inward)
-                const child = await shown.design.findTreeItem(fullName);
+                // re-render the MAIN page at the child instance's scope (like go-to-parent, inward).
+                // Resolve by walking DOWN the in-memory tree from the already-rendered scope
+                // (current.instance) along the RELATIVE path — the mirror of go-to-parent's `.parent`
+                // walk. This anchors on the exact rendered scope (no root re-lookup / full-path
+                // re-parse), and its direct children are already loaded (resolveScope →
+                // getChildrenExternal), so the common case is an in-memory lookup. Fall back to the
+                // absolute findTreeItem if the local walk misses.
+                const relPath = [...(msg.path ?? []), msg.leafName].filter(Boolean).join('.');
+                const child = await shown.instance.findChild(relPath, shown.design)
+                    ?? await shown.design.findTreeItem(fullName);
                 if (child) { await this.render(shown.design, child, shown.preset); }
                 return;
             }
