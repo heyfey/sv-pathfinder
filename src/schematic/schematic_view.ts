@@ -300,26 +300,41 @@ export class SchematicViewProvider {
 
     // #region export
     // The webview owns the SVG DOM, so it serializes the picture; we just pick the file and
-    // write the bytes it sends back (showSaveDialog → buildExport → exportContent → write).
+    // write the bytes it sends back (pick format → showSaveDialog → buildExport →
+    // exportContent → write). We choose the format with a QuickPick rather than the save
+    // dialog's file-type filters: the simple input-box dialog (used on remote/WSL) shows no
+    // filter dropdown, so it would silently keep the first format.
     private pendingExportUri?: vscode.Uri;
     private async handleExportRequest() {
         const shown = this.current;
         if (!shown) { return; }
+        const pick = await vscode.window.showQuickPick(
+            [
+                { label: 'SVG image', description: 'Vector — scalable (.svg)', ext: 'svg' as const },
+                { label: 'PNG image', description: 'Bitmap (.png)', ext: 'png' as const },
+                { label: 'digitaljs JSON', description: 'Re-loadable circuit data (.json)', ext: 'json' as const },
+            ],
+            { title: 'Export schematic as', placeHolder: 'Choose a format' },
+        );
+        if (!pick) { return; }
+        const ext = pick.ext;
         const base = (shown.ctx.instancePath || shown.ctx.moduleName || 'schematic').replace(/[^\w.-]+/g, '_');
         // Save next to the design by default (ctx.workDir is the design's source dir, always a
         // real path); fall back to the workspace folder, then home. Use an ABSOLUTE path so the
         // dialog doesn't resolve a bare filename at the filesystem root.
         const dirPath = shown.ctx.workDir || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || os.homedir();
-        const uri = await vscode.window.showSaveDialog({
-            title: 'Export schematic',
-            defaultUri: vscode.Uri.file(path.join(dirPath, `${base}.svg`)),
-            filters: { 'SVG image': ['svg'], 'PNG image': ['png'], 'digitaljs JSON': ['json'] },
+        const chosen = await vscode.window.showSaveDialog({
+            title: `Export schematic (${ext.toUpperCase()})`,
+            defaultUri: vscode.Uri.file(path.join(dirPath, `${base}.${ext}`)),
+            filters: { [pick.label]: [ext] },
         });
-        if (!uri) { return; }
-        this.pendingExportUri = uri;
-        const ext = path.extname(uri.fsPath).slice(1).toLowerCase();
-        const format = (ext === 'png' || ext === 'json') ? ext : 'svg';
-        this.postMessage({ type: 'buildExport', format });
+        if (!chosen) { return; }
+        // the format follows the chosen FORMAT, not whatever extension was typed — keep the file
+        // extension consistent with the content.
+        this.pendingExportUri = path.extname(chosen.fsPath).toLowerCase() === `.${ext}`
+            ? chosen
+            : chosen.with({ path: `${chosen.path}.${ext}` });
+        this.postMessage({ type: 'buildExport', format: ext });
     }
     private async handleExportContent(msg: ExportContentMessage) {
         const uri = this.pendingExportUri;
