@@ -213,9 +213,8 @@ const _subMinimized = new Set(); // keys whose popup is currently minimized
 let _taskbarEl = null;
 let _mainTab = null;
 function taskbar() {
-    if (!_taskbarEl) {
-        _taskbarEl = document.createElement('div');
-        _taskbarEl.id = 'sv-taskbar';
+    if (!_mainTab) {
+        _taskbarEl = document.getElementById('sv-taskbar'); // lives at the left of the status bar
         // the main-page tab is always first and can't be minimized — a quick way to surface
         // the main schematic (minimizes every open popup so nothing covers it).
         _mainTab = document.createElement('div');
@@ -224,7 +223,6 @@ function taskbar() {
         _mainTab.title = 'Show the main schematic (minimize all popups)';
         _mainTab.addEventListener('click', focusMain);
         _taskbarEl.appendChild(_mainTab);
-        document.body.insertBefore(_taskbarEl, document.getElementById('status'));
     }
     return _taskbarEl;
 }
@@ -564,7 +562,7 @@ function loadSchematic(msg) {
 let baseStatus = ''; // persistent status (load / value count); hover overlays it transiently
 function setStatus(text) {
     baseStatus = text;
-    document.getElementById('status').textContent = text;
+    document.getElementById('status-text').textContent = text;
 }
 
 // One-line identity of a hovered model, shown in the status bar.
@@ -594,12 +592,12 @@ function bindHover(p) {
         if (hovered) { hovered.classList.remove('sv-hover'); }
         hovered = cv.el;
         hovered.classList.add('sv-hover');
-        document.getElementById('status').textContent = describe(cv.model);
+        document.getElementById('status-text').textContent = describe(cv.model);
     });
     p.on('cell:mouseleave', (cv) => {
         cv.el.classList.remove('sv-hover');
         if (hovered === cv.el) { hovered = null; }
-        document.getElementById('status').textContent = baseStatus;
+        document.getElementById('status-text').textContent = baseStatus;
     });
 }
 

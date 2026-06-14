@@ -87,13 +87,22 @@ html, body {
 }
 #sv-minimap:hover { opacity: 1; }
 
+/* bottom bar: popup tabs on the left, the "# nets / # devices" status text on the right */
 #status {
     flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
     padding: 2px 8px;
+    border-top: 1px solid var(--vscode-editorWidget-border, #444);
+    position: relative;
+    z-index: 10000; /* keep the bar (and its tabs) above the absolutely-positioned dialogs */
+}
+#status-text {
+    margin-left: auto; /* push to the right regardless of how many tabs are present */
     font-size: 0.85em;
     opacity: 0.75;
-    text-align: right;
-    border-top: 1px solid var(--vscode-editorWidget-border, #444);
+    white-space: nowrap;
 }
 
 /* ---- digitaljs SVG theming ----
@@ -180,17 +189,13 @@ html, body {
  * The theme-aware value palette is installed on cells.Wire.prototype.attrs.signal in
  * main.mjs instead. */
 
-/* ---- popup taskbar (one tab per open child window) ---- */
+/* ---- popup taskbar (one tab per open child window), lives at the left of the status bar --- */
 #sv-taskbar {
-    flex: 0 0 auto;
     display: none; /* shown (flex) only when popups exist */
+    align-items: center;
     gap: 4px;
-    padding: 3px 6px;
-    background: var(--vscode-editorWidget-background, #252526);
-    border-top: 1px solid var(--vscode-editorWidget-border, #454545);
     overflow-x: auto;
-    position: relative;
-    z-index: 10000; /* stay above the (absolutely-positioned) jquery-ui dialogs */
+    min-width: 0; /* allow the tab row to shrink/scroll rather than push the status text off */
 }
 .sv-tab {
     flex: 0 0 auto;

@@ -198,7 +198,7 @@ export class SchematicViewProvider {
   </span>
 </div>
 <div id="paper-container"><div id="paper"></div></div>
-<div id="status"></div>
+<div id="status"><span id="sv-taskbar"></span><span id="status-text"></span></div>
 <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
