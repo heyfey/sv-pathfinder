@@ -243,7 +243,8 @@ html, body {
     overflow: hidden;
 }
 .sv-min-btn { right: 2.1em; }
-.ui-dialog .ui-dialog-titlebar-close { right: 0.4em; margin: 0; }
+/* font-size:0 hides jquery-ui's "Close" label text node; the ✕ comes from ::before below */
+.ui-dialog .ui-dialog-titlebar-close { right: 0.4em; margin: 0; font-size: 0; }
 .sv-min-btn:hover,
 .ui-dialog .ui-dialog-titlebar-close:hover {
     background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.2));
@@ -252,7 +253,7 @@ html, body {
 .ui-dialog .ui-dialog-titlebar-close .ui-icon,
 .ui-dialog .ui-dialog-titlebar-close .ui-button-icon,
 .ui-dialog .ui-dialog-titlebar-close .ui-button-icon-space { display: none; }
-.ui-dialog .ui-dialog-titlebar-close::before { content: '✕'; font-size: 12px; }
+.ui-dialog .ui-dialog-titlebar-close::before { content: '✕'; font-size: 13px; line-height: 1; }
 
 /* ---- right-click context menu ---- */
 #sv-ctxmenu {
