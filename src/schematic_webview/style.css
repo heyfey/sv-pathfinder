@@ -31,6 +31,72 @@ html, body {
     text-overflow: ellipsis;
 }
 
+/* RTL / Gate-Level slider toggle (labels flanking an iOS-style switch) */
+#preset-toggle.sv-seg {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 6px;
+    font-size: 0.9em;
+    user-select: none;
+    vertical-align: middle;
+}
+.sv-seg-label {
+    opacity: 0.5;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.sv-seg-label.active {
+    opacity: 1;
+    color: var(--sv-accent, var(--vscode-charts-blue));
+    font-weight: 600;
+}
+.sv-switch {
+    position: relative;
+    display: inline-block;
+    width: 32px;
+    height: 16px;
+    flex: 0 0 auto;
+    cursor: pointer;
+}
+.sv-switch input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.sv-slider {
+    position: absolute;
+    inset: 0;
+    background: var(--vscode-button-secondaryBackground, #3a3d41);
+    border: 1px solid var(--vscode-editorWidget-border, #555);
+    border-radius: 999px;
+    transition: background 0.15s;
+}
+.sv-slider::before {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    left: 2px;
+    top: 1px;
+    background: var(--vscode-foreground, #dddddd);
+    border-radius: 50%;
+    transition: transform 0.15s;
+}
+.sv-switch input:checked + .sv-slider {
+    background: var(--sv-accent, var(--vscode-charts-blue));
+    border-color: var(--sv-accent, var(--vscode-charts-blue));
+}
+.sv-switch input:checked + .sv-slider::before {
+    transform: translateX(16px);
+    background: #ffffff;
+}
+.sv-switch input:focus-visible + .sv-slider {
+    outline: 1px solid var(--sv-accent, var(--vscode-charts-blue));
+    outline-offset: 1px;
+}
+
 #toolbar-right button {
     background: var(--vscode-button-secondaryBackground, #3a3d41);
     color: var(--vscode-button-secondaryForeground, #ffffff);

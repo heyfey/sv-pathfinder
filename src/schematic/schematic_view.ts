@@ -193,7 +193,11 @@ export class SchematicViewProvider {
     <button id="zoom-out" title="Zoom out">−</button>
     <button id="zoom-in" title="Zoom in">+</button>
     <button id="zoom-fit" title="Fit">⊡</button>
-    <button id="preset-toggle" title="Toggle RTL / Gate-Level view">RTL</button>
+    <span id="preset-toggle" class="sv-seg" title="Toggle RTL / Gate-Level view">
+      <span class="sv-seg-label active" data-side="rtl">RTL</span>
+      <label class="sv-switch"><input type="checkbox" id="preset-switch"><span class="sv-slider"></span></label>
+      <span class="sv-seg-label" data-side="gls">Gate-Level</span>
+    </span>
     <button id="refresh" title="Re-run Yosys">↻</button>
   </span>
 </div>

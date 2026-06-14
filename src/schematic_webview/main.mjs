@@ -1075,13 +1075,16 @@ document.getElementById('zoom-out').addEventListener('click', () => zoomBy(0.8))
 document.getElementById('zoom-fit').addEventListener('click', fitToView);
 document.getElementById('refresh').addEventListener('click', () => post({ type: 'refresh' }));
 document.getElementById('go-parent').addEventListener('click', () => post({ type: 'goToParent' }));
-// RTL / Gate-Level toggle. The button shows the CURRENT view; clicking switches.
-const presetButton = document.getElementById('preset-toggle');
-presetButton.addEventListener('click', () => {
-    const toGls = presetButton.textContent === 'RTL';
-    presetButton.textContent = toGls ? 'Gate-Level' : 'RTL';
-    post({ type: 'setPreset', preset: toGls ? 'gls' : 'rtl' });
-});
+// RTL / Gate-Level slider toggle: left = RTL (unchecked), right = Gate-Level (checked).
+const presetSwitch = document.getElementById('preset-switch');
+const presetLabels = document.querySelectorAll('#preset-toggle .sv-seg-label');
+function setPreset(gls) {
+    presetSwitch.checked = gls;
+    presetLabels.forEach((l) => l.classList.toggle('active', (l.dataset.side === 'gls') === gls));
+    post({ type: 'setPreset', preset: gls ? 'gls' : 'rtl' });
+}
+presetSwitch.addEventListener('change', () => setPreset(presetSwitch.checked));
+presetLabels.forEach((l) => l.addEventListener('click', () => setPreset(l.dataset.side === 'gls')));
 
 // ---- messages from the extension ----
 window.addEventListener('message', (event) => {
