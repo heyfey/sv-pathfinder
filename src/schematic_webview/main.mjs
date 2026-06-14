@@ -187,15 +187,13 @@ function calibrateCharPx(paper) {
 const _openSubKeys = new Set();     // instance keys with an open popup
 const _openSubDialogs = new Map();  // key -> jquery-ui dialog div (to raise on re-click)
 const _subTitles = new Map();       // key -> "full.hier.path  (module)" for the titlebar
+const _subShort = new Map();        // key -> short instance label (for the taskbar tab)
 function openSubcircuit(model, paper) {
     const key = model.get('celltype') + ' ' + model.get('label');
-    if (_openSubKeys.has(key)) {
-        const dlg = _openSubDialogs.get(key);
-        if (dlg) { try { dlg.dialog('moveToTop'); } catch (e) { /* dialog not ready yet */ } }
-        return;
-    }
+    if (_openSubKeys.has(key)) { restorePopup(key); return; } // already open → restore + raise
     const hier = [currentScopePath, ...graphPath(model), model.get('label')].filter(Boolean).join('.');
     _subTitles.set(key, `${hier}  (${cleanModuleName(model.get('celltype'))})`);
+    _subShort.set(key, model.get('label'));
     _openSubKeys.add(key);                            // mark before trigger (guards fast double-clicks)
     paper.trigger('open:subcircuit', model);
 }
@@ -205,6 +203,74 @@ cells.SubcircuitView.prototype.zoomInCircuit = function (evt) {
     openSubcircuit(this.model, this.paper);
     return false;
 };
+
+// ---- popup taskbar + minimize ----
+// A row of tabs along the bottom (one per open popup) for quickly switching between many
+// child windows, plus a minimize button in each dialog titlebar. Tabs raise (and restore) the
+// popup; minimize hides it but keeps its tab. State is keyed by the same per-instance key.
+const _taskbarTabs = new Map();  // key -> tab element
+const _subMinimized = new Set(); // keys whose popup is currently minimized
+let _taskbarEl = null;
+function taskbar() {
+    if (!_taskbarEl) {
+        _taskbarEl = document.createElement('div');
+        _taskbarEl.id = 'sv-taskbar';
+        document.body.insertBefore(_taskbarEl, document.getElementById('status'));
+    }
+    return _taskbarEl;
+}
+function refreshTaskbar() { if (_taskbarEl) { _taskbarEl.style.display = _taskbarTabs.size ? 'flex' : 'none'; } }
+function dialogWidget(key) {
+    const div = _openSubDialogs.get(key);
+    try { return div ? div.dialog('widget') : null; } catch (e) { return null; }
+}
+function restorePopup(key) {
+    if (_subMinimized.has(key)) {
+        _subMinimized.delete(key);
+        const w = dialogWidget(key); if (w) { w.show(); }
+        const tab = _taskbarTabs.get(key); if (tab) { tab.classList.remove('sv-min'); }
+    }
+    const div = _openSubDialogs.get(key);
+    if (div) { try { div.dialog('moveToTop'); } catch (e) { /* not ready */ } }
+}
+function minimizePopup(key) {
+    const w = dialogWidget(key); if (!w) { return; }
+    _subMinimized.add(key); w.hide();
+    const tab = _taskbarTabs.get(key); if (tab) { tab.classList.add('sv-min'); }
+}
+function addTaskbarTab(key) {
+    if (_taskbarTabs.has(key)) { return; }
+    const tab = document.createElement('div');
+    tab.className = 'sv-tab';
+    tab.textContent = _subShort.get(key) || cleanModuleName((key.split(' ')[0] || ''));
+    tab.title = _subTitles.get(key) || key;
+    tab.addEventListener('click', () => restorePopup(key));
+    taskbar().appendChild(tab);
+    _taskbarTabs.set(key, tab);
+    refreshTaskbar();
+}
+function removeTaskbarTab(key) {
+    const tab = _taskbarTabs.get(key);
+    if (tab) { tab.remove(); _taskbarTabs.delete(key); }
+    _subMinimized.delete(key);
+    refreshTaskbar();
+}
+// Add a "minimize" button to the dialog titlebar, left of jquery-ui's close button.
+function addMinimizeButton(div, key) {
+    let titlebar;
+    try { titlebar = div.dialog('widget').find('.ui-dialog-titlebar').get(0); } catch (e) { return; }
+    if (!titlebar || titlebar.querySelector('.sv-min-btn')) { return; }
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'sv-min-btn'; btn.title = 'Minimize'; btn.textContent = '–';
+    btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); minimizePopup(key); });
+    const close = titlebar.querySelector('.ui-dialog-titlebar-close');
+    if (close) { titlebar.insertBefore(btn, close); } else { titlebar.appendChild(btn); }
+}
+function clearTaskbar() {
+    for (const tab of _taskbarTabs.values()) { tab.remove(); }
+    _taskbarTabs.clear(); _subMinimized.clear(); _subShort.clear();
+    refreshTaskbar();
+}
 
 // Theme-aware wire value palette. digitaljs colors wires by signal value via the `line`
 // selector attrs (hard-coded greens/reds); replace them with VS Code theme colors so the
@@ -369,6 +435,7 @@ function loadSchematic(msg) {
     _openSubKeys.clear();      // popups from the previous schematic are gone
     _openSubDialogs.clear();
     _subTitles.clear();
+    clearTaskbar();            // popup tabs from the previous render
     clearSelection();          // highlights belong to the previous render
     currentScopePath = msg.scopePath; // root for popup hierarchical titles
     spacing = SPACING[msg.spacing] || SPACING.compact; // density tier for this render (read by the patches below)
@@ -396,9 +463,12 @@ function loadSchematic(msg) {
             const wrappedClose = () => {
                 _openSubKeys.delete(key);
                 _openSubDialogs.delete(key);
+                removeTaskbarTab(key);
                 closingCallback();
             };
             Circuit.prototype._defaultWindowCallback.call(this, type, div, wrappedClose);
+            // a taskbar tab (switch between many popups) + a titlebar minimize button
+            if (key) { addTaskbarTab(key); addMinimizeButton(div, key); }
             // jquery-ui autofocuses the first button (the zoom "−"), showing a focus ring on
             // open; drop it so the toolbar reads neutral until the user actually clicks.
             setTimeout(() => { const a = document.activeElement; if (a && typeof a.blur === 'function') { a.blur(); } }, 0);

@@ -180,6 +180,55 @@ html, body {
  * The theme-aware value palette is installed on cells.Wire.prototype.attrs.signal in
  * main.mjs instead. */
 
+/* ---- popup taskbar (one tab per open child window) ---- */
+#sv-taskbar {
+    flex: 0 0 auto;
+    display: none; /* shown (flex) only when popups exist */
+    gap: 4px;
+    padding: 3px 6px;
+    background: var(--vscode-editorWidget-background, #252526);
+    border-top: 1px solid var(--vscode-editorWidget-border, #454545);
+    overflow-x: auto;
+    position: relative;
+    z-index: 10000; /* stay above the (absolutely-positioned) jquery-ui dialogs */
+}
+.sv-tab {
+    flex: 0 0 auto;
+    max-width: 200px;
+    padding: 2px 10px;
+    background: var(--vscode-button-secondaryBackground, #3a3d41);
+    color: var(--vscode-button-secondaryForeground, #ffffff);
+    border: 1px solid var(--vscode-editorWidget-border, transparent);
+    border-radius: 3px;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.85em;
+    font-family: var(--vscode-editor-font-family, monospace);
+}
+.sv-tab:hover { background: var(--vscode-button-secondaryHoverBackground, #45494e); }
+.sv-tab.sv-min { opacity: 0.55; font-style: italic; } /* minimized */
+
+/* minimize button injected into the dialog titlebar, left of jquery-ui's close button */
+.sv-min-btn {
+    position: absolute;
+    right: 2.1em;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    background: transparent;
+    color: var(--vscode-editor-foreground, #cccccc);
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 15px;
+    line-height: 1;
+    padding: 0;
+}
+.sv-min-btn:hover { background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.2)); }
+
 /* ---- right-click context menu ---- */
 #sv-ctxmenu {
     position: fixed;
