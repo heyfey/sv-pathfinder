@@ -6,6 +6,7 @@ import ELK from 'elkjs/lib/elk.bundled.js';
 import { Vector3vl } from '3vl';
 // our overrides must come after digitaljs's own CSS (pulled in by the import above)
 import './style.css';
+import '@vscode/codicons/dist/codicon.css'; // VS Code's official icon font (bundled as a data-url)
 
 // Layout density tiers (user setting `schematicSpacing`). One table drives everything that
 // affects crowding: ELK block/edge spacing, the clearance reserved around each wire's
@@ -219,7 +220,8 @@ function taskbar() {
         // the main schematic (minimizes every open popup so nothing covers it).
         _mainTab = document.createElement('div');
         _mainTab.className = 'sv-tab sv-tab-main';
-        _mainTab.textContent = '⌂ ' + (currentMainName || 'main');
+        _mainTab.innerHTML = '<i class="codicon codicon-home"></i><span class="sv-tab-name"></span>';
+        _mainTab.querySelector('.sv-tab-name').textContent = currentMainName || 'main';
         _mainTab.title = 'Show the main schematic (minimize all popups)';
         _mainTab.addEventListener('click', focusMain);
         _taskbarEl.appendChild(_mainTab);
@@ -283,23 +285,27 @@ function removeTaskbarTab(key) {
     _subMinimized.delete(key);
     refreshTaskbar();
 }
-// Add a "minimize" button to the dialog titlebar, left of jquery-ui's close button.
+// Add a "minimize" button to the dialog titlebar, left of jquery-ui's close button — and
+// re-skin jquery-ui's close button with the matching codicon (drop its sprite icon + label).
 function addMinimizeButton(div, key) {
     let titlebar;
     try { titlebar = div.dialog('widget').find('.ui-dialog-titlebar').get(0); } catch (e) { return; }
     if (!titlebar || titlebar.querySelector('.sv-min-btn')) { return; }
     const btn = document.createElement('button');
-    btn.type = 'button'; btn.className = 'sv-min-btn'; btn.title = 'Minimize'; btn.textContent = '–';
+    btn.type = 'button'; btn.className = 'sv-min-btn'; btn.title = 'Minimize';
+    btn.innerHTML = '<i class="codicon codicon-chrome-minimize"></i>';
     btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); minimizePopup(key); });
     const close = titlebar.querySelector('.ui-dialog-titlebar-close');
-    if (close) { titlebar.insertBefore(btn, close); } else { titlebar.appendChild(btn); }
+    if (close) { close.replaceChildren(); close.innerHTML = '<i class="codicon codicon-chrome-close"></i>'; titlebar.insertBefore(btn, close); } else { titlebar.appendChild(btn); }
 }
-// digitaljs's subcircuit zoom buttons (– / +) have no tooltips; add them.
+// digitaljs's subcircuit zoom buttons (– / +): give them codicon icons + tooltips.
 function addZoomTooltips(div) {
     const root = div && div.get ? div.get(0) : null;
     if (!root) { return; }
     for (const b of root.querySelectorAll('.btn-group .btn')) {
-        b.title = (b.textContent || '').trim() === '+' ? 'Zoom in' : 'Zoom out';
+        const zin = (b.textContent || '').trim() === '+';
+        b.title = zin ? 'Zoom in' : 'Zoom out';
+        b.innerHTML = `<i class="codicon codicon-zoom-${zin ? 'in' : 'out'}"></i>`;
     }
 }
 // Add an export (⤓) button to the popup's button group so this child view can be exported too.
@@ -313,7 +319,7 @@ function addPopupExport(div) {
     btn.type = 'button';
     btn.className = 'btn btn-secondary sv-popup-export';
     btn.title = 'Export this view (SVG / PNG / JSON)';
-    btn.textContent = '⤓';
+    btn.innerHTML = '<i class="codicon codicon-export"></i>';
     btn.addEventListener('click', () => { _exportPaper = p; post({ type: 'export', name: paperHierName(p) }); });
     group.appendChild(btn);
 }
@@ -503,7 +509,7 @@ function loadSchematic(msg) {
     clearSelection();          // highlights belong to the previous render
     currentScopePath = msg.scopePath; // root for popup hierarchical titles
     currentMainName = msg.moduleName;
-    if (_mainTab) { _mainTab.textContent = '⌂ ' + currentMainName; }
+    if (_mainTab) { _mainTab.querySelector('.sv-tab-name').textContent = currentMainName; }
     spacing = SPACING[msg.spacing] || SPACING.compact; // density tier for this render (read by the patches below)
     _wireLabelDims.clear();    // net-label sizes are re-recorded as this design's wires build (at current tier)
     document.getElementById('breadcrumb').textContent = `${msg.scopePath}  (${msg.moduleName})`;

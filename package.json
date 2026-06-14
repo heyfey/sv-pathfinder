@@ -76,13 +76,20 @@
         },
         "sv-pathfinder.schematicOverview": {
           "type": "string",
-          "enum": ["scrollbars", "minimap"],
+          "enum": [
+            "scrollbars",
+            "minimap"
+          ],
           "default": "scrollbars",
           "markdownDescription": "Overview affordance for the main schematic: `scrollbars` or a `minimap` (corner overview with a draggable viewport). Subcircuit popup windows always use scrollbars."
         },
         "sv-pathfinder.schematicSpacing": {
           "type": "string",
-          "enum": ["compact", "comfortable", "spacious"],
+          "enum": [
+            "compact",
+            "comfortable",
+            "spacious"
+          ],
           "enumDescriptions": [
             "Tightest layout — smallest canvas, densest packing.",
             "More room between blocks and around signal names.",
@@ -405,6 +412,7 @@
     "typescript": "^5.7.3"
   },
   "dependencies": {
+    "@vscode/codicons": "^0.0.45",
     "3vl": "^1.0.1",
     "digitaljs": "^0.14.2",
     "kuzu": "^0.9.0",

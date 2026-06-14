@@ -196,17 +196,17 @@ export class SchematicViewProvider {
 <div id="toolbar">
   <span id="breadcrumb"></span>
   <span id="toolbar-right">
-    <button id="go-parent" title="Go to parent scope" disabled>↰</button>
-    <button id="zoom-out" title="Zoom out">−</button>
-    <button id="zoom-in" title="Zoom in">+</button>
-    <button id="zoom-fit" title="Fit">⊡</button>
+    <button id="go-parent" class="codicon codicon-arrow-up" title="Go to parent scope" disabled></button>
+    <button id="zoom-out" class="codicon codicon-zoom-out" title="Zoom out"></button>
+    <button id="zoom-in" class="codicon codicon-zoom-in" title="Zoom in"></button>
+    <button id="zoom-fit" class="codicon codicon-screen-full" title="Fit"></button>
     <span id="preset-toggle" class="sv-seg" title="Toggle RTL / Gate-Level view">
       <span class="sv-seg-label active" data-side="rtl">RTL</span>
       <label class="sv-switch"><input type="checkbox" id="preset-switch"><span class="sv-slider"></span></label>
       <span class="sv-seg-label" data-side="gls">Gate-Level</span>
     </span>
-    <button id="refresh" title="Re-run Yosys">↻</button>
-    <button id="export" title="Export (SVG / PNG / JSON)">⤓</button>
+    <button id="refresh" class="codicon codicon-refresh" title="Re-run Yosys"></button>
+    <button id="export" class="codicon codicon-export" title="Export (SVG / PNG / JSON)"></button>
   </span>
 </div>
 <div id="paper-container"><div id="paper"></div></div>

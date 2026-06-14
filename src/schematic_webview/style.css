@@ -41,6 +41,7 @@ html, body {
     user-select: none;
     vertical-align: middle;
 }
+.sv-tab .codicon { margin-right: 4px; vertical-align: middle; font-size: 13px; }
 .sv-seg-label {
     opacity: 0.5;
     cursor: pointer;
@@ -106,6 +107,16 @@ html, body {
     margin-left: 4px;
     cursor: pointer;
 }
+/* codicon-icon toolbar buttons: center the glyph, tighten the (now icon-only) padding */
+#toolbar-right button.codicon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px 6px;
+    font-size: 16px;
+    vertical-align: middle;
+}
+#toolbar-right button.codicon:disabled { opacity: 0.4; cursor: default; }
 
 #toolbar-right button:hover {
     background: var(--vscode-button-secondaryHoverBackground, #45494e);
@@ -290,11 +301,15 @@ html, body {
 
 /* titlebar buttons: our injected minimize, and jquery-ui's close restyled to match it
  * (flat, transparent, same size/hover) instead of jquery-ui's bordered icon button. */
+/* popup titlebar buttons (our minimize + jquery-ui's re-skinned close), both codicon-icon */
 .sv-min-btn,
 .ui-dialog .ui-dialog-titlebar-close {
     position: absolute;
     top: 50%;
     transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     width: 20px;
     height: 20px;
     padding: 0;
@@ -303,24 +318,20 @@ html, body {
     border: none;
     border-radius: 3px;
     cursor: pointer;
-    font-size: 14px;
-    line-height: 1;
-    text-indent: 0;
-    overflow: hidden;
 }
 .sv-min-btn { right: 2.1em; }
-/* font-size:0 hides jquery-ui's "Close" label text node; the ✕ comes from ::before below.
- * jquery-ui pins this button at right:0, so nudge it left toward the minimize with margin. */
-.ui-dialog .ui-dialog-titlebar-close { right: 0; margin: 0 4px 0 0; font-size: 0; }
+/* jquery-ui pins this button at right:0, so nudge it left toward the minimize with margin */
+.ui-dialog .ui-dialog-titlebar-close { right: 0; margin: 0 4px 0 0; }
 .sv-min-btn:hover,
 .ui-dialog .ui-dialog-titlebar-close:hover {
     background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.2));
 }
-/* hide jquery-ui's sprite icon and draw a clean ✕ glyph like the minimize "–" */
-.ui-dialog .ui-dialog-titlebar-close .ui-icon,
-.ui-dialog .ui-dialog-titlebar-close .ui-button-icon,
-.ui-dialog .ui-dialog-titlebar-close .ui-button-icon-space { display: none; }
-.ui-dialog .ui-dialog-titlebar-close::before { content: '✕'; font-size: 13px; line-height: 1; }
+.sv-min-btn .codicon,
+.ui-dialog .ui-dialog-titlebar-close .codicon { font-size: 13px; }
+/* hide jquery-ui's original sprite icon (we inject a codicon instead) */
+.ui-dialog .ui-dialog-titlebar-close .ui-icon { display: none; }
+/* popup zoom/export buttons (digitaljs .btn) carry a codicon now */
+.ui-dialog .btn .codicon { font-size: 14px; vertical-align: middle; }
 
 /* ---- right-click context menu ---- */
 #sv-ctxmenu {
