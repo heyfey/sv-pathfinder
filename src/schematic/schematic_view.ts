@@ -280,6 +280,12 @@ export class SchematicViewProvider {
                     vscode.window.setStatusBarMessage(`Copied value ${msg.value}`, 2000);
                 }
                 return;
+            case 'stepInto': {
+                // re-render the MAIN page at the child instance's scope (like go-to-parent, inward)
+                const child = await shown.design.findTreeItem(fullName);
+                if (child) { await this.render(shown.design, child, shown.preset); }
+                return;
+            }
             case 'gotoSource':
                 // reuse the precise source nav (Yosys source_positions → declaration fallback)
                 await this.handleElementClick({ ...msg, type: 'elementClick', action: 'source' } as ElementClickMessage);

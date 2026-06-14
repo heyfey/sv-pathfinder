@@ -684,7 +684,8 @@ function currentValue(model) {
     return undefined;
 }
 const CTX_ITEMS = [
-    { label: 'Expand', applies: (i) => i.isSub, expand: true },
+    { label: 'Step into', applies: (i) => i.isSub, action: 'stepInto' }, // navigate the MAIN page into the child
+    { label: 'Expand', applies: (i) => i.isSub, expand: true },          // open the child in a popup
     { label: 'Go to source', applies: (i) => sourceNavigable(i), action: 'gotoSource' },
     { label: 'Go to definition', applies: (i) => i.isSub || realName(i), action: 'gotoDefinition' },
     { sep: true },

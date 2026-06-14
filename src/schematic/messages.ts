@@ -30,7 +30,7 @@ export interface GoToParentMessage {
 // is handled entirely in the webview and does NOT come through here.
 export interface ContextActionMessage {
     type: 'contextAction';
-    action: 'gotoSource' | 'gotoDefinition' | 'copyName' | 'addToWaveform' | 'copyValue';
+    action: 'stepInto' | 'gotoSource' | 'gotoDefinition' | 'copyName' | 'addToWaveform' | 'copyValue';
     kind: 'wire' | 'device' | 'subcircuit';
     leafName?: string;
     celltype?: string;
