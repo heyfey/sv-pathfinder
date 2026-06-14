@@ -400,19 +400,21 @@ function loadSchematic(msg) {
     // hover, and navigation (wheel zoom/pan + drag pan) on all of them so popup windows
     // behave like the main canvas. (Registered before displayOn.)
     circuit.on('new:paper', (p) => {
-        // Read-only viewer: lock node positions (no dragging cells around). Blank-area drag
-        // still pans (attachNav), and clicks/right-clicks still fire — only element move is off.
-        // Set the paper option now (new views inherit it) AND setInteractivity after render
-        // (propagates to already-created cell views, whose cached `interactive` `can()` reads).
-        p.options.interactive = { elementMove: false };
         p.on('cell:pointerclick', (cellView) => toggleSelect(cellView)); // latch highlight
         p.on('blank:pointerclick', () => clearSelection());              // click empty → clear
         bindHover(p);
         bindContextMenu(p);
         attachNav(p);
-        // After the paper unfreezes: lock cell dragging on every view, and learn this
-        // environment's per-char width once so later layouts (popups, reloads) size exactly.
-        p.once('render:done', () => { p.setInteractivity({ elementMove: false }); calibrateCharPx(p); });
+        // After the paper unfreezes: make it read-only and learn this environment's per-char
+        // width once (so later layouts size exactly). digitaljs's fixed() = setInteractivity
+        // (false) + a `fixed` CSS class: it disables ALL editing — dragging nodes AND starting
+        // a new wire from a port magnet — and switches the move/crosshair cursors (and magnet
+        // hover) back to plain default. Blank-area pan and clicks/right-clicks are paper
+        // events, not "interactions", so they keep working.
+        p.once('render:done', () => {
+            if (typeof p.fixed === 'function') { p.fixed(true); }
+            calibrateCharPx(p);
+        });
         // ELK positions cells asynchronously; drop the cached content bbox while it changes
         // so clamping/overviews recompute from the final layout, not a pre-layout box.
         watchAreaInvalidation(p.model);
