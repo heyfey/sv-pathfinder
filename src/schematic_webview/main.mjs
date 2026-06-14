@@ -638,8 +638,17 @@ function elementInfo(model) {
         isIO: type === 'Input' || type === 'Output',
         kind: isLink ? 'wire' : (celltype ? 'subcircuit' : 'device'),
         leafName: isLink ? model.get('netname') : (model.get('label') || model.get('net')),
+        sourcePositions: model.get('source_positions') || [],
     };
 }
+// A "real" (user) RTL name resolves in the design tree; Yosys names synthesized/internal
+// objects with a leading '$' ($procmux…, $driver…, $0\…) — those have no RTL source, so a
+// leaf-name lookup can't resolve them.
+function realName(i) { return !!i.leafName && !String(i.leafName).startsWith('$'); }
+// "Go to source" can resolve a location iff: the element carries precise Yosys source
+// positions, OR it's a child instance (→ its module's source), OR it has a real name (→ the
+// design tree). Otherwise navigation would silently do nothing, so don't offer it.
+function sourceNavigable(i) { return (i.sourcePositions && i.sourcePositions.length > 0) || i.isSub || realName(i); }
 // Current annotated value as a copyable string, or undefined when there's no real value
 // (no waveform loaded → all-x). Wires carry the signal; an IO/gate's value is on its output.
 function currentValue(model) {
@@ -654,12 +663,12 @@ function currentValue(model) {
 }
 const CTX_ITEMS = [
     { label: 'Expand', applies: (i) => i.isSub, expand: true },
-    { label: 'Go to source', applies: () => true, action: 'gotoSource' },
-    { label: 'Go to definition', applies: (i) => i.isSub || i.isLink || i.isIO, action: 'gotoDefinition' },
+    { label: 'Go to source', applies: (i) => sourceNavigable(i), action: 'gotoSource' },
+    { label: 'Go to definition', applies: (i) => i.isSub || realName(i), action: 'gotoDefinition' },
     { sep: true },
     { label: 'Copy hierarchy name', applies: (i) => !!i.leafName, action: 'copyName' },
     { label: 'Copy value', applies: (i) => currentValue(i.model) !== undefined, action: 'copyValue' },
-    { label: 'Add to waveform', applies: (i) => i.isLink || i.isIO || i.isSub, action: 'addToWaveform' },
+    { label: 'Add to waveform', applies: (i) => i.isSub || realName(i), action: 'addToWaveform' },
 ];
 let _ctxMenu = null;
 function hideContextMenu() { if (_ctxMenu) { _ctxMenu.style.display = 'none'; } }
