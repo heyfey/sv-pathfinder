@@ -1789,14 +1789,14 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         for (const child of scope.children) {
             // Skip parameters as they are constant
             if (child.contextValue === 'varItem' && child.type !== 'parameter') {
-                let parts: string[] = [];
+                let baseDescription = '';
                 if (typeof child.description === 'string') {
-                    parts = child.description.split('=');
+                    baseDescription = child.description.split('=')[0].trim();
                 }
                 if (waveformValueMap.has(child.name)) {
-                    child.description = parts[0].trim() + ` = ${waveformValueMap.get(child.name)}`;
+                    child.description = baseDescription + ` = ${waveformValueMap.get(child.name)}`;
                 } else {
-                    child.description = parts[0].trim();
+                    child.description = baseDescription;
                 }
             }
         }
