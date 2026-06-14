@@ -334,19 +334,20 @@ function graphPath(model) {
     return path;
 }
 
-function emitClick(model) {
-    const isLink = typeof model.isLink === 'function' && model.isLink();
-    const celltype = model.get('celltype');
-    post({
-        type: 'elementClick',
-        kind: isLink ? 'wire' : (celltype ? 'subcircuit' : 'device'),
-        // IO port devices carry the port name in 'net' (no 'label')
-        leafName: isLink ? model.get('netname') : (model.get('label') || model.get('net')),
-        celltype,
-        path: graphPath(model),
-        sourcePositions: model.get('source_positions') || [],
-        action: 'source',
-    });
+// ---- persistent selection highlight ----
+// Left-click latches an accent outline on a wire/port/instance and keeps it until clicked
+// again; multiple stay lit at once, so you can light up a whole propagation path. Click a
+// blank area to clear. Distinct from the transient hover glow. (Cross-nav / actions moved to
+// the right-click menu.)
+const _selected = new Set(); // highlighted cell-view <g> elements
+function toggleSelect(cellView) {
+    const el = cellView.el;
+    if (_selected.has(el)) { el.classList.remove('sv-selected'); _selected.delete(el); }
+    else { el.classList.add('sv-selected'); _selected.add(el); }
+}
+function clearSelection() {
+    for (const el of _selected) { el.classList.remove('sv-selected'); }
+    _selected.clear();
 }
 
 // ---- schematic load ----
@@ -360,6 +361,7 @@ function loadSchematic(msg) {
     _openSubKeys.clear();      // popups from the previous schematic are gone
     _openSubDialogs.clear();
     _subTitles.clear();
+    clearSelection();          // highlights belong to the previous render
     currentScopePath = msg.scopePath; // root for popup hierarchical titles
     spacing = SPACING[msg.spacing] || SPACING.compact; // density tier for this render (read by the patches below)
     _wireLabelDims.clear();    // net-label sizes are re-recorded as this design's wires build (at current tier)
@@ -403,7 +405,8 @@ function loadSchematic(msg) {
         // Set the paper option now (new views inherit it) AND setInteractivity after render
         // (propagates to already-created cell views, whose cached `interactive` `can()` reads).
         p.options.interactive = { elementMove: false };
-        p.on('cell:pointerclick', (cellView) => emitClick(cellView.model));
+        p.on('cell:pointerclick', (cellView) => toggleSelect(cellView)); // latch highlight
+        p.on('blank:pointerclick', () => clearSelection());              // click empty → clear
         bindHover(p);
         bindContextMenu(p);
         attachNav(p);

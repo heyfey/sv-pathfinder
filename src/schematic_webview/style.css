@@ -146,6 +146,26 @@ html, body {
             drop-shadow(0 0 1px var(--sv-accent, var(--vscode-charts-blue)));
 }
 
+/* persistent selection: latched accent outline (click to toggle, many at once → trace a
+ * propagation path). Stronger/solid vs the transient hover glow: a thicker body stroke and
+ * wire width plus a brighter glow. We only touch stroke-WIDTH on wires, not the stroke color,
+ * so the value palette is preserved. */
+.djs .sv-selected {
+    filter: drop-shadow(0 0 4px var(--sv-accent, var(--vscode-charts-blue)))
+            drop-shadow(0 0 2px var(--sv-accent, var(--vscode-charts-blue)));
+}
+.djs .sv-selected [joint-selector="body"],
+.djs .sv-selected rect.body, .djs .sv-selected circle.body,
+.djs .sv-selected polygon.body, .djs .sv-selected path.body {
+    stroke: var(--sv-accent, var(--vscode-charts-blue));
+    stroke-width: 2.5px;
+}
+.djs .sv-selected path.connection,
+.djs .sv-selected .connection,
+.djs .sv-selected line.wire {
+    stroke-width: 3px;
+}
+
 /* NOTE: wire value colors are NOT set here. digitaljs colors the wire's `line` selector
  * by signal value via SVG attributes (high/low/def/undef); a CSS `stroke` rule on the
  * connection path overrides those attributes and would flatten every wire to one color.
