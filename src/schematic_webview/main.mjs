@@ -1080,11 +1080,61 @@ function zoomBy(factor) {
     zoomAround(paper, factor, r.left + r.width / 2, r.top + r.height / 2);
 }
 
+// ---- export ----
+// Serialize the main paper as a standalone SVG. The on-file SVG has none of our CSS or the VS
+// Code theme vars, so we (1) frame the FULL content via a viewBox on the content bounds (drop
+// the live pan/zoom so current zoom doesn't matter), (2) bake the computed presentation styles
+// (fill/stroke/font/…) inline so it looks identical, (3) drop foreignObjects (hidden widgets),
+// (4) paint the theme background behind it (white would hide the light-on-dark schematic).
+const SVG_STYLE_PROPS = [
+    'fill', 'fill-opacity', 'stroke', 'stroke-opacity', 'stroke-width', 'stroke-dasharray',
+    'stroke-linecap', 'stroke-linejoin', 'opacity', 'color', 'display', 'visibility',
+    'font-family', 'font-size', 'font-weight', 'font-style', 'text-anchor',
+    'dominant-baseline', 'text-decoration',
+];
+function inlineComputedStyles(live, clone) {
+    if (live.nodeType === 1 && clone.nodeType === 1) {
+        const cs = getComputedStyle(live);
+        let style = clone.getAttribute('style') || '';
+        for (const p of SVG_STYLE_PROPS) { const v = cs.getPropertyValue(p); if (v) { style += `${p}:${v};`; } }
+        clone.setAttribute('style', style);
+    }
+    const lk = live.children, ck = clone.children;
+    for (let i = 0; i < lk.length && i < ck.length; i++) { inlineComputedStyles(lk[i], ck[i]); }
+}
+function buildSvgExport() {
+    const live = paper.el.querySelector('svg');
+    if (!live) { return ''; }
+    const clone = live.cloneNode(true);
+    const a = paper.getContentArea({ useModelGeometry: true });
+    const pad = 20;
+    const x = Math.round(a.x - pad), y = Math.round(a.y - pad);
+    const w = Math.round(a.width + 2 * pad), h = Math.round(a.height + 2 * pad);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+    clone.setAttribute('width', w);
+    clone.setAttribute('height', h);
+    clone.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
+    // drop the pan/zoom transform so the content sits at its model coordinates (= the viewBox)
+    const layers = clone.querySelector('.joint-layers') || clone.querySelector('g');
+    if (layers) { layers.removeAttribute('transform'); }
+    inlineComputedStyles(live, clone);
+    clone.querySelectorAll('foreignObject').forEach((n) => n.remove());
+    const bg = getComputedStyle(document.body).backgroundColor || '#1e1e1e';
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.setAttribute('x', x); rect.setAttribute('y', y);
+    rect.setAttribute('width', w); rect.setAttribute('height', h);
+    rect.setAttribute('fill', bg);
+    clone.insertBefore(rect, clone.firstChild);
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
+}
+
 document.getElementById('zoom-in').addEventListener('click', () => zoomBy(1.25));
 document.getElementById('zoom-out').addEventListener('click', () => zoomBy(0.8));
 document.getElementById('zoom-fit').addEventListener('click', fitToView);
 document.getElementById('refresh').addEventListener('click', () => post({ type: 'refresh' }));
 document.getElementById('go-parent').addEventListener('click', () => post({ type: 'goToParent' }));
+document.getElementById('export').addEventListener('click', () => post({ type: 'export' }));
 // RTL / Gate-Level slider toggle: left = RTL (unchecked), right = Gate-Level (checked).
 const presetSwitch = document.getElementById('preset-switch');
 const presetLabels = document.querySelectorAll('#preset-toggle .sv-seg-label');
@@ -1120,6 +1170,14 @@ window.addEventListener('message', (event) => {
         case 'clearValues':
             clearValues();
             setStatus('values cleared');
+            break;
+        case 'buildExport':
+            try {
+                if (msg.format === 'svg') { post({ type: 'exportContent', format: 'svg', text: buildSvgExport() }); }
+            } catch (e) {
+                setStatus('Export failed: ' + (e && e.message ? e.message : e));
+                console.error(e);
+            }
             break;
     }
 });

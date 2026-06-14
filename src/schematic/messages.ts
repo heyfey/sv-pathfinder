@@ -39,7 +39,21 @@ export interface ContextActionMessage {
     value?: string; // current annotated value, for copyValue
 }
 
-export type FromWebviewMessage = ElementClickMessage | WebviewReadyMessage | GoToParentMessage | ContextActionMessage;
+// webview -> extension: user asked to export the schematic (toolbar button)
+export interface ExportRequestMessage {
+    type: 'export';
+}
+
+// webview -> extension: the generated export content for the file the user chose
+export interface ExportContentMessage {
+    type: 'exportContent';
+    format: string;
+    text?: string;   // utf-8 content (svg / json)
+    base64?: string; // binary content (png)
+}
+
+export type FromWebviewMessage = ElementClickMessage | WebviewReadyMessage | GoToParentMessage
+    | ContextActionMessage | ExportRequestMessage | ExportContentMessage;
 
 // extension -> webview
 export interface LoadSchematicMessage {
@@ -61,4 +75,10 @@ export interface ClearValuesMessage {
     type: 'clearValues';
 }
 
-export type ToWebviewMessage = LoadSchematicMessage | SetValuesMessage | ClearValuesMessage;
+// extension -> webview: build export content in the given format (chosen from the save dialog)
+export interface BuildExportMessage {
+    type: 'buildExport';
+    format: 'svg' | 'png' | 'json';
+}
+
+export type ToWebviewMessage = LoadSchematicMessage | SetValuesMessage | ClearValuesMessage | BuildExportMessage;

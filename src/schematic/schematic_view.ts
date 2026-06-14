@@ -10,7 +10,7 @@ import { DesignItem, NetlistItem, HierarchyTreeProvider, replaceFilePathIfNeeded
 import { resolveScope, scopeCacheKey, ScopeContext } from './scope_resolver';
 import { runYosys, SchematicPreset } from './yosys_runner';
 import { convertToDigitalJs } from './converter';
-import { FromWebviewMessage, ToWebviewMessage, ElementClickMessage, ContextActionMessage, SourcePosition } from './messages';
+import { FromWebviewMessage, ToWebviewMessage, ElementClickMessage, ContextActionMessage, ExportContentMessage, SourcePosition } from './messages';
 
 interface ShownSchematic {
     design: DesignItem;
@@ -127,6 +127,12 @@ export class SchematicViewProvider {
                 case 'contextAction':
                     this.handleContextAction(msg as ContextActionMessage);
                     break;
+                case 'export':
+                    this.handleExportRequest();
+                    break;
+                case 'exportContent':
+                    this.handleExportContent(msg as ExportContentMessage);
+                    break;
                 case 'setPreset': {
                     const preset = (msg as any).preset === 'gls' ? 'gls' : 'rtl';
                     if (this.current && preset !== this.current.preset) {
@@ -199,6 +205,7 @@ export class SchematicViewProvider {
       <span class="sv-seg-label" data-side="gls">Gate-Level</span>
     </span>
     <button id="refresh" title="Re-run Yosys">↻</button>
+    <button id="export" title="Export as SVG">⤓</button>
   </span>
 </div>
 <div id="paper-container"><div id="paper"></div></div>
@@ -287,6 +294,39 @@ export class SchematicViewProvider {
                 if (item) { await vscode.commands.executeCommand('sv-pathfinder.addToWaveform', item); }
                 return;
             }
+        }
+    }
+
+    // #region export
+    // The webview owns the SVG DOM, so it serializes the picture; we just pick the file and
+    // write the bytes it sends back (showSaveDialog → buildExport → exportContent → write).
+    private pendingExportUri?: vscode.Uri;
+    private async handleExportRequest() {
+        const shown = this.current;
+        if (!shown) { return; }
+        const base = (shown.ctx.instancePath || shown.ctx.moduleName || 'schematic').replace(/[^\w.-]+/g, '_');
+        const dir = vscode.workspace.workspaceFolders?.[0]?.uri;
+        const uri = await vscode.window.showSaveDialog({
+            title: 'Export schematic',
+            defaultUri: dir ? vscode.Uri.joinPath(dir, `${base}.svg`) : vscode.Uri.file(`${base}.svg`),
+            filters: { 'SVG image': ['svg'] },
+        });
+        if (!uri) { return; }
+        this.pendingExportUri = uri;
+        const ext = path.extname(uri.fsPath).slice(1).toLowerCase();
+        const format = (ext === 'png' || ext === 'json') ? ext : 'svg';
+        this.postMessage({ type: 'buildExport', format });
+    }
+    private async handleExportContent(msg: ExportContentMessage) {
+        const uri = this.pendingExportUri;
+        this.pendingExportUri = undefined;
+        if (!uri) { return; }
+        try {
+            const bytes = msg.base64 ? Buffer.from(msg.base64, 'base64') : Buffer.from(msg.text ?? '', 'utf8');
+            await vscode.workspace.fs.writeFile(uri, bytes);
+            vscode.window.showInformationMessage(`Saved schematic to ${path.basename(uri.fsPath)}`);
+        } catch (e: any) {
+            vscode.window.showErrorMessage(`sv-pathfinder schematic export: ${e?.message ?? e}`);
         }
     }
 
