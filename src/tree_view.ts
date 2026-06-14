@@ -4,6 +4,7 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as cp from 'child_process';
 import * as slang from './slang_server/SlangInterface'
+import { absolutizeFlist } from './flist';
 
 // Must use require instead of import somehow
 let kuzu: any | undefined; // require("kuzu");
@@ -876,7 +877,10 @@ class SlangDesignItem extends DesignItem {
     // This is called in setActiveDesign, that means we recompile every time user switch designs.
     // This should be reviewed, search for "slangfixme" for related code.
     public async load(): Promise<boolean> {
-        await slang.setBuildFile(this.resourceUri.fsPath);
+        // slang-server resolves relative .f paths against its own CWD (which we
+        // don't control), so rewrite the build file with absolute paths first.
+        const buildFile = await absolutizeFlist(this.resourceUri.fsPath);
+        await slang.setBuildFile(buildFile);
         this.unit = await slang.getUnit();
         // console.log("Loaded SlangDesignItem: " + this.resourceUri.fsPath);
         // console.log(this.unit);
