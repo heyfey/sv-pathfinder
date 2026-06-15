@@ -63,14 +63,6 @@ const origIOCheckMode = cells.IO.prototype._checkMode;
 cells.IO.prototype._checkMode = function () {
     const mode = origIOCheckMode.call(this); // keep correct mode + side effects
     this.set('markup', this.markupInSubcircuit);
-    // reserve a value line under the net name (boxed top-level / boundary port): grow the box and
-    // lift the name so its value (filled in by IOView._updateIoValue) sits below it.
-    this.prop('size/height', 40);
-    this.attr({
-        'ioname/refY': 0.5, 'ioname/y': -7,
-        'ioval/refX': 0.5, 'ioval/refY': 0.5, 'ioval/y': 10,
-        'ioval/textAnchor': 'middle', 'ioval/textVerticalAnchor': 'middle',
-    });
     return mode;
 };
 cells.InputView.prototype._updateView = function () { };
@@ -81,10 +73,11 @@ cells.IOView.prototype._calculateBoxWidth = function () {
     const net = this.model.get('net') || '';
     return net ? Math.ceil(boxTextWidth(net)) + spacing.ioPad : 20;
 };
-// Boxed IO ports (top-level ports, and a subcircuit's boundary IOs) show their value under the net
-// name too — same as child-instance ports. Add a value text to the box markup and update it from
-// the SIGNAL flags digitaljs already raises on the IO cell (an Input drives outputSignals.out, an
-// Output reads inputSignals.in).
+// Boxed IO ports (top-level ports, and a subcircuit's boundary IOs) show their value as a caption
+// UNDER the box — same value info as child-instance ports. Add a value text to the box markup and
+// update it from the SIGNAL flags digitaljs already raises on the IO cell (an Input drives
+// outputSignals.out, an Output reads inputSignals.in). Position is set absolutely from the box size
+// in the view: fractional refX/refY don't behave when applied at runtime, so we place it directly.
 cells.IO.prototype.markupInSubcircuit = cells.IO.prototype.markupInSubcircuit.concat([
     { tagName: 'text', className: 'iovalue', selector: 'ioval' },
 ]);
@@ -104,6 +97,11 @@ cells.IOView.prototype._updateIoValue = function () {
     node.textContent = t;
     node.style.display = t ? 'inline' : 'none';          // JointJS display:none-s empty text
     node.style.fill = _valuePalette[signalCategory(sig)]; // match the wire colour
+    // caption under the box, centred to it (box-local coords; origin at the box top-left)
+    const sz = this.model.size();
+    node.setAttribute('x', sz.width / 2);
+    node.setAttribute('y', sz.height + 11);
+    node.setAttribute('text-anchor', 'middle');
 };
 
 // Size child-instance (and dff/fsm/memory) boxes to fit their port-name labels. digitaljs's
@@ -729,6 +727,10 @@ function loadSchematic(msg) {
     paper = circuit.displayOn(paperDiv());
     labelIndex = circuit.getLabelIndex();
     cleanSubcircuitCaptions(labelIndex);
+    // Reset every net to x up front. digitaljs seeds single-bit nets to 0 (defined low), so
+    // without a waveform the schematic would otherwise show red "0" wires everywhere. Start from
+    // "unknown" instead: x => no value text + neutral wire, until VaporView pushes real values.
+    clearValues();
     // never start the engine — external values only
     // ELK runs asynchronously AFTER displayOn returns and applies all cell positions in
     // one batch when done. Fit once after that batch settles, then DISARM — fitting on
