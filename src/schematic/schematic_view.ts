@@ -9,7 +9,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { DesignItem, NetlistItem, HierarchyTreeProvider, replaceFilePathIfNeeded, showTextDocumentLocation } from '../tree_view';
 import { resolveScope, scopeCacheKey, ScopeContext } from './scope_resolver';
-import { runYosys, SchematicPreset } from './yosys_runner';
+import { runYosys, SchematicPreset, getResolvedBackendName } from './yosys_runner';
 import { convertToDigitalJs } from './converter';
 import { FromWebviewMessage, ToWebviewMessage, ElementClickMessage, ContextActionMessage, ExportRequestMessage, ExportContentMessage, SourcePosition } from './messages';
 
@@ -91,6 +91,7 @@ export class SchematicViewProvider {
                 hasParent: findParentScope(instance) !== undefined,
                 overview,
                 spacing,
+                backend: getResolvedBackendName(),
             });
             // push current waveform values onto the fresh schematic
             this.debouncePushValues();

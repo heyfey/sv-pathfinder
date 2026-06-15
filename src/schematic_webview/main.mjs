@@ -539,6 +539,33 @@ let autoFit = true;   // auto-fit after async ELK layout until the user zooms ma
 let fitTimer = null;
 let currentScopePath = ''; // breadcrumb root for this render; used to build popup hier titles
 let currentMainName = '';  // main module name (label for the always-present main taskbar tab)
+let currentBackend = '';   // resolved yosys backend name, for diagnosing a malformed-circuit failure
+
+// digitaljs builds wires from `connectors` and crashes on `conn.from.id` if an endpoint is
+// undefined ("Cannot read properties of undefined (reading 'id')"). A well-formed netlist never
+// produces that, so its presence means the netlist itself is malformed — typically when an
+// unexpected yosys (e.g. one another extension put on PATH) emitted JSON our converter didn't
+// expect. Drop those connectors per graph (top + each subcircuit) so the rest still renders, and
+// return the count so we can warn with the offending backend.
+function sanitizeCircuit(circ) {
+    if (!circ || typeof circ !== 'object') { return 0; }
+    let dropped = 0;
+    const cleanGraph = (g) => {
+        if (!g || !Array.isArray(g.connectors)) { return; }
+        const devs = g.devices || {};
+        const before = g.connectors.length;
+        // both endpoints must exist AND name a device in this graph — otherwise digitaljs throws
+        // either at Wire construction ("reading 'id'") or later ("LinkView: invalid source cell").
+        g.connectors = g.connectors.filter(c =>
+            c && c.from && c.to && c.from.id && c.to.id && devs[c.from.id] && devs[c.to.id]);
+        dropped += before - g.connectors.length;
+    };
+    cleanGraph(circ); // top module
+    if (circ.subcircuits && typeof circ.subcircuits === 'object') {
+        for (const g of Object.values(circ.subcircuits)) { cleanGraph(g); }
+    }
+    return dropped;
+}
 // Read-only interactivity: disable every editing action (drag a node, start a wire from a
 // port magnet, move/add/remove a wire's vertices or endpoints) while KEEPING pointer events,
 // so click-to-highlight and the right-click menu still work on wires, ports, and instances.
@@ -700,6 +727,7 @@ function loadSchematic(msg) {
     clearSelection();          // highlights belong to the previous render
     currentScopePath = msg.scopePath; // root for popup hierarchical titles
     currentMainName = msg.moduleName;
+    currentBackend = msg.backend || '';
     if (_mainTab) { _mainTab.querySelector('.sv-tab-name').textContent = currentMainName; }
     spacing = SPACING[msg.spacing] || SPACING.compact; // density tier for this render (read by the patches below)
     _wireLabelDims.clear();    // net-label sizes are re-recorded as this design's wires build (at current tier)
@@ -710,6 +738,15 @@ function loadSchematic(msg) {
     setStatus('laying out schematic…');
     const container = document.getElementById('paper-container');
     container.innerHTML = '<div id="paper"></div>';
+
+    // Guard digitaljs against a malformed netlist (drop connectors with a missing endpoint) so one
+    // bad wire can't abort the whole render; warn — with the backend — when any are dropped, since
+    // it usually means the wrong yosys produced the JSON.
+    const droppedConns = sanitizeCircuit(msg.circuit);
+    if (droppedConns > 0) {
+        const be = currentBackend ? ` — backend: ${currentBackend}` : '';
+        console.warn(`sv-pathfinder schematic: dropped ${droppedConns} malformed connector(s)${be}`);
+    }
 
     // default windowCallback uses jquery-ui dialogs (fine inside the webview); wrap it to give
     // the popup a breadcrumb-style title (full hier path + module, set in openSubcircuit) and
@@ -1449,8 +1486,14 @@ window.addEventListener('message', (event) => {
             try {
                 loadSchematic(msg);
             } catch (e) {
-                setStatus('Failed to render schematic: ' + (e && e.message ? e.message : e));
-                console.error(e);
+                const detail = e && e.message ? e.message : e;
+                const be = msg.backend ? ` [backend: ${msg.backend}]` : '';
+                // a malformed netlist usually means an unexpected yosys produced it — point at the fix
+                const hint = /reading 'id'|undefined/.test(String(detail))
+                    ? ' — the netlist looks malformed; if the backend above is not your intended yosys, set "sv-pathfinder.ossCadSuitePath".'
+                    : '';
+                setStatus(`Failed to render schematic${be}: ${detail}${hint}`);
+                console.error('sv-pathfinder schematic render failed; backend:', msg.backend, e);
             }
             break;
         case 'setValues': {

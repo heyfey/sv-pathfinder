@@ -65,6 +65,7 @@ export interface LoadSchematicMessage {
     hasParent: boolean;      // whether a parent scope exists (enables the "go to parent" button)
     overview: 'minimap' | 'scrollbars'; // main-paper overview style (popups always use scrollbars)
     spacing: 'compact' | 'comfortable' | 'spacious'; // layout density (ELK spacing + box padding)
+    backend?: string;        // resolved yosys backend name (for diagnostics on a render failure)
 }
 
 export interface SetValuesMessage {
