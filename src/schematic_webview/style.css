@@ -230,6 +230,15 @@ html, body {
     pointer-events: none;
 }
 
+/* per-wire live value (under each net name): the wire LINE already encodes the value by colour,
+ * so keep the text neutral/dim to avoid fighting it. Blank when there's no waveform value. */
+.djs .joint-link text.wirevalue {
+    fill: var(--vscode-descriptionForeground, #999);
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 6pt;
+    pointer-events: none;
+}
+
 /* read-only viewer: hide the box zoom (🔍) affordance; child instances open via
  * right-click → Expand. (Wire value tooltips are on .joint-link, not .joint-cell.) */
 .djs .joint-cell .tooltip { display: none; }

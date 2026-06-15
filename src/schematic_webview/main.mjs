@@ -29,10 +29,12 @@ import '@vscode/codicons/dist/codicon.css'; // VS Code's official icon font (bun
 // Subcircuit hard-codes 16px/row in cells/subcircuit.js; we override it to rowH so the value line
 // fits). Widths stay name-driven; only heights change, so runtime value updates are pure text swaps.
 //   rowH — child-instance per-port row pitch; must clear a name line + a value line under it.
+//   valueH — extra channel height reserved under each wire net-name for its value line, so 2-line
+//            wire labels (name over value) don't crowd parallel labeled wires.
 const SPACING = {
-    compact:     { nodeNode: 24, betweenLayers: 36, edgeNode: 12, edgeEdge: 10, edgeLabel: 3, labelPad: 6,  labelH: 14, boxGap: 56, ioPad: 26, netChannel: 0.5,  rowH: 26 },
-    comfortable: { nodeNode: 34, betweenLayers: 56, edgeNode: 22, edgeEdge: 16, edgeLabel: 4, labelPad: 14, labelH: 16, boxGap: 70, ioPad: 34, netChannel: 0.85, rowH: 28 },
-    spacious:    { nodeNode: 44, betweenLayers: 80, edgeNode: 30, edgeEdge: 24, edgeLabel: 5, labelPad: 24, labelH: 18, boxGap: 84, ioPad: 42, netChannel: 1.0,  rowH: 30 },
+    compact:     { nodeNode: 24, betweenLayers: 36, edgeNode: 12, edgeEdge: 10, edgeLabel: 3, labelPad: 6,  labelH: 14, boxGap: 56, ioPad: 26, netChannel: 0.5,  rowH: 26, valueH: 9 },
+    comfortable: { nodeNode: 34, betweenLayers: 56, edgeNode: 22, edgeEdge: 16, edgeLabel: 4, labelPad: 14, labelH: 16, boxGap: 70, ioPad: 34, netChannel: 0.85, rowH: 28, valueH: 10 },
+    spacious:    { nodeNode: 44, betweenLayers: 80, edgeNode: 30, edgeEdge: 24, edgeLabel: 5, labelPad: 24, labelH: 18, boxGap: 84, ioPad: 42, netChannel: 1.0,  rowH: 30, valueH: 11 },
 };
 let spacing = SPACING.compact;
 
@@ -170,25 +172,52 @@ cells.FSMView.prototype._displayEditor = function () { };
 // (b) every layout runs through ELK.layout(elkGraph). So: record each wire's label size by
 // id, and just before ELK runs, widen the spacing and attach each edge's label so ELK
 // reserves room for it. digitaljs still draws the label itself (we ignore ELK's label
-// position); we only buy it space. This is the readability fix for crowding/label overlap;
-// value annotation is color-only, so it adds no extra text and won't compound it.
+// position); we only buy it space. This is the readability fix for crowding/label overlap.
+// Value annotation shows the value UNDER the net-name, so the channel also grows vertically by
+// `valueH` (a second line); width stays the name, so wires don't get longer.
 const _wireLabelDims = new Map(); // wire/link id -> { width, height, text }
 // Reserved size of the channel ELK keeps clear for a net-name label. width = estimated text
 // width (textWidth) + tier side padding; height drives how far ELK spreads parallel labeled
 // wires apart. Computed at Wire construction (no DOM yet), so it uses the textWidth estimate.
-// NOTE (value annotation): we will show the value UNDER the name, so reserve VERTICAL room —
-// bump `labelH` (a second line) here; ELK widens the channel to fit. Width stays the name.
+// height = name line (labelH) + value line (valueH), reserved up front so live value updates are
+// pure text swaps that never trigger a re-layout.
 function netLabelDims(text) {
     // Reserve only `netChannel` of the label width so compact tiers keep wires short; ELK
     // still inserts a lane (≥ this) that the betweenLayers margins pad out from the boxes.
     const w = textWidth(text) * spacing.netChannel + spacing.labelPad;
-    return { width: Math.max(1, Math.ceil(w)), height: spacing.labelH, text };
+    return { width: Math.max(1, Math.ceil(w)), height: spacing.labelH + spacing.valueH, text };
 }
 const _origWireInit = cells.Wire.prototype.initialize;
 cells.Wire.prototype.initialize = function () {
     _origWireInit.apply(this, arguments);
     const nm = this.get('netname');
-    if (nm) { _wireLabelDims.set(this.id, netLabelDims(nm)); }
+    if (!nm) { return; }
+    _wireLabelDims.set(this.id, netLabelDims(nm));
+    // digitaljs gave this wire a single-line netname label; replace it with a two-line label so
+    // the live value can sit UNDER the name (vertical growth, no extra wire length). The name is
+    // lifted just above the wire and the value sits just below it; WireView._updateSignal fills
+    // the value text on each signal change (below). Blank value line when there's no waveform.
+    this.label(0, {
+        markup: [
+            { tagName: 'text', selector: 'label', className: 'label' },
+            { tagName: 'text', selector: 'labelvalue', className: 'wirevalue' },
+        ],
+        attrs: {
+            label: { text: nm, fontSize: '8pt', textAnchor: 'middle', textVerticalAnchor: 'middle', y: -4 },
+            labelvalue: { text: '', textAnchor: 'middle', textVerticalAnchor: 'middle', y: 7 },
+        },
+        position: { distance: 0.5 },
+    });
+};
+// Fill the per-wire value line from the reactive signal path. digitaljs's WireView recolors the
+// line on each change:signal (confirmUpdate -> _updateSignal); we extend it to also write the
+// formatted value under the net name. View-only (textContent on the label's value node) — no
+// model mutation, no layout — the same approach as the child-instance port values.
+const _origWireUpdateSignal = cells.WireView.prototype._updateSignal;
+cells.WireView.prototype._updateSignal = function () {
+    _origWireUpdateSignal.apply(this, arguments);
+    const node = this.el.querySelector('.wirevalue');
+    if (node) { node.textContent = formatSig(this.model.get('signal')); }
 };
 const _origElkLayout = ELK.prototype.layout;
 ELK.prototype.layout = function (graph, opts) {
