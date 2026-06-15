@@ -382,7 +382,10 @@ export class SchematicViewProvider {
             return api.onDidSetMarker((data: any) => {
                 const design = this.current?.design;
                 if (!this.panel || !design) { return; }
-                if (data.uri.fsPath !== design.getActiveWaveform()?.resourceUri.fsPath) { return; }
+                // vaporview's MarkerSetEvent.uri is a string, not a vscode.Uri, so parse it
+                // before comparing fsPath (otherwise data.uri.fsPath is always undefined and
+                // every marker event is dropped — the colors-don't-update bug).
+                if (vscode.Uri.parse(data.uri).fsPath !== design.getActiveWaveform()?.resourceUri.fsPath) { return; }
                 if (data.time === this.timestamp) { return; }
                 this.timestamp = data.time;
                 this.debouncePushValues();
