@@ -3,15 +3,17 @@
 // unknown $-cells throw, so surface a useful error instead of a stack trace.
 const { yosys2digitaljs } = require('yosys2digitaljs/core');
 
-// yosys2digitaljs supports only input/output ports and single-driver nets; digitaljs has
-// no tristate modeling at all (3-valued logic, no z). Legacy RTL with bidirectional
-// buses (`inout [7:0] data`) is common, so instead of failing, render inouts as plain
-// connection points: a module-level inout becomes an output-style port box (net SINK),
-// and a cell-level inout pin is treated as an input from the parent's perspective (also
-// a sink). Neither adds a net source, so the transform cannot introduce the converter's
-// "Multiple sources driving net" error; nets only driven through the bidir path render
-// as undriven (x) — acceptable for a structural view. 'z' constant bits map to 'x'
-// (same rule as value annotation; digitaljs cannot display z).
+// yosys2digitaljs supports only input/output ports and single-driver nets, and
+// digitaljs has no bidirectional-port modeling. Legacy RTL with inout buses
+// (`inout [7:0] data`) is common, so instead of failing, render inouts as plain
+// connection points: a module-level inout becomes an output-style port box (net
+// SINK), and a cell-level inout pin is treated as an input from the parent's
+// perspective (also a sink). Neither adds a net source, so the transform cannot
+// introduce the converter's "Multiple sources driving net" error.
+//
+// digitaljs Constant devices DO render 'z' (high-impedance) even though its value
+// engine (3vl) is 3-valued, so 'z' bits pass through and display as 'z' constants;
+// only live value propagation collapses z->x.
 // digitaljs nets allow only a single source. When a net is driven by more than
 // one cell output (e.g. a reg written by both an always_comb and an always_ff —
 // ambiguous/illegal hardware that yosys still emits), yosys2digitaljs throws
@@ -62,7 +64,6 @@ function resolveMultiDrivers(mod: any, allocBits: (n: number) => number[]): void
 }
 
 function normalizeForDigitaljs(yosysJson: any): any {
-    const zToX = (bits: any[]) => bits.map(b => (b === 'z' || b === 'Z') ? 'x' : b);
     // Yosys JSON int params may be plain numbers (-compat-int) or bit strings
     const decodeInt = (v: any, dflt: number): number => {
         if (typeof v === 'number') { return v; }
@@ -84,14 +85,10 @@ function normalizeForDigitaljs(yosysJson: any): any {
 
         for (const port of Object.values<any>(mod.ports ?? {})) {
             if (port.direction === 'inout') { port.direction = 'output'; }
-            if (Array.isArray(port.bits)) { port.bits = zToX(port.bits); }
         }
         for (const [cellName, cell] of Object.entries<any>(mod.cells ?? {})) {
             for (const [pname, pdir] of Object.entries<any>(cell.port_directions ?? {})) {
                 if (pdir === 'inout') { cell.port_directions[pname] = 'input'; }
-            }
-            for (const [cname, conn] of Object.entries<any>(cell.connections ?? {})) {
-                if (Array.isArray(conn)) { cell.connections[cname] = zToX(conn); }
             }
             // $bmux (Y = word S of the packed array A; emitted for indexed reads like
             // `rom[addr]` that don't infer a memory) has no converter mapping. For
@@ -133,13 +130,14 @@ function normalizeForDigitaljs(yosysJson: any): any {
                 }
             }
             // $tribuf (Y = EN ? A : z) has no converter mapping; rewrite as a $mux
-            // selecting between all-x ("bus released") and the driven value — the exact
-            // 3-valued rendering of a tristate driver. src attributes are preserved.
+            // selecting between the high-Z constant ("bus released") and the driven
+            // value. digitaljs renders the 'z' constant, so this is a faithful
+            // tristate-driver depiction. src attributes are preserved.
             if (cell.type === '$tribuf') {
                 const width = cell.connections.A.length;
                 cell.type = '$mux';
                 cell.connections = {
-                    A: Array(width).fill('x'),
+                    A: Array(width).fill('z'),
                     B: cell.connections.A,
                     S: cell.connections.EN,
                     Y: cell.connections.Y,
@@ -174,9 +172,6 @@ function normalizeForDigitaljs(yosysJson: any): any {
             }
         }
         resolveMultiDrivers(mod, allocBits);
-        for (const nn of Object.values<any>(mod.netnames ?? {})) {
-            if (Array.isArray(nn.bits)) { nn.bits = zToX(nn.bits); }
-        }
     }
     return yosysJson;
 }
