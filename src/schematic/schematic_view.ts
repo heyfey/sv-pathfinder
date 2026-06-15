@@ -420,11 +420,11 @@ export class SchematicViewProvider {
                 'waveformViewer.getValuesAtTime',
                 { uri: waveform.resourceUri.toString(), instancePaths });
             if (!waveformValues) { return; }
-            const updates: { name: string; value: string }[] = [];
+            const updates: { name: string; value: string; prev?: string }[] = [];
             for (const v of waveformValues) {
-                const value = lastWaveformValue(v.value);
+                const { value, prev } = waveformValuePair(v.value);
                 if (value === undefined) { continue; }
-                updates.push({ name: v.instancePath.split('.').pop()!, value });
+                updates.push({ name: v.instancePath.split('.').pop()!, value, prev });
             }
             if (updates.length > 0) {
                 this.postMessage({ type: 'setValues', updates });
@@ -461,13 +461,20 @@ function findParentScope(instance: NetlistItem): NetlistItem | undefined {
 
 // VaporView returns either a JSON string or an array of value strings (value before /
 // after the marker edge); the schematic wants the value AT the cursor = the last one.
-function lastWaveformValue(values: any): string | undefined {
+// The value AT the cursor plus the one just before it. vaporview returns an array of values for a
+// net when the cursor sits on a transition; we take the last as `value` and the second-last as
+// `prev` so the webview can render old→new. A single (stable) value yields prev === undefined.
+function waveformValuePair(values: any): { value: string | undefined; prev: string | undefined } {
     let v: any = values;
     if (typeof v === 'string') {
-        try { v = JSON.parse(v); } catch { return v; }
+        try { v = JSON.parse(v); } catch { return { value: v, prev: undefined }; }
     }
     if (Array.isArray(v)) {
-        return v.length > 0 ? String(v[v.length - 1]) : undefined;
+        if (v.length === 0) { return { value: undefined, prev: undefined }; }
+        return {
+            value: String(v[v.length - 1]),
+            prev: v.length > 1 ? String(v[v.length - 2]) : undefined,
+        };
     }
-    return typeof v === 'string' ? v : undefined;
+    return { value: typeof v === 'string' ? v : undefined, prev: undefined };
 }

@@ -69,7 +69,10 @@ export interface LoadSchematicMessage {
 
 export interface SetValuesMessage {
     type: 'setValues';
-    updates: { name: string; value: string }[]; // value: raw binary-ish string, webview sanitizes
+    // value: raw binary-ish string of the value AT the cursor (drives the wire colour); prev: the
+    // value just before it when the cursor sits on a transition, so the webview can render
+    // old→new (a value change is significant in hardware, so we don't hide it). webview sanitizes.
+    updates: { name: string; value: string; prev?: string }[];
 }
 
 export interface ClearValuesMessage {

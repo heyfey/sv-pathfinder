@@ -93,7 +93,7 @@ cells.IOView.prototype._updateIoValue = function () {
     const dir = this.model._portDirection; // 'out' for Input (drives net), 'in' for Output (reads)
     const sigs = this.model.get(dir === 'out' ? 'outputSignals' : 'inputSignals');
     const sig = sigs && sigs[dir];
-    const t = formatSig(sig);
+    const t = valueText(this.model.get('net'), sig);
     node.textContent = t;
     node.style.display = t ? 'inline' : 'none';          // JointJS display:none-s empty text
     node.style.fill = _valuePalette[signalCategory(sig)]; // match the wire colour
@@ -171,6 +171,19 @@ const _origUpdatePortSignals = cells.GateView.prototype._updatePortSignals;
 cells.SubcircuitView.prototype._updatePortSignals = function (dir) {
     _origUpdatePortSignals.apply(this, arguments);
     const m = this.model;
+    // map each port to the parent-scope net wired to it, so its value (and old→new transition) is
+    // looked up under the right name. Cached once per view — the graph is static after layout.
+    if (!this._portNetsCache) {
+        this._portNetsCache = {};
+        const g = m.graph;
+        if (g) {
+            for (const link of g.getConnectedLinks(m)) {
+                const s = link.get('source'), tt = link.get('target');
+                if (s && s.id === m.id && 'port' in s) { this._portNetsCache[s.port] = link.get('netname'); }
+                if (tt && tt.id === m.id && 'port' in tt) { this._portNetsCache[tt.port] = link.get('netname'); }
+            }
+        }
+    }
     const sigs = dir === 'in' ? m.get('inputSignals')
         : dir === 'out' ? m.get('outputSignals')
         : Object.assign({}, m.get('inputSignals'), m.get('outputSignals'));
@@ -178,7 +191,7 @@ cells.SubcircuitView.prototype._updatePortSignals = function (dir) {
         const cache = this._portElementsCache[port];
         const node = cache && cache.portSelectors && cache.portSelectors.iovalue;
         if (!node) { continue; }
-        const t = formatSig(sigs[port]);
+        const t = valueText(this._portNetsCache[port], sigs[port]);
         node.textContent = t;
         // JointJS hides a text node whose `text` attr is empty (display:none); we set textContent
         // directly, so force display back on when there's a value (and off when blank).
@@ -255,7 +268,7 @@ cells.WireView.prototype._updateSignal = function () {
     const node = this.el.querySelector('.wirevalue');
     if (!node) { return; }
     const sig = this.model.get('signal');
-    const t = formatSig(sig);
+    const t = valueText(this.model.get('netname'), sig);
     node.textContent = t;
     // JointJS hides an empty-text node (display:none); force it back on when there's a value.
     node.style.display = t ? 'inline' : 'none';
@@ -560,6 +573,7 @@ function setWireValue(name, rawValue) {
 
 function clearValues() {
     if (!labelIndex || !circuit) { return; }
+    _prevValue.clear();
     for (const wire of Object.values(labelIndex.wires)) {
         const bits = wire.get('bits');
         const vec = Vector3vl.xes(bits);
@@ -832,6 +846,20 @@ function formatSig(sig) {
     const bin = sig.toBin();
     if (/^x+$/i.test(bin)) { return ''; } // unannotated / released-to-x
     return (typeof sig.toHex === 'function' && bin.length > 4) ? '0x' + sig.toHex() : bin;
+}
+// Raw previous value per net (set only when the cursor lands on a transition); lets the displayed
+// value text show old→new. Keyed by net name (the same leaf name VaporView/setValues use).
+const _prevValue = new Map();
+// Text to show for a net: just the current value, or `old→new` when the cursor is on a transition.
+// '' (blank) for unknown/x so undriven nets stay clean. `netname` may be null (unnamed wire).
+function valueText(netname, sig) {
+    const cur = formatSig(sig);
+    if (cur === '') { return ''; }
+    const prevRaw = netname ? _prevValue.get(netname) : undefined;
+    if (prevRaw === undefined) { return cur; }
+    const bits = sig.toBin().length;
+    const prevFmt = formatSig(Vector3vl.fromBin(toBinFor3vl(prevRaw, bits), bits));
+    return (prevFmt === '' || prevFmt === cur) ? cur : `${prevFmt}→${cur}`;
 }
 // Current annotated value as a copyable string, or undefined when there's no real value
 // (no waveform loaded → all-x). Wires carry the signal; an IO/gate's value is on its output.
@@ -1384,6 +1412,13 @@ window.addEventListener('message', (event) => {
             break;
         case 'setValues': {
             if (!circuit) { break; }
+            // Record transitions FIRST so the cascade from setWireValue (which re-renders value
+            // text) can read every net's `prev` while it runs. This batch is the full set, so a
+            // clear+repopulate keeps no stale transitions from the previous cursor position.
+            _prevValue.clear();
+            for (const u of msg.updates) {
+                if (u.prev !== undefined) { _prevValue.set(u.name, u.prev); }
+            }
             let applied = 0;
             for (const u of msg.updates) {
                 if (setWireValue(u.name, u.value)) { applied++; }
