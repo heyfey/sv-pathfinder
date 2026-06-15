@@ -22,16 +22,17 @@ import '@vscode/codicons/dist/codicon.css'; // VS Code's official icon font (bun
 //             the minimum wire length, so this is the main lever on how long/empty wires look.
 //             compact reserves little (short wires; a label may sit closer to a box); roomier
 //             tiers reserve the full label so names never touch a box.
-// VALUE ANNOTATION (planned): values render UNDER the name, not beside it — so the reserved
-// room grows VERTICALLY, not horizontally. Reserve it here up front (never resize at runtime,
-// which would force a re-layout): bump `labelH` for a value line under each wire net-name; for
-// child-instance boxes, reserve a value line under EACH port name — i.e. grow the per-port row
-// height (digitaljs's Subcircuit uses 16px/row in cells/subcircuit.js; override that to ~28).
-// Widths stay name-driven; only heights change, so runtime value updates are pure text swaps.
+// VALUE ANNOTATION: values render UNDER the name, not beside it — so the reserved room grows
+// VERTICALLY, not horizontally. Reserve it here up front (never resize at runtime, which would
+// force a re-layout): bump `labelH` for a value line under each wire net-name; for child-instance
+// boxes, reserve a value line under EACH port name via `rowH` — the per-port row pitch (digitaljs's
+// Subcircuit hard-codes 16px/row in cells/subcircuit.js; we override it to rowH so the value line
+// fits). Widths stay name-driven; only heights change, so runtime value updates are pure text swaps.
+//   rowH — child-instance per-port row pitch; must clear a name line + a value line under it.
 const SPACING = {
-    compact:     { nodeNode: 24, betweenLayers: 36, edgeNode: 12, edgeEdge: 10, edgeLabel: 3, labelPad: 6,  labelH: 14, boxGap: 56, ioPad: 26, netChannel: 0.5 },
-    comfortable: { nodeNode: 34, betweenLayers: 56, edgeNode: 22, edgeEdge: 16, edgeLabel: 4, labelPad: 14, labelH: 16, boxGap: 70, ioPad: 34, netChannel: 0.85 },
-    spacious:    { nodeNode: 44, betweenLayers: 80, edgeNode: 30, edgeEdge: 24, edgeLabel: 5, labelPad: 24, labelH: 18, boxGap: 84, ioPad: 42, netChannel: 1.0 },
+    compact:     { nodeNode: 24, betweenLayers: 36, edgeNode: 12, edgeEdge: 10, edgeLabel: 3, labelPad: 6,  labelH: 14, boxGap: 56, ioPad: 26, netChannel: 0.5,  rowH: 26 },
+    comfortable: { nodeNode: 34, betweenLayers: 56, edgeNode: 22, edgeEdge: 16, edgeLabel: 4, labelPad: 14, labelH: 16, boxGap: 70, ioPad: 34, netChannel: 0.85, rowH: 28 },
+    spacious:    { nodeNode: 44, betweenLayers: 80, edgeNode: 30, edgeEdge: 24, edgeLabel: 5, labelPad: 24, labelH: 18, boxGap: 84, ioPad: 42, netChannel: 1.0,  rowH: 30 },
 };
 let spacing = SPACING.compact;
 
@@ -86,6 +87,66 @@ cells.BoxView.prototype._calculateBoxWidth = function () {
         if (p.group === 'out') { rw = Math.max(rw, w); } else if (p.group === 'in') { lw = Math.max(lw, w); }
     }
     return Math.ceil(lw + rw) + spacing.boxGap;
+};
+
+// Per-port value annotation on child-instance (Subcircuit) boxes. digitaljs draws only the port
+// NAME (the `iolabel` text) and packs ports at 16px/row. To show each port's live VaporView value
+// UNDER its name we (a) add a second text element `iovalue` to the port markup, (b) re-pitch the
+// box to spacing.rowH/row so the value line has room WITHOUT a runtime resize (reserve up front —
+// a resize would force a full re-layout), and (c) drive the value text from the SAME reactive
+// signal path that already colors the port circles (the _updatePortSignals override below).
+// Scoped to Subcircuit so plain gates/dffs are untouched. Widths stay name-driven (hex values are
+// short); a value wider than its port name can encroach on the middle gap — acceptable for now.
+cells.Subcircuit.prototype.portMarkup = cells.Gate.prototype.portMarkup.concat([
+    { tagName: 'text', className: 'iovalue', selector: 'iovalue' },
+]);
+const _origSubPreprocess = cells.Subcircuit.prototype._preprocessPorts;
+cells.Subcircuit.prototype._preprocessPorts = function (ports) {
+    _origSubPreprocess.call(this, ports); // sets each port's bits + iolabel (name) attrs
+    for (const port of ports) {
+        const isOut = port.group === 'out';
+        // place the value directly under the name (iolabel sits at the port centre): same side
+        // anchor as the name, nudged down a line. Styling (size/colour) is in style.css (.iovalue).
+        (port.attrs = port.attrs || {})['iovalue'] = {
+            text: '', refX: isOut ? -5 : 5, refY: 9,
+            textAnchor: isOut ? 'end' : 'start', textVerticalAnchor: 'middle',
+        };
+    }
+};
+const _origSubInitialize = cells.Subcircuit.prototype.initialize;
+cells.Subcircuit.prototype.initialize = function () {
+    _origSubInitialize.apply(this, arguments); // builds ports + sets the 16px/row size
+    // re-pitch to spacing.rowH/row so a value line fits under each port name (mirrors the
+    // vcount*16+8 rule in cells/subcircuit.js, but with our taller pitch). Width is left to
+    // BoxView._autoResizeBox / _calculateBoxWidth.
+    const items = (this.get('ports') || {}).items || [];
+    let ins = 0, outs = 0;
+    for (const p of items) { if (p.group === 'out') { outs++; } else { ins++; } }
+    const vcount = Math.max(ins, outs);
+    if (vcount > 0) {
+        const sz = this.size();
+        this.set('size', { width: sz.width, height: vcount * spacing.rowH + 8 });
+    }
+};
+// Feed per-port value text from the reactive signal path. digitaljs's Circuit binds
+// change:outputSignals -> fan-out wire signal -> target._setInput -> inputSignals at the MODEL
+// level (circuit.js, independent of the never-started engine), so our VaporView annotation
+// (setWireValue) already propagates a value onto every subcircuit port. GateView._updatePortSignals
+// recolours the port circle on each such change; we extend it to also write the formatted value
+// under the name. View-only (set textContent on the cached port node) — no model mutation, so no
+// re-entrancy and no extra layout, exactly like the existing wire-colour path.
+const _origUpdatePortSignals = cells.GateView.prototype._updatePortSignals;
+cells.SubcircuitView.prototype._updatePortSignals = function (dir) {
+    _origUpdatePortSignals.apply(this, arguments);
+    const m = this.model;
+    const sigs = dir === 'in' ? m.get('inputSignals')
+        : dir === 'out' ? m.get('outputSignals')
+        : Object.assign({}, m.get('inputSignals'), m.get('outputSignals'));
+    for (const port in sigs) {
+        const cache = this._portElementsCache[port];
+        const node = cache && cache.portSelectors && cache.portSelectors.iovalue;
+        if (node) { node.textContent = formatSig(sigs[port]); }
+    }
 };
 
 // Drop the wire hover-tools (delete-wire ✕, monitor 🔍, endpoint reconnect, reshape) —
@@ -671,17 +732,22 @@ function realName(i) { return !!i.leafName && !String(i.leafName).startsWith('$'
 // positions, OR it's a child instance (→ its module's source), OR it has a real name (→ the
 // design tree). Otherwise navigation would silently do nothing, so don't offer it.
 function sourceNavigable(i) { return (i.sourcePositions && i.sourcePositions.length > 0) || i.isSub || realName(i); }
+// Format a Vector3vl signal for display: '' when there's no real value (no waveform → all-x),
+// else binary for narrow nets and 0x-hex for wider ones. Shared by the per-port value
+// annotation (iovalue text) and the context-menu "Copy value".
+function formatSig(sig) {
+    if (!sig || typeof sig.toBin !== 'function') { return ''; }
+    const bin = sig.toBin();
+    if (/^x+$/i.test(bin)) { return ''; } // unannotated / released-to-x
+    return (typeof sig.toHex === 'function' && bin.length > 4) ? '0x' + sig.toHex() : bin;
+}
 // Current annotated value as a copyable string, or undefined when there's no real value
 // (no waveform loaded → all-x). Wires carry the signal; an IO/gate's value is on its output.
 function currentValue(model) {
     let sig = model.get('signal');
     if (!sig) { const outs = model.get('outputSignals'); if (outs) { sig = Object.values(outs)[0]; } }
-    if (sig && typeof sig.toBin === 'function') {
-        const bin = sig.toBin();
-        if (/^x+$/i.test(bin)) { return undefined; } // unannotated
-        return (typeof sig.toHex === 'function' && bin.length > 4) ? '0x' + sig.toHex() : bin;
-    }
-    return undefined;
+    const s = formatSig(sig);
+    return s === '' ? undefined : s;
 }
 const CTX_ITEMS = [
     { label: 'Step into', applies: (i) => i.isSub, action: 'stepInto' }, // navigate the MAIN page into the child

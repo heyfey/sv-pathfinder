@@ -221,6 +221,15 @@ html, body {
     fill: var(--vscode-editor-foreground, #cccccc);
 }
 
+/* per-port live value (under each child-instance port name): smaller, monospace, dimmer so it
+ * reads as annotation rather than structure. Blank when there's no waveform value. */
+.djs .joint-cell text.iovalue {
+    fill: var(--vscode-charts-green, #2fb344);
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 6pt;
+    pointer-events: none;
+}
+
 /* read-only viewer: hide the box zoom (🔍) affordance; child instances open via
  * right-click → Expand. (Wire value tooltips are on .joint-link, not .joint-cell.) */
 .djs .joint-cell .tooltip { display: none; }
