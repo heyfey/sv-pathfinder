@@ -188,6 +188,8 @@ cells.SubcircuitView.prototype._updatePortSignals = function (dir) {
         : dir === 'out' ? m.get('outputSignals')
         : Object.assign({}, m.get('inputSignals'), m.get('outputSignals'));
     for (const port in sigs) {
+        // align the port circle with VaporView: any x bit ⇒ x colour (digitaljs only does all-x)
+        if (signalCategory(sigs[port]) === 'undef') { this._applyPortAttrs(port, this.attrs.signal.undef); }
         const cache = this._portElementsCache[port];
         const node = cache && cache.portSelectors && cache.portSelectors.iovalue;
         if (!node) { continue; }
@@ -265,9 +267,12 @@ cells.Wire.prototype.initialize = function () {
 const _origWireUpdateSignal = cells.WireView.prototype._updateSignal;
 cells.WireView.prototype._updateSignal = function () {
     _origWireUpdateSignal.apply(this, arguments);
+    const sig = this.model.get('signal');
+    // Align the line with VaporView: ANY x bit ⇒ x colour. digitaljs only treats an ALL-x net as
+    // undef, so a partially-x bus would stay a defined (blue) line — override it to undef here.
+    if (sig && signalCategory(sig) === 'undef') { this._applyAttrs(this.attrs.signal.undef); }
     const node = this.el.querySelector('.wirevalue');
     if (!node) { return; }
-    const sig = this.model.get('signal');
     const t = valueText(this.model.get('netname'), sig);
     node.textContent = t;
     // JointJS hides an empty-text node (display:none); force it back on when there's a value.
@@ -513,9 +518,13 @@ function applyWireValuePalette() {
         undef: { line: { stroke: _valuePalette.undef } },
     };
 }
-// value bucket for a Vector3vl signal (matches digitaljs's high/low/def/undef color buckets).
+// value bucket for a Vector3vl signal → high/low/def/undef color. NOTE: any x bit ⇒ undef, to
+// match VaporView (a bus with any unknown bit reads as x). This is stricter than digitaljs's own
+// `isDefined`, which is only false when EVERY bit is x — so a partially-x bus would otherwise be
+// coloured as a defined (blue) value.
 function signalCategory(sig) {
-    if (!sig || !sig.isDefined) { return 'undef'; }
+    if (!sig || typeof sig.toBin !== 'function') { return 'undef'; }
+    if (sig.toBin().includes('x')) { return 'undef'; }
     if (sig.isHigh) { return 'high'; }
     if (sig.isLow) { return 'low'; }
     return 'def';
@@ -586,6 +595,25 @@ function clearValues() {
         } else {
             wire.set('signal', vec);
         }
+    }
+}
+
+// Re-apply every cell/link's value text from _valueText. The reactive _updateSignal path only runs
+// when a signal actually CHANGES, so a net whose annotated value equals its current signal (e.g. an
+// x value while the load default is also x) would keep stale/blank text. Called once per
+// setValues/clearValues batch so every annotation reflects the current cursor. No-op before the
+// paper has rendered (load-time clear): findViewByModel returns nothing and the first render fills in.
+function refreshValueText() {
+    if (!paper || !labelIndex) { return; }
+    for (const el of labelIndex.graph.getElements()) {
+        const v = paper.findViewByModel(el);
+        if (!v) { continue; }
+        if (typeof v._updateIoValue === 'function') { v._updateIoValue(); }
+        else if (el.get('type') === 'Subcircuit' && typeof v._updatePortSignals === 'function') { v._updatePortSignals(); }
+    }
+    for (const l of labelIndex.graph.getLinks()) {
+        const v = paper.findViewByModel(l);
+        if (v && typeof v._updateSignal === 'function') { v._updateSignal(); }
     }
 }
 
@@ -847,23 +875,30 @@ function formatSig(sig) {
     if (/^x+$/i.test(bin)) { return ''; } // unannotated / released-to-x
     return (typeof sig.toHex === 'function' && bin.length > 4) ? '0x' + sig.toHex() : bin;
 }
-// One element of a value chain, formatted: the bin/hex value, or 'x' for an unknown element (so a
-// glitch like 0→x→1 still reads). Distinct from formatSig (which blanks all-x) — used inside chains.
+// One element of a value chain, formatted HONESTLY (unlike formatSig, which blanks all-x for the
+// no-waveform case). x is shown, not hidden: narrow nets as binary ('x', '10x'); wide nets as the
+// hex digits incl. x ('xx' all-unknown, 'ax' partially) — and only a fully-defined wide value gets
+// the 0x prefix, so an x-bearing value reads visibly different from a real hex.
 function fmtToken(raw, bits) {
-    return formatSig(Vector3vl.fromBin(toBinFor3vl(raw, bits), bits)) || 'x';
+    const vec = Vector3vl.fromBin(toBinFor3vl(raw, bits), bits);
+    const bin = vec.toBin();
+    if (bin.length > 4) {
+        const hex = typeof vec.toHex === 'function' ? vec.toHex() : bin;
+        return bin.includes('x') ? hex : '0x' + hex;
+    }
+    return bin;
 }
-// Display string for a net's value array AT the cursor: a single value, `old→new` on a transition,
-// or the whole `v0→v1→…→final` chain for a glitch (we keep every element — a value change/glitch
-// is meaningful). A lone unknown collapses to '' so undriven nets stay clean.
+// Display string for a net's value array AT the cursor: one value, `old→new` on a transition, or
+// the whole `v0→…→final` chain for a glitch (every element kept). Built only for ANNOTATED nets, so
+// an x value here is shown honestly — the "no waveform" blank comes from the valueText fallback.
 function chainDisplay(values, bits) {
     if (!values || values.length === 0) { return ''; }
-    const toks = values.map(v => fmtToken(v, bits));
-    if (toks.length === 1) { return toks[0] === 'x' ? '' : toks[0]; }
-    return toks.join('→');
+    return values.map(v => fmtToken(v, bits)).join('→');
 }
 // Display string per net, built once from its value array in the setValues handler (keyed by the
-// leaf net name VaporView uses). The reactive views read this; nets with no entry fall back to the
-// live signal (blank when x). This is the chain text itself, not a stored "previous value".
+// leaf net name VaporView uses). The reactive views read this. A net WITH a value (even x) shows it;
+// a net with no entry (no waveform / not traced) falls back to formatSig → blank — that's the
+// difference between "value is x" and "no value loaded".
 const _valueText = new Map();
 function valueText(netname, sig) {
     if (netname && _valueText.has(netname)) { return _valueText.get(netname); }
@@ -1435,11 +1470,13 @@ window.addEventListener('message', (event) => {
                 if (!u.values || u.values.length === 0) { continue; }
                 if (setWireValue(u.name, u.values[u.values.length - 1])) { applied++; }
             }
+            refreshValueText(); // catch nets whose value didn't change the signal (e.g. x while already x)
             setStatus(`values @ cursor: ${applied}/${msg.updates.length} nets annotated`);
             break;
         }
         case 'clearValues':
             clearValues();
+            refreshValueText(); // blank nets whose signal was already x (no change event fired)
             setStatus('values cleared');
             break;
         case 'buildExport':
