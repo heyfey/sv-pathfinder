@@ -420,11 +420,11 @@ export class SchematicViewProvider {
                 'waveformViewer.getValuesAtTime',
                 { uri: waveform.resourceUri.toString(), instancePaths });
             if (!waveformValues) { return; }
-            const updates: { name: string; value: string; prev?: string }[] = [];
+            const updates: { name: string; values: string[] }[] = [];
             for (const v of waveformValues) {
-                const { value, prev } = waveformValuePair(v.value);
-                if (value === undefined) { continue; }
-                updates.push({ name: v.instancePath.split('.').pop()!, value, prev });
+                const values = waveformValueArray(v.value);
+                if (values.length === 0) { continue; }
+                updates.push({ name: v.instancePath.split('.').pop()!, values });
             }
             if (updates.length > 0) {
                 this.postMessage({ type: 'setValues', updates });
@@ -461,20 +461,14 @@ function findParentScope(instance: NetlistItem): NetlistItem | undefined {
 
 // VaporView returns either a JSON string or an array of value strings (value before /
 // after the marker edge); the schematic wants the value AT the cursor = the last one.
-// The value AT the cursor plus the one just before it. vaporview returns an array of values for a
-// net when the cursor sits on a transition; we take the last as `value` and the second-last as
-// `prev` so the webview can render old→new. A single (stable) value yields prev === undefined.
-function waveformValuePair(values: any): { value: string | undefined; prev: string | undefined } {
+// The full value array vaporview reports for a net AT the cursor: one value when stable, [old, new]
+// on a transition, or [old, …, final] for a glitch. Normalize vaporview's shape (a JSON-string or
+// a real array) to string[]; the webview joins the chain and colours by the last element.
+function waveformValueArray(values: any): string[] {
     let v: any = values;
     if (typeof v === 'string') {
-        try { v = JSON.parse(v); } catch { return { value: v, prev: undefined }; }
+        try { v = JSON.parse(v); } catch { return v ? [v] : []; }
     }
-    if (Array.isArray(v)) {
-        if (v.length === 0) { return { value: undefined, prev: undefined }; }
-        return {
-            value: String(v[v.length - 1]),
-            prev: v.length > 1 ? String(v[v.length - 2]) : undefined,
-        };
-    }
-    return { value: typeof v === 'string' ? v : undefined, prev: undefined };
+    if (Array.isArray(v)) { return v.map(String); }
+    return typeof v === 'string' && v ? [v] : [];
 }

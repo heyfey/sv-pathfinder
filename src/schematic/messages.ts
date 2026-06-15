@@ -69,10 +69,12 @@ export interface LoadSchematicMessage {
 
 export interface SetValuesMessage {
     type: 'setValues';
-    // value: raw binary-ish string of the value AT the cursor (drives the wire colour); prev: the
-    // value just before it when the cursor sits on a transition, so the webview can render
-    // old→new (a value change is significant in hardware, so we don't hide it). webview sanitizes.
-    updates: { name: string; value: string; prev?: string }[];
+    // values: the full value array vaporview reports AT the cursor for each net — usually a single
+    // value, but [old, new] on a transition and [old, n1, …, final] for a glitch (rare, FSDB). The
+    // webview renders the whole chain joined with → (a value change/glitch is significant in
+    // hardware, so we don't hide it) and colours by the last element. raw binary-ish; webview
+    // sanitizes.
+    updates: { name: string; values: string[] }[];
 }
 
 export interface ClearValuesMessage {

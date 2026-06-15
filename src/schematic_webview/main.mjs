@@ -573,7 +573,7 @@ function setWireValue(name, rawValue) {
 
 function clearValues() {
     if (!labelIndex || !circuit) { return; }
-    _prevValue.clear();
+    _valueText.clear();
     for (const wire of Object.values(labelIndex.wires)) {
         const bits = wire.get('bits');
         const vec = Vector3vl.xes(bits);
@@ -847,19 +847,27 @@ function formatSig(sig) {
     if (/^x+$/i.test(bin)) { return ''; } // unannotated / released-to-x
     return (typeof sig.toHex === 'function' && bin.length > 4) ? '0x' + sig.toHex() : bin;
 }
-// Raw previous value per net (set only when the cursor lands on a transition); lets the displayed
-// value text show old→new. Keyed by net name (the same leaf name VaporView/setValues use).
-const _prevValue = new Map();
-// Text to show for a net: just the current value, or `old→new` when the cursor is on a transition.
-// '' (blank) for unknown/x so undriven nets stay clean. `netname` may be null (unnamed wire).
+// One element of a value chain, formatted: the bin/hex value, or 'x' for an unknown element (so a
+// glitch like 0→x→1 still reads). Distinct from formatSig (which blanks all-x) — used inside chains.
+function fmtToken(raw, bits) {
+    return formatSig(Vector3vl.fromBin(toBinFor3vl(raw, bits), bits)) || 'x';
+}
+// Display string for a net's value array AT the cursor: a single value, `old→new` on a transition,
+// or the whole `v0→v1→…→final` chain for a glitch (we keep every element — a value change/glitch
+// is meaningful). A lone unknown collapses to '' so undriven nets stay clean.
+function chainDisplay(values, bits) {
+    if (!values || values.length === 0) { return ''; }
+    const toks = values.map(v => fmtToken(v, bits));
+    if (toks.length === 1) { return toks[0] === 'x' ? '' : toks[0]; }
+    return toks.join('→');
+}
+// Display string per net, built once from its value array in the setValues handler (keyed by the
+// leaf net name VaporView uses). The reactive views read this; nets with no entry fall back to the
+// live signal (blank when x). This is the chain text itself, not a stored "previous value".
+const _valueText = new Map();
 function valueText(netname, sig) {
-    const cur = formatSig(sig);
-    if (cur === '') { return ''; }
-    const prevRaw = netname ? _prevValue.get(netname) : undefined;
-    if (prevRaw === undefined) { return cur; }
-    const bits = sig.toBin().length;
-    const prevFmt = formatSig(Vector3vl.fromBin(toBinFor3vl(prevRaw, bits), bits));
-    return (prevFmt === '' || prevFmt === cur) ? cur : `${prevFmt}→${cur}`;
+    if (netname && _valueText.has(netname)) { return _valueText.get(netname); }
+    return formatSig(sig);
 }
 // Current annotated value as a copyable string, or undefined when there's no real value
 // (no waveform loaded → all-x). Wires carry the signal; an IO/gate's value is on its output.
@@ -1412,16 +1420,20 @@ window.addEventListener('message', (event) => {
             break;
         case 'setValues': {
             if (!circuit) { break; }
-            // Record transitions FIRST so the cascade from setWireValue (which re-renders value
-            // text) can read every net's `prev` while it runs. This batch is the full set, so a
-            // clear+repopulate keeps no stale transitions from the previous cursor position.
-            _prevValue.clear();
+            // Build each net's display chain FIRST so the cascade from setWireValue (which
+            // re-renders value text) can read it while it runs. This batch is the full set, so a
+            // clear+repopulate keeps no stale chains from the previous cursor position.
+            _valueText.clear();
             for (const u of msg.updates) {
-                if (u.prev !== undefined) { _prevValue.set(u.name, u.prev); }
+                if (!u.values || u.values.length === 0) { continue; }
+                const w = labelIndex && labelIndex.wires[u.name];
+                const bits = (w && w.get('bits')) || String(u.values[0]).length || 1;
+                _valueText.set(u.name, chainDisplay(u.values, bits));
             }
             let applied = 0;
             for (const u of msg.updates) {
-                if (setWireValue(u.name, u.value)) { applied++; }
+                if (!u.values || u.values.length === 0) { continue; }
+                if (setWireValue(u.name, u.values[u.values.length - 1])) { applied++; }
             }
             setStatus(`values @ cursor: ${applied}/${msg.updates.length} nets annotated`);
             break;
