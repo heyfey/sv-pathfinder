@@ -147,7 +147,12 @@ cells.SubcircuitView.prototype._updatePortSignals = function (dir) {
     for (const port in sigs) {
         const cache = this._portElementsCache[port];
         const node = cache && cache.portSelectors && cache.portSelectors.iovalue;
-        if (node) { node.textContent = formatSig(sigs[port]); }
+        if (!node) { continue; }
+        const t = formatSig(sigs[port]);
+        node.textContent = t;
+        // JointJS hides a text node whose `text` attr is empty (display:none); we set textContent
+        // directly, so force display back on when there's a value (and off when blank).
+        node.style.display = t ? 'inline' : 'none';
     }
 };
 
@@ -217,7 +222,11 @@ const _origWireUpdateSignal = cells.WireView.prototype._updateSignal;
 cells.WireView.prototype._updateSignal = function () {
     _origWireUpdateSignal.apply(this, arguments);
     const node = this.el.querySelector('.wirevalue');
-    if (node) { node.textContent = formatSig(this.model.get('signal')); }
+    if (!node) { return; }
+    const t = formatSig(this.model.get('signal'));
+    node.textContent = t;
+    // JointJS hides an empty-text node (display:none); force it back on when there's a value.
+    node.style.display = t ? 'inline' : 'none';
 };
 const _origElkLayout = ELK.prototype.layout;
 ELK.prototype.layout = function (graph, opts) {
