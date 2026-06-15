@@ -221,19 +221,12 @@ html, body {
     fill: var(--vscode-editor-foreground, #cccccc);
 }
 
-/* per-port live value (under each child-instance port name): smaller, monospace, dimmer so it
- * reads as annotation rather than structure. Blank when there's no waveform value. */
-.djs .joint-cell text.iovalue {
-    fill: var(--vscode-charts-green, #2fb344);
-    font-family: var(--vscode-editor-font-family, monospace);
-    font-size: 6pt;
-    pointer-events: none;
-}
-
-/* per-wire live value (under each net name): the wire LINE already encodes the value by colour,
- * so keep the text neutral/dim to avoid fighting it. Blank when there's no waveform value. */
+/* live value annotation text: under each child-instance port name (.iovalue, also the boxed IO
+ * ports) and under each wire net name (.wirevalue). Small, monospace; blank when there's no
+ * waveform value. The fill is set per-node in JS to match the signal's wire colour (high/low/
+ * def/undef), so it isn't declared here. */
+.djs .joint-cell text.iovalue,
 .djs .joint-link text.wirevalue {
-    fill: var(--vscode-descriptionForeground, #999);
     font-family: var(--vscode-editor-font-family, monospace);
     font-size: 6pt;
     pointer-events: none;

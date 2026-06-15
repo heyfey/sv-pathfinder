@@ -32,9 +32,9 @@ import '@vscode/codicons/dist/codicon.css'; // VS Code's official icon font (bun
 //   valueH — extra channel height reserved under each wire net-name for its value line, so 2-line
 //            wire labels (name over value) don't crowd parallel labeled wires.
 const SPACING = {
-    compact:     { nodeNode: 24, betweenLayers: 36, edgeNode: 12, edgeEdge: 10, edgeLabel: 3, labelPad: 6,  labelH: 14, boxGap: 56, ioPad: 26, netChannel: 0.5,  rowH: 26, valueH: 9 },
-    comfortable: { nodeNode: 34, betweenLayers: 56, edgeNode: 22, edgeEdge: 16, edgeLabel: 4, labelPad: 14, labelH: 16, boxGap: 70, ioPad: 34, netChannel: 0.85, rowH: 28, valueH: 10 },
-    spacious:    { nodeNode: 44, betweenLayers: 80, edgeNode: 30, edgeEdge: 24, edgeLabel: 5, labelPad: 24, labelH: 18, boxGap: 84, ioPad: 42, netChannel: 1.0,  rowH: 30, valueH: 11 },
+    compact:     { nodeNode: 24, betweenLayers: 36, edgeNode: 12, edgeEdge: 10, edgeLabel: 3, labelPad: 6,  labelH: 14, boxGap: 56, ioPad: 26, netChannel: 0.5,  rowH: 28, valueH: 9 },
+    comfortable: { nodeNode: 34, betweenLayers: 56, edgeNode: 22, edgeEdge: 16, edgeLabel: 4, labelPad: 14, labelH: 16, boxGap: 70, ioPad: 34, netChannel: 0.85, rowH: 30, valueH: 10 },
+    spacious:    { nodeNode: 44, betweenLayers: 80, edgeNode: 30, edgeEdge: 24, edgeLabel: 5, labelPad: 24, labelH: 18, boxGap: 84, ioPad: 42, netChannel: 1.0,  rowH: 32, valueH: 11 },
 };
 let spacing = SPACING.compact;
 
@@ -63,6 +63,14 @@ const origIOCheckMode = cells.IO.prototype._checkMode;
 cells.IO.prototype._checkMode = function () {
     const mode = origIOCheckMode.call(this); // keep correct mode + side effects
     this.set('markup', this.markupInSubcircuit);
+    // reserve a value line under the net name (boxed top-level / boundary port): grow the box and
+    // lift the name so its value (filled in by IOView._updateIoValue) sits below it.
+    this.prop('size/height', 40);
+    this.attr({
+        'ioname/refY': 0.5, 'ioname/y': -7,
+        'ioval/refX': 0.5, 'ioval/refY': 0.5, 'ioval/y': 10,
+        'ioval/textAnchor': 'middle', 'ioval/textVerticalAnchor': 'middle',
+    });
     return mode;
 };
 cells.InputView.prototype._updateView = function () { };
@@ -72,6 +80,30 @@ cells.IOView.prototype._calculateBoxWidth = function () {
     // frozen so the text isn't laid out (getBBox ~0). estimate = name*charPx + tier padding.
     const net = this.model.get('net') || '';
     return net ? Math.ceil(boxTextWidth(net)) + spacing.ioPad : 20;
+};
+// Boxed IO ports (top-level ports, and a subcircuit's boundary IOs) show their value under the net
+// name too — same as child-instance ports. Add a value text to the box markup and update it from
+// the SIGNAL flags digitaljs already raises on the IO cell (an Input drives outputSignals.out, an
+// Output reads inputSignals.in).
+cells.IO.prototype.markupInSubcircuit = cells.IO.prototype.markupInSubcircuit.concat([
+    { tagName: 'text', className: 'iovalue', selector: 'ioval' },
+]);
+const _ioBaseConfirmUpdate = cells.IOView.prototype.confirmUpdate;
+cells.IOView.prototype.confirmUpdate = function (flags) {
+    const r = _ioBaseConfirmUpdate.apply(this, arguments);
+    if (this.hasFlag(flags, 'SIGNAL') || this.hasFlag(flags, 'SIGNAL2')) { this._updateIoValue(); }
+    return r;
+};
+cells.IOView.prototype._updateIoValue = function () {
+    const node = this.selectors && this.selectors.ioval;
+    if (!node) { return; }
+    const dir = this.model._portDirection; // 'out' for Input (drives net), 'in' for Output (reads)
+    const sigs = this.model.get(dir === 'out' ? 'outputSignals' : 'inputSignals');
+    const sig = sigs && sigs[dir];
+    const t = formatSig(sig);
+    node.textContent = t;
+    node.style.display = t ? 'inline' : 'none';          // JointJS display:none-s empty text
+    node.style.fill = _valuePalette[signalCategory(sig)]; // match the wire colour
 };
 
 // Size child-instance (and dff/fsm/memory) boxes to fit their port-name labels. digitaljs's
@@ -110,7 +142,7 @@ cells.Subcircuit.prototype._preprocessPorts = function (ports) {
         // place the value directly under the name (iolabel sits at the port centre): same side
         // anchor as the name, nudged down a line. Styling (size/colour) is in style.css (.iovalue).
         (port.attrs = port.attrs || {})['iovalue'] = {
-            text: '', refX: isOut ? -5 : 5, refY: 9,
+            text: '', refX: isOut ? -5 : 5, refY: 13,
             textAnchor: isOut ? 'end' : 'start', textVerticalAnchor: 'middle',
         };
     }
@@ -153,6 +185,7 @@ cells.SubcircuitView.prototype._updatePortSignals = function (dir) {
         // JointJS hides a text node whose `text` attr is empty (display:none); we set textContent
         // directly, so force display back on when there's a value (and off when blank).
         node.style.display = t ? 'inline' : 'none';
+        node.style.fill = _valuePalette[signalCategory(sigs[port])]; // match the wire colour
     }
 };
 
@@ -199,8 +232,8 @@ cells.Wire.prototype.initialize = function () {
     if (!nm) { return; }
     _wireLabelDims.set(this.id, netLabelDims(nm));
     // digitaljs gave this wire a single-line netname label; replace it with a two-line label so
-    // the live value can sit UNDER the name (vertical growth, no extra wire length). The name is
-    // lifted just above the wire and the value sits just below it; WireView._updateSignal fills
+    // the live value can sit UNDER the name (vertical growth, no extra wire length). Both lines sit
+    // on the SAME side — below the wire — name first, value under it; WireView._updateSignal fills
     // the value text on each signal change (below). Blank value line when there's no waveform.
     this.label(0, {
         markup: [
@@ -208,8 +241,8 @@ cells.Wire.prototype.initialize = function () {
             { tagName: 'text', selector: 'labelvalue', className: 'wirevalue' },
         ],
         attrs: {
-            label: { text: nm, fontSize: '8pt', textAnchor: 'middle', textVerticalAnchor: 'middle', y: -4 },
-            labelvalue: { text: '', textAnchor: 'middle', textVerticalAnchor: 'middle', y: 7 },
+            label: { text: nm, fontSize: '8pt', textAnchor: 'middle', textVerticalAnchor: 'middle', y: 6 },
+            labelvalue: { text: '', textAnchor: 'middle', textVerticalAnchor: 'middle', y: 16 },
         },
         position: { distance: 0.5 },
     });
@@ -223,10 +256,12 @@ cells.WireView.prototype._updateSignal = function () {
     _origWireUpdateSignal.apply(this, arguments);
     const node = this.el.querySelector('.wirevalue');
     if (!node) { return; }
-    const t = formatSig(this.model.get('signal'));
+    const sig = this.model.get('signal');
+    const t = formatSig(sig);
     node.textContent = t;
     // JointJS hides an empty-text node (display:none); force it back on when there's a value.
     node.style.display = t ? 'inline' : 'none';
+    node.style.fill = _valuePalette[signalCategory(sig)]; // match this wire's line colour
 };
 const _origElkLayout = ELK.prototype.layout;
 ELK.prototype.layout = function (graph, opts) {
@@ -448,14 +483,31 @@ function cssVar(name, fallback) {
     const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
     return v || fallback;
 }
+// signal value -> color, shared by the wire LINE stroke AND the value TEXT fill (ports, wires, IO
+// boxes) so the annotated value reads in the same color as its wire. Seeded with the theme
+// defaults; applyWireValuePalette() refreshes from the live CSS vars on load.
+let _valuePalette = { high: '#2fb344', low: '#f14c4c', def: '#4a9cff', undef: '#888888' };
 function applyWireValuePalette() {
+    _valuePalette = {
+        high:  cssVar('--vscode-charts-green', '#2fb344'),       // 1
+        low:   cssVar('--vscode-charts-red', '#f14c4c'),         // 0
+        def:   cssVar('--vscode-charts-blue', '#4a9cff'),        // defined bus
+        undef: cssVar('--vscode-disabledForeground', '#888888'), // x / no data
+    };
     // the signal-color table lives on the WireView (read by its _updateSignal), not the model
     cells.WireView.prototype.attrs.signal = {
-        high:  { line: { stroke: cssVar('--vscode-charts-green', '#2fb344') } }, // 1
-        low:   { line: { stroke: cssVar('--vscode-charts-red', '#f14c4c') } },   // 0
-        def:   { line: { stroke: cssVar('--vscode-charts-blue', '#4a9cff') } },  // defined bus
-        undef: { line: { stroke: cssVar('--vscode-disabledForeground', '#888888') } }, // x / no data
+        high:  { line: { stroke: _valuePalette.high } },
+        low:   { line: { stroke: _valuePalette.low } },
+        def:   { line: { stroke: _valuePalette.def } },
+        undef: { line: { stroke: _valuePalette.undef } },
     };
+}
+// value bucket for a Vector3vl signal (matches digitaljs's high/low/def/undef color buckets).
+function signalCategory(sig) {
+    if (!sig || !sig.isDefined) { return 'undef'; }
+    if (sig.isHigh) { return 'high'; }
+    if (sig.isLow) { return 'low'; }
+    return 'def';
 }
 
 const vscode = acquireVsCodeApi();
