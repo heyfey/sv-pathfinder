@@ -63,14 +63,17 @@ function resolveMultiDrivers(mod: any, allocBits: (n: number) => number[]): void
     }
 }
 
-function normalizeForDigitaljs(yosysJson: any): any {
+// Mutates yosysJson in place; returns module name -> set of port names that were `inout`
+// (so convertToDigitalJs can mark the corresponding Input/Output devices bidirectional).
+function normalizeForDigitaljs(yosysJson: any): Map<string, Set<string>> {
+    const inoutByModule = new Map<string, Set<string>>();
     // Yosys JSON int params may be plain numbers (-compat-int) or bit strings
     const decodeInt = (v: any, dflt: number): number => {
         if (typeof v === 'number') { return v; }
         if (typeof v === 'string') { return parseInt(v, 2) || dflt; }
         return dflt;
     };
-    for (const mod of Object.values<any>(yosysJson.modules ?? {})) {
+    for (const [modName, mod] of Object.entries<any>(yosysJson.modules ?? {})) {
         // fresh net-bit id allocator for transforms that need internal nets
         let nextBit = 2;
         const scanBits = (bits: any[]) => {
@@ -83,13 +86,45 @@ function normalizeForDigitaljs(yosysJson: any): any {
         }
         const allocBits = (n: number) => Array.from({ length: n }, () => nextBit++);
 
-        for (const port of Object.values<any>(mod.ports ?? {})) {
-            if (port.direction === 'inout') { port.direction = 'output'; }
+        // Module inout ports -> output (a sink Output box inside the module). Record them so the
+        // resulting Input/Output devices can be marked bidirectional.
+        const inoutPorts = new Set<string>();
+        for (const [pname, port] of Object.entries<any>(mod.ports ?? {})) {
+            if (port.direction === 'inout') { inoutPorts.add(pname); port.direction = 'output'; }
         }
-        for (const [cellName, cell] of Object.entries<any>(mod.cells ?? {})) {
+        if (inoutPorts.size > 0) { inoutByModule.set(modName, inoutPorts); }
+
+        // digitaljs has no bidirectional net, so each inout net needs exactly one source or no wire
+        // is drawn. Group inout cell-pins by net; if a net already has a real driver (a cell output,
+        // or a module input) keep them all as sinks (input); otherwise promote ONE pin to output so
+        // the connection renders. Only sourceless nets are promoted -> no new multi-driver is forced
+        // (resolveMultiDrivers is the backstop). Module inout->output ports are SINKS, not drivers.
+        const inoutPinsByNet = new Map<string, { cell: any; pin: string }[]>();
+        const drivenNets = new Set<string>();
+        for (const port of Object.values<any>(mod.ports ?? {})) {
+            if (port.direction === 'input' && Array.isArray(port.bits)) { drivenNets.add(JSON.stringify(port.bits)); }
+        }
+        for (const cell of Object.values<any>(mod.cells ?? {})) {
             for (const [pname, pdir] of Object.entries<any>(cell.port_directions ?? {})) {
-                if (pdir === 'inout') { cell.port_directions[pname] = 'input'; }
+                const conn = cell.connections?.[pname];
+                if (!Array.isArray(conn)) { continue; }
+                const key = JSON.stringify(conn);
+                if (pdir === 'output') { drivenNets.add(key); }
+                else if (pdir === 'inout') {
+                    const list = inoutPinsByNet.get(key) ?? [];
+                    list.push({ cell, pin: pname });
+                    inoutPinsByNet.set(key, list);
+                }
             }
+        }
+        for (const [key, pins] of inoutPinsByNet) {
+            const promote = !drivenNets.has(key);
+            pins.forEach((p, i) => {
+                p.cell.port_directions[p.pin] = (promote && i === 0) ? 'output' : 'input';
+            });
+        }
+
+        for (const [cellName, cell] of Object.entries<any>(mod.cells ?? {})) {
             // $bmux (Y = word S of the packed array A; emitted for indexed reads like
             // `rom[addr]` that don't infer a memory) has no converter mapping. For
             // power-of-2 word widths it is exactly $shiftx by S*WIDTH, where the
@@ -173,12 +208,36 @@ function normalizeForDigitaljs(yosysJson: any): any {
         }
         resolveMultiDrivers(mod, allocBits);
     }
-    return yosysJson;
+    return inoutByModule;
+}
+
+// Mark the Input/Output devices that came from `inout` ports as bidirectional, directly in the
+// digitaljs JSON. digitaljs clones device fields onto the cell model, so the webview reads
+// cell.get('bidir') and draws a bidirectional pin glyph. The flag rides per module graph (top +
+// each nested subcircuit), so popups and multiple panels carry it with no side channel.
+function tagBidirPorts(djs: any, inoutByModule: Map<string, Set<string>>): void {
+    if (!djs || inoutByModule.size === 0) { return; }
+    const subcircuits = djs.subcircuits ?? {};
+    const tagGraph = (graph: any, ports: Set<string> | undefined) => {
+        if (!graph || !ports || !graph.devices) { return; }
+        for (const dev of Object.values<any>(graph.devices)) {
+            if ((dev.type === 'Input' || dev.type === 'Output') && ports.has(dev.net)) { dev.bidir = true; }
+        }
+    };
+    for (const [modName, graph] of Object.entries<any>(subcircuits)) {
+        tagGraph(graph, inoutByModule.get(modName));
+    }
+    // the top module is spread into djs (not under subcircuits): the one inout module not nested.
+    const topName = [...inoutByModule.keys()].find(m => !(m in subcircuits));
+    if (topName) { tagGraph(djs, inoutByModule.get(topName)); }
 }
 
 export function convertToDigitalJs(yosysJson: any): any {
     try {
-        return yosys2digitaljs(normalizeForDigitaljs(yosysJson));
+        const inoutByModule = normalizeForDigitaljs(yosysJson); // mutates yosysJson, returns inout ports
+        const djs = yosys2digitaljs(yosysJson);
+        tagBidirPorts(djs, inoutByModule);
+        return djs;
     } catch (e: any) {
         const msg = String(e?.message ?? e);
         const m = msg.match(/Invalid cell type: (.*)/);

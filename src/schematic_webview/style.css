@@ -232,6 +232,14 @@ html, body {
     pointer-events: none;
 }
 
+/* bidirectional (inout) port marker (⇄) on child-instance ports and boxed IO ports. A structural
+ * cue (the port is bidirectional), so a neutral accent rather than a value colour. */
+.djs .joint-cell text.portbidir {
+    fill: var(--sv-accent, var(--vscode-charts-blue, #4a9cff));
+    font-size: 8pt;
+    pointer-events: none;
+}
+
 /* read-only viewer: hide the box zoom (🔍) affordance; child instances open via
  * right-click → Expand. (Wire value tooltips are on .joint-link, not .joint-cell.) */
 .djs .joint-cell .tooltip { display: none; }

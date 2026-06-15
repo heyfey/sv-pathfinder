@@ -80,11 +80,12 @@ cells.IOView.prototype._calculateBoxWidth = function () {
 // in the view: fractional refX/refY don't behave when applied at runtime, so we place it directly.
 cells.IO.prototype.markupInSubcircuit = cells.IO.prototype.markupInSubcircuit.concat([
     { tagName: 'text', className: 'iovalue', selector: 'ioval' },
+    { tagName: 'text', className: 'portbidir', selector: 'iobidir' }, // ⇄ when the port is inout
 ]);
 const _ioBaseConfirmUpdate = cells.IOView.prototype.confirmUpdate;
 cells.IOView.prototype.confirmUpdate = function (flags) {
     const r = _ioBaseConfirmUpdate.apply(this, arguments);
-    if (this.hasFlag(flags, 'SIGNAL') || this.hasFlag(flags, 'SIGNAL2')) { this._updateIoValue(); }
+    this._updateIoValue(); // value (signal-driven) + the static bidirectional glyph; idempotent
     return r;
 };
 cells.IOView.prototype._updateIoValue = function () {
@@ -102,6 +103,16 @@ cells.IOView.prototype._updateIoValue = function () {
     node.setAttribute('x', sz.width / 2);
     node.setAttribute('y', sz.height + 11);
     node.setAttribute('text-anchor', 'middle');
+    // bidirectional glyph above the box for an inout port (converter tagged the IO cell `bidir`)
+    const bnode = this.selectors && this.selectors.iobidir;
+    if (bnode) {
+        const bidir = !!this.model.get('bidir');
+        bnode.textContent = bidir ? '⇄' : '';
+        bnode.style.display = bidir ? 'inline' : 'none';
+        bnode.setAttribute('x', sz.width / 2);
+        bnode.setAttribute('y', -5);
+        bnode.setAttribute('text-anchor', 'middle');
+    }
 };
 
 // Size child-instance (and dff/fsm/memory) boxes to fit their port-name labels. digitaljs's
@@ -131,10 +142,22 @@ cells.BoxView.prototype._calculateBoxWidth = function () {
 // short); a value wider than its port name can encroach on the middle gap — acceptable for now.
 cells.Subcircuit.prototype.portMarkup = cells.Gate.prototype.portMarkup.concat([
     { tagName: 'text', className: 'iovalue', selector: 'iovalue' },
+    { tagName: 'text', className: 'portbidir', selector: 'portbidir' }, // ⇄ on inout (bidirectional) ports
 ]);
 const _origSubPreprocess = cells.Subcircuit.prototype._preprocessPorts;
 cells.Subcircuit.prototype._preprocessPorts = function (ports) {
     _origSubPreprocess.call(this, ports); // sets each port's bits + iolabel (name) attrs
+    // inout ports: the converter tagged the inner module's matching Input/Output cell `bidir`, and a
+    // subcircuit port's id IS that inner IO's net. The graph is already set here (before Box.init),
+    // so detect bidir ports now (in the preprocess phase, where port attrs actually take effect).
+    const graph = this.get('graph');
+    const bidirNets = new Set();
+    if (graph && typeof graph.getCells === 'function') {
+        for (const c of graph.getCells()) {
+            const t = c.get && c.get('type');
+            if ((t === 'Input' || t === 'Output') && c.get('bidir')) { bidirNets.add(c.get('net')); }
+        }
+    }
     for (const port of ports) {
         const isOut = port.group === 'out';
         // place the value directly under the name (iolabel sits at the port centre): same side
@@ -143,6 +166,13 @@ cells.Subcircuit.prototype._preprocessPorts = function (ports) {
             text: '', refX: isOut ? -5 : 5, refY: 13,
             textAnchor: isOut ? 'end' : 'start', textVerticalAnchor: 'middle',
         };
+        // ⇄ on the wire side of an inout port
+        if (bidirNets.has(port.id)) {
+            port.attrs['portbidir'] = {
+                text: '⇄', refX: isOut ? 13 : -13, refY: 0,
+                textAnchor: 'middle', textVerticalAnchor: 'middle',
+            };
+        }
     }
 };
 const _origSubInitialize = cells.Subcircuit.prototype.initialize;
