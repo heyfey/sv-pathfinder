@@ -12,6 +12,55 @@ const { yosys2digitaljs } = require('yosys2digitaljs/core');
 // "Multiple sources driving net" error; nets only driven through the bidir path render
 // as undriven (x) — acceptable for a structural view. 'z' constant bits map to 'x'
 // (same rule as value annotation; digitaljs cannot display z).
+// digitaljs nets allow only a single source. When a net is driven by more than
+// one cell output (e.g. a reg written by both an always_comb and an always_ff —
+// ambiguous/illegal hardware that yosys still emits), yosys2digitaljs throws
+// "Multiple sources driving net". Rather than fail, surface the conflict
+// honestly: reroute each driver onto its own private net and merge them through
+// a labeled $mux "resolver" whose select is constant x ("resolution undefined"),
+// so the schematic shows every source converging on the contended net instead of
+// silently dropping one. Only exact same-width overlaps are handled (the common
+// whole-reg case); partial-bit overlaps are left for the converter to report.
+function resolveMultiDrivers(mod: any, allocBits: (n: number) => number[]): void {
+    const byBits = new Map<string, { cell: any; port: string }[]>();
+    for (const cell of Object.values<any>(mod.cells ?? {})) {
+        for (const [port, conn] of Object.entries<any>(cell.connections ?? {})) {
+            if (cell.port_directions?.[port] !== 'output') { continue; }
+            if (!Array.isArray(conn) || conn.some((b: any) => typeof b !== 'number')) { continue; }
+            const key = JSON.stringify(conn);
+            const list = byBits.get(key) ?? [];
+            list.push({ cell, port });
+            byBits.set(key, list);
+        }
+    }
+    let tag = 0;
+    for (const [key, drivers] of byBits) {
+        if (drivers.length < 2) { continue; }
+        const origBits: number[] = JSON.parse(key);
+        const w = origBits.length;
+        // Reroute every driver to its own private net.
+        const sources = drivers.map(({ cell, port }) => {
+            const priv = allocBits(w);
+            cell.connections[port] = priv;
+            return priv;
+        });
+        // Merge through a chain of $mux resolvers (select = constant x).
+        let acc: any[] = sources[0];
+        for (let i = 1; i < sources.length; i++) {
+            const Y = i === sources.length - 1 ? origBits : allocBits(w);
+            mod.cells[`$multidriver$${tag++}`] = {
+                type: '$mux',
+                parameters: { WIDTH: w },
+                port_directions: { A: 'input', B: 'input', S: 'input', Y: 'output' },
+                connections: { A: acc, B: sources[i], S: ['x'], Y },
+                attributes: { multidriver: 1 },
+                hide_name: 0,
+            };
+            acc = Y;
+        }
+    }
+}
+
 function normalizeForDigitaljs(yosysJson: any): any {
     const zToX = (bits: any[]) => bits.map(b => (b === 'z' || b === 'Z') ? 'x' : b);
     // Yosys JSON int params may be plain numbers (-compat-int) or bit strings
@@ -124,6 +173,7 @@ function normalizeForDigitaljs(yosysJson: any): any {
                 delete mod.cells[cellName];
             }
         }
+        resolveMultiDrivers(mod, allocBits);
         for (const nn of Object.values<any>(mod.netnames ?? {})) {
             if (Array.isArray(nn.bits)) { nn.bits = zToX(nn.bits); }
         }
