@@ -973,6 +973,9 @@ function elementInfo(model) {
 // objects with a leading '$' ($procmux…, $driver…, $0\…) — those have no RTL source, so a
 // leaf-name lookup can't resolve them.
 function realName(i) { return !!i.leafName && !String(i.leafName).startsWith('$'); }
+// A net = a wire or a boundary IO port. For these, "go to source" and "go to definition" resolve to
+// the same declaration, so we offer only "go to definition" (whose tree reveal works).
+function isNet(i) { return i.kind === 'wire' || i.isIO; }
 // "Go to source" can resolve a location iff: the element carries precise Yosys source
 // positions, OR it's a child instance (→ its module's source), OR it has a real name (→ the
 // design tree). Otherwise navigation would silently do nothing, so don't offer it.
@@ -1032,7 +1035,10 @@ function currentValue(model) {
 const CTX_ITEMS = [
     { label: 'Step into', applies: (i) => i.isSub, action: 'stepInto' }, // navigate the MAIN page into the child
     { label: 'Expand', applies: (i) => i.isSub, expand: true },          // open the child in a popup
-    { label: 'Go to source', applies: (i) => sourceNavigable(i), action: 'gotoSource' },
+    // For a NET (wire/IO) with a resolvable definition, "go to source" duplicates "go to definition"
+    // — keep only the latter. Still offer source nav for a net that has ONLY source positions (e.g. a
+    // $-named net), and for gates/instances where the two genuinely differ.
+    { label: 'Go to source', applies: (i) => sourceNavigable(i) && !(isNet(i) && realName(i)), action: 'gotoSource' },
     { label: 'Go to definition', applies: (i) => i.isSub || realName(i), action: 'gotoDefinition' },
     { sep: true },
     { label: 'Copy name', applies: (i) => !!i.leafName, action: 'copyName' },
