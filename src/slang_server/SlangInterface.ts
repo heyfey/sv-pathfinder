@@ -113,7 +113,7 @@ export async function getUnit(): Promise<Instance[]> {
   return children
 }
 
-/// Module -> scopes for instances view
+/// Module -> scopes for Modules view
 export async function getScopesByModule(): Promise<Module[]> {
   const children: Module[] = await vscode.commands.executeCommand('slang.getScopesByModule')
   if (children === undefined) {

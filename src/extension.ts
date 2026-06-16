@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 
-import { OpenedDesignsTreeProvider, HierarchyTreeProvider, DriversLoadsTreeProvider, ModuleInstancesTreeProvider } from './tree_view';
+import { OpenedDesignsTreeProvider, HierarchyTreeProvider, DriversLoadsTreeProvider, ModuleInstancesTreeProvider, showModulesViewEnabled } from './tree_view';
 import { EditorMenuProvider } from './editor_menu';
 import { WaveformValueAnnotationProvider } from './value_annotation';
 import { Parser } from './parser';
@@ -40,7 +40,7 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 	// Set initial state only on extension activation
 	// If the setting is changed, need to reload the window to take effect
-	if (vscode.workspace.getConfiguration('sv-pathfinder').get<boolean>('showInstancesView', true)) {
+	if (showModulesViewEnabled()) {
 		vscode.commands.executeCommand('setContext', 'sv-pathfinder.moduleInstancesViewVisible', true);
 	}
 

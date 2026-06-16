@@ -6,6 +6,18 @@ import * as cp from 'child_process';
 import * as slang from './slang_server/SlangInterface'
 import { absolutizeFlist } from './flist';
 import { isNoOpNavigation, findColumnForPath } from './nav_history';
+import { resolveRenamedBool } from './settings_util';
+
+// Whether the "Modules" view is enabled. The setting was renamed showInstancesView → showModulesView;
+// honor the old key for users who set it before the rename.
+export function showModulesViewEnabled(): boolean {
+    const cfg = vscode.workspace.getConfiguration('sv-pathfinder');
+    const userSet = (key: string) => {
+        const i = cfg.inspect<boolean>(key);
+        return i?.workspaceFolderValue ?? i?.workspaceValue ?? i?.globalValue;
+    };
+    return resolveRenamedBool(userSet('showModulesView'), userSet('showInstancesView'), true);
+}
 
 // Must use require instead of import somehow
 let kuzu: any | undefined; // require("kuzu");
@@ -64,7 +76,7 @@ export function createScope(fullName: string, type: string, file: string, lineNu
         case 'instancearray': { icon = moduleIcon; break; } // for slang
     }
 
-    // Hack for instances view
+    // Hack for Modules view
     if (contextValue === 'moduleDefItem') {
         icon = new vscode.ThemeIcon(icon.id, new vscode.ThemeColor('charts.orange'));
     }
@@ -517,7 +529,7 @@ class KuzuDesignItem extends DesignItem {
             }, async () => {
                 this.db = new kuzu.Database(this.resourceUri.fsPath, 0, true, true, 0);
                 const conn = new kuzu.Connection(this.db);
-                if (vscode.workspace.getConfiguration('sv-pathfinder').get<boolean>('showInstancesView', true)) {
+                if (showModulesViewEnabled()) {
                     await this.loadModuleDefs(conn);
                 }
                 await this.loadTopModules(conn);
@@ -709,7 +721,7 @@ class UhdmDesignItem extends DesignItem {
                 cancellable: false
             }, async () => {
                 this.designId = await this.uhdmAddon.loadDesign(this.resourceUri.fsPath);
-                if (vscode.workspace.getConfiguration('sv-pathfinder').get<boolean>('showInstancesView', true)) {
+                if (showModulesViewEnabled()) {
                     // Consider remove "await" for large designs, but:
                     //   1. Need to make sure loadModuleDefs is finished before selectInstance called
                     //   2. Need to refresh moduleInstancesTreeProvider after loadModuleDefs is finished

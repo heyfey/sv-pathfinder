@@ -59,10 +59,10 @@
           "default": "",
           "markdownDescription": "Path to the Surelog executable. If empty, 'surelog' will be resolved from your system PATH. This setting is only relevant when `#sv-pathfinder.compiler#` is set to 'Surelog'."
         },
-        "sv-pathfinder.showInstancesView": {
+        "sv-pathfinder.showModulesView": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Show the instances view. Need to reload window to take effect."
+          "markdownDescription": "Show the Modules view (modules in the design; expand one to see its instances). Need to reload window to take effect."
         },
         "sv-pathfinder.ossCadSuitePath": {
           "type": "string",
@@ -157,7 +157,7 @@
         },
         {
           "id": "moduleInstancesView",
-          "name": "Instances",
+          "name": "Modules",
           "when": "sv-pathfinder.moduleInstancesViewVisible"
         }
       ]

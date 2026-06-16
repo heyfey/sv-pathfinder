@@ -91,7 +91,7 @@ sv-pathfinder is seamlessly integrated with VaporView – [Download](https://mar
 - `"sv-pathfinder.localPathPrefix": string`
     - Replace the remote path prefix with the local path prefix when jumping to source files. This is useful when the design database is generated on the different machine/path. Only take effect when both set.
 - `"sv-pathfinder.surelogPath": string`, Path to the Surelog executable. If empty, 'surelog' will be resolved from your system PATH.
-- `"sv-pathfinder.showInstancesView": boolean`, Show the instances view. Need to reload window to take effect.
+- `"sv-pathfinder.showModulesView": boolean`, Show the Modules view (modules in the design; expand one to see its instances). Need to reload window to take effect.
     - Default: `true`
 - `"sv-pathfinder.ossCadSuitePath": string`, Path to the OSS CAD Suite installation directory (the folder containing `bin/yosys`), used by the schematic feature. If empty, `yosys` is resolved from PATH, then `yowasp-yosys`.
 - `"sv-pathfinder.schematicAccentColor": string`, Accent color for the schematic (child-instance fills and hover highlights). Any CSS color; empty uses a theme-aware default.
