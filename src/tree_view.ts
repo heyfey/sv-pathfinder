@@ -5,7 +5,7 @@ import * as os from 'os';
 import * as cp from 'child_process';
 import * as slang from './slang_server/SlangInterface'
 import { absolutizeFlist } from './flist';
-import { isNoOpNavigation } from './nav_history';
+import { isNoOpNavigation, findColumnForPath } from './nav_history';
 
 // Must use require instead of import somehow
 let kuzu: any | undefined; // require("kuzu");
@@ -1512,15 +1512,35 @@ export function replaceFilePathIfNeeded(filePath: string, isExample: boolean = f
     return filePath.replace(from, to);
 }
 
+// Find the view column of an already-open tab for `uri`, scanning all tab groups (covers background
+// tabs, not just each group's visible editor). Returns undefined if the file isn't open anywhere.
+function findOpenViewColumn(uri: vscode.Uri): vscode.ViewColumn | undefined {
+    const groups = vscode.window.tabGroups.all.map((g) => ({
+        column: g.viewColumn,
+        paths: g.tabs
+            .map((t) => (t.input instanceof vscode.TabInputText ? t.input.uri.fsPath : undefined))
+            .filter((p): p is string => p !== undefined),
+    }));
+    return findColumnForPath(groups, uri.fsPath);
+}
+
 export async function showTextDocumentLocation(filePath: string, lineNumber: number, columnNumber: number, isExample: boolean = false) {
     filePath = replaceFilePathIfNeeded(filePath, isExample);
     const uri = vscode.Uri.file(filePath);
     columnNumber = columnNumber > 0 ? columnNumber - 1 : 0; // Convert to 0-based index
-    await vscode.window.showTextDocument(uri, { preview: true }).then(() => {
-        const range = new vscode.Range(lineNumber - 1, columnNumber, lineNumber - 1, columnNumber);
-        vscode.window.activeTextEditor?.revealRange(range);
-        vscode.window.activeTextEditor!.selection = new vscode.Selection(range.start, range.start);
-    });
+
+    // If the file is already open in some editor group (common with split layouts), reuse that group
+    // instead of opening a duplicate in the active group. Otherwise open as a preview in the active
+    // group (the prior behavior).
+    const viewColumn = findOpenViewColumn(uri);
+    const options: vscode.TextDocumentShowOptions = viewColumn !== undefined
+        ? { viewColumn, preview: false }
+        : { preview: true };
+
+    const range = new vscode.Range(lineNumber - 1, columnNumber, lineNumber - 1, columnNumber);
+    const editor = await vscode.window.showTextDocument(uri, options);
+    editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+    editor.selection = new vscode.Selection(range.start, range.start);
 }
 
 // #region HierarchyTreeProvider

@@ -17,3 +17,20 @@ export interface NavContext<T> {
 export function isNoOpNavigation<T>(last: NavContext<T> | undefined, element: T, action: string): boolean {
     return !!last && last.element === element && last.action === action;
 }
+
+// One editor group, described by its column id and the file paths of the tabs it holds.
+export interface EditorGroupPaths<C> {
+    column: C;
+    paths: string[];
+}
+
+// Find the column of an already-open tab for `targetPath`, scanning ALL groups (so background tabs
+// count, not just each group's visible editor). Returns undefined if the file isn't open anywhere —
+// the caller then falls back to opening it in the active group. This is what makes "go to source"
+// jump to an existing split instead of opening a duplicate.
+export function findColumnForPath<C>(groups: EditorGroupPaths<C>[], targetPath: string): C | undefined {
+    for (const group of groups) {
+        if (group.paths.some((p) => p === targetPath)) { return group.column; }
+    }
+    return undefined;
+}

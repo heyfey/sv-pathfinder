@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 
-import { isNoOpNavigation, NavContext } from '../nav_history';
+import { isNoOpNavigation, NavContext, findColumnForPath } from '../nav_history';
 
 // Stand-in for a NetlistItem: identity is what matters (reference equality).
 type Item = { name: string };
@@ -31,5 +31,28 @@ suite('isNoOpNavigation', () => {
     test('equal-by-value but different reference → real jump (identity, not value)', () => {
         const last: NavContext<Item> = { element: { name: 'tpu.cpu' }, action: 'gotoDefinition' };
         assert.strictEqual(isNoOpNavigation(last, { name: 'tpu.cpu' }, 'gotoDefinition'), false);
+    });
+});
+
+suite('findColumnForPath', () => {
+    const groups = [
+        { column: 1, paths: ['/a/top.sv', '/a/util.sv'] },
+        { column: 2, paths: ['/a/cpu.sv'] },           // a split holding cpu.sv (incl. background tabs)
+    ];
+
+    test('file open in a non-active group → returns that group column (the split case)', () => {
+        assert.strictEqual(findColumnForPath(groups, '/a/cpu.sv'), 2);
+    });
+
+    test('file open in the first group → returns its column', () => {
+        assert.strictEqual(findColumnForPath(groups, '/a/util.sv'), 1);
+    });
+
+    test('file not open anywhere → undefined (caller opens fresh)', () => {
+        assert.strictEqual(findColumnForPath(groups, '/a/mem.sv'), undefined);
+    });
+
+    test('no groups → undefined', () => {
+        assert.strictEqual(findColumnForPath([], '/a/top.sv'), undefined);
     });
 });
