@@ -1258,6 +1258,11 @@ function makeFinder({ getPaper, getGraph, container, onGoto }) {
         else if (!box.isConnected) { container().appendChild(box); } // a re-render detaches the box → re-attach
         items = buildIndex();
         box.style.display = 'flex';
+        // In a popup the container's top-right row is digitaljs's toolbar (.btn-group: zoom/find/
+        // export). The box is right-anchored, so push it BELOW that bar to avoid covering the
+        // buttons. The main page has no toolbar inside #paper-container → bar is null → CSS top.
+        const bar = container().querySelector('.btn-group');
+        box.style.top = bar ? (bar.offsetTop + bar.offsetHeight + 6) + 'px' : '';
         input.focus(); input.select();
         run(input.value);
     }
