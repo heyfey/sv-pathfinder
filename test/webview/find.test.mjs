@@ -52,7 +52,7 @@ const multi = await page.evaluate(() => {
     const segs = window.__schematic.labelIndex.graph.getLinks().filter(l => l.get('netname') === 'clk').length;
     const inp = document.getElementById('sv-find-input'); inp.value = 'clk'; inp.dispatchEvent(new Event('input'));
     const total = parseInt((document.getElementById('sv-find-count').textContent || '0/0').split('/')[1], 10);
-    return { segs, total };
+    return { segs, total, soft: document.querySelectorAll('.sv-find-match').length, cur: document.querySelectorAll('.sv-find-current').length };
 });
 console.log('clk segments:', JSON.stringify(multi));
 
@@ -89,6 +89,7 @@ const ok = report('find', [
     ['Esc closes + clears highlight', !r.closed.open && !r.closed.hasCurrent],
     ['Find still works after a re-render', afterRerender.open && afterRerender.inputFocusable],
     ['every wire segment is findable (multi-segment net not deduped)', multi.segs > 1 && multi.total > multi.segs],
+    ['all matches soft-highlighted, exactly one focused', multi.soft === multi.total && multi.cur === 1],
     ['find highlight keeps the wire value colour (green), adds a glow', valColour.stroke === 'rgb(47, 179, 68)' && valColour.hasGlow],
     ['selecting a found signal is visible (accent glow, not masked by find)', selVisible.changed && selVisible.accent],
     ['no page errors', !logs.some(l => l.startsWith('PAGEERROR'))],

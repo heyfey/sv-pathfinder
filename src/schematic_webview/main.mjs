@@ -1162,7 +1162,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { hideCont
 window.addEventListener('blur', hideContextMenu);
 
 // ---- find (Ctrl+F): jump to a signal / instance / port by name on the main paper ----
-let _findBox = null, _findItems = [], _findMatches = [], _findIdx = -1, _findHi = null;
+let _findBox = null, _findItems = [], _findMatches = [], _findIdx = -1, _findHi = null, _findSoft = new Set();
 // Index every searchable thing on the main paper: named wires, child instances, IO ports, and named
 // gates ($-prefixed synthetic names are skipped — not user-meaningful).
 function buildFindIndex() {
@@ -1187,10 +1187,23 @@ function buildFindIndex() {
 }
 function runFindQuery(raw) {
     const q = raw.trim().toLowerCase();
-    if (!q) { _findMatches = []; _findIdx = -1; clearFindHighlight(); updateFindCount(); return; }
+    if (!q) { _findMatches = []; _findIdx = -1; clearFindHighlight(); clearSoftHighlights(); updateFindCount(); return; }
     _findMatches = _findItems.filter(it => it.key.includes(q))
         .sort((a, b) => (a.key === q ? 0 : a.key.startsWith(q) ? 1 : 2) - (b.key === q ? 0 : b.key.startsWith(q) ? 1 : 2));
-    if (_findMatches.length) { gotoFindMatch(0); } else { _findIdx = -1; clearFindHighlight(); updateFindCount(); }
+    applySoftHighlights();                          // soft-highlight EVERY match (editor/browser style)...
+    if (_findMatches.length) { gotoFindMatch(0); }  // ...and focus the first
+    else { _findIdx = -1; clearFindHighlight(); updateFindCount(); }
+}
+// Soft highlight on every match (the focused one additionally gets sv-find-current). A plain class
+// toggle — no per-element filter — so it stays cheap even for a net with many fan-out segments.
+function clearSoftHighlights() { for (const el of _findSoft) { el.classList.remove('sv-find-match'); } _findSoft.clear(); }
+function applySoftHighlights() {
+    clearSoftHighlights();
+    if (!paper) { return; }
+    for (const it of _findMatches) {
+        const v = paper.findViewByModel(it.model);
+        if (v) { v.el.classList.add('sv-find-match'); _findSoft.add(v.el); }
+    }
 }
 function clearFindHighlight() { if (_findHi) { _findHi.classList.remove('sv-find-current'); _findHi = null; } }
 function gotoFindMatch(i) {
@@ -1247,7 +1260,7 @@ function openFind() {
     input.focus(); input.select();
     runFindQuery(input.value);
 }
-function closeFind() { if (_findBox) { _findBox.style.display = 'none'; } clearFindHighlight(); }
+function closeFind() { if (_findBox) { _findBox.style.display = 'none'; } clearFindHighlight(); clearSoftHighlights(); }
 function findOpen() { return _findBox && _findBox.style.display !== 'none'; }
 document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); openFind(); }

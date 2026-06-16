@@ -303,6 +303,20 @@ html, body {
     stroke-width: 3px;
 }
 
+/* SOFT find highlight on EVERY match (the focused one also gets .sv-find-current below). Cheap — no
+ * filter, so it scales to a net with many segments: a translucent find-colour halo on the wire's wide
+ * (invisible) wrapper path, which does NOT mask the value-coloured connection on top of it; and a
+ * find-colour outline on element bodies. */
+.djs .sv-find-match [joint-selector="wrapper"] {
+    stroke: var(--vscode-charts-yellow, #e2c08d);
+    stroke-opacity: 0.35;
+}
+.djs .sv-find-match [joint-selector="body"],
+.djs .sv-find-match rect.body, .djs .sv-find-match circle.body,
+.djs .sv-find-match polygon.body, .djs .sv-find-match path.body {
+    stroke: var(--vscode-charts-yellow, #e2c08d);
+}
+
 /* current find match: a distinct find-match GLOW (not the accent used by hover/select) so the match
  * stands out after Find jumps to it. The glow is on a single element per navigate, so the drop-shadow
  * filter is fine here (unlike hover). Crucially, on a WIRE we do NOT recolour the stroke — that's the
