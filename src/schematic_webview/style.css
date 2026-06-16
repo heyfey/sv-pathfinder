@@ -266,10 +266,13 @@ html, body {
     stroke: var(--sv-accent, var(--vscode-charts-blue));
     stroke-width: 3px;
 }
+/* 6px (not 4) so it clearly exceeds a BUS wire's native 4px — at 4px a hovered bus looked unchanged.
+ * CSS wins over digitaljs's inline stroke-width attribute, so this lifts both 2px single-bit and 4px
+ * bus wires. */
 .djs .sv-hover path.connection,
 .djs .sv-hover .connection,
 .djs .sv-hover line.wire {
-    stroke-width: 4px;
+    stroke-width: 6px;
 }
 
 /* persistent selection: latched accent outline (click to toggle, many at once → trace a
