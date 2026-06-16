@@ -11,6 +11,7 @@ import { DesignItem, NetlistItem, HierarchyTreeProvider, replaceFilePathIfNeeded
 import { resolveScope, scopeCacheKey, ScopeContext } from './scope_resolver';
 import { runYosys, SchematicPreset, getResolvedBackendName } from './yosys_runner';
 import { convertToDigitalJs } from './converter';
+import { findParentModuleScope } from './scope_nav';
 import { FromWebviewMessage, ToWebviewMessage, ElementClickMessage, ContextActionMessage, ExportRequestMessage, ExportContentMessage, SourcePosition } from './messages';
 
 interface ShownSchematic {
@@ -92,7 +93,7 @@ export class SchematicViewProvider {
                 circuit: digitalJsJson,
                 scopePath: ctx.instancePath,
                 moduleName: ctx.moduleName,
-                hasParent: findParentScope(instance) !== undefined,
+                hasParent: findParentModuleScope(instance) !== undefined,
                 overview,
                 spacing,
                 backend: getResolvedBackendName(),
@@ -155,7 +156,7 @@ export class SchematicViewProvider {
                     break;
                 case 'goToParent':
                     if (this.current) {
-                        const parent = findParentScope(this.current.instance);
+                        const parent = findParentModuleScope(this.current.instance);
                         if (parent) {
                             this.render(this.current.design, parent, this.current.preset);
                         }
@@ -477,18 +478,6 @@ function cleanModuleName(celltype: string): string {
     }
     const i = celltype.indexOf('$');
     return i > 0 ? celltype.slice(0, i) : celltype;
-}
-
-// Nearest ancestor scope instance of a rendered scope, for "go to parent". The schematic's
-// top is always a scopeItem; walk .parent past any scopearray/instancearray wrappers to the
-// next scopeItem. Top-level modules have no parent (returns undefined → button disabled).
-function findParentScope(instance: NetlistItem): NetlistItem | undefined {
-    let p = instance.parent;
-    while (p) {
-        if (p.contextValue === 'scopeItem') { return p; }
-        p = p.parent;
-    }
-    return undefined;
 }
 
 // VaporView returns either a JSON string or an array of value strings (value before /
