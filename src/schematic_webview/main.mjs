@@ -695,6 +695,10 @@ function refreshValueText() {
 // fresh, self-contained animation, so rapid/repeated setValues (debounced marker moves) can't cancel
 // it the way a CSS-class toggle on the next animation frame could. A thickness+brightness pulse,
 // deliberately a different effect from the accent drop-shadow glow used by hover/select.
+// When a LOT of nets transition at once it's a clock edge (≈every sequential net changes) — flashing
+// all of them is both visually useless (the whole sheet blinks) and the dominant per-marker cost
+// (one Web Animation per wire). Above this many changed nets we skip the flash entirely.
+const FLASH_MAX_NETS = 200;
 function flashChanged(nets) {
     if (!paper || !labelIndex || !nets || nets.size === 0) { return; }
     for (const l of labelIndex.graph.getLinks()) {
@@ -1591,7 +1595,9 @@ window.addEventListener('message', (event) => {
                 if (setWireValue(u.name, u.values[u.values.length - 1])) { applied++; }
             }
             refreshValueText(); // catch nets whose value didn't change the signal (e.g. x while already x)
-            flashChanged(changedNets); // pulse the wires that transition at this cursor
+            // pulse the wires that transition at this cursor — but skip a mass change (clock edge),
+            // where flashing every net is noise and the per-marker bottleneck.
+            if (changedNets.size <= FLASH_MAX_NETS) { flashChanged(changedNets); }
             setStatus(`values @ cursor: ${applied}/${msg.updates.length} nets annotated`);
             break;
         }

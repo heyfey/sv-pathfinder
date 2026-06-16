@@ -255,11 +255,21 @@ html, body {
 .djs:not(.fixed) [magnet=true]:not(.joint-element) { cursor: default; }
 .djs:not(.fixed) [magnet=true]:not(.joint-element):hover { opacity: 1; }
 
-/* hover highlight: accent glow on the hovered cell/wire (class toggled from JS).
- * A drop-shadow outlines any shape without overriding the wire's value stroke color. */
-.djs .sv-hover {
-    filter: drop-shadow(0 0 3px var(--sv-accent, var(--vscode-charts-blue)))
-            drop-shadow(0 0 1px var(--sv-accent, var(--vscode-charts-blue)));
+/* hover highlight: accent outline on the hovered cell/wire (class toggled from JS). Uses a stroke
+ * change, NOT a drop-shadow filter: a filter forces the browser to re-rasterize the element (and its
+ * filter region) on every mouse move, which is a major repaint cost on a large schematic. A stroke
+ * tweak only repaints the element, so hover stays cheap at scale. We never touch the wire's stroke
+ * COLOR (only width), so the value palette is preserved. */
+.djs .sv-hover [joint-selector="body"],
+.djs .sv-hover rect.body, .djs .sv-hover circle.body,
+.djs .sv-hover polygon.body, .djs .sv-hover path.body {
+    stroke: var(--sv-accent, var(--vscode-charts-blue));
+    stroke-width: 2px;
+}
+.djs .sv-hover path.connection,
+.djs .sv-hover .connection,
+.djs .sv-hover line.wire {
+    stroke-width: 2.5px;
 }
 
 /* persistent selection: latched accent outline (click to toggle, many at once → trace a
