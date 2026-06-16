@@ -400,6 +400,7 @@
     "test:converter": "npm run compile-tests && mocha --ui tdd out/test/converter.test.js",
     "test:webview": "node esbuild.js && node test/webview/run.mjs",
     "test:all": "npm run check-types && npm run lint && npm run test:unit && npm run test:webview",
+    "bench": "node esbuild.js && node test/webview/perf.mjs",
     "prepare": "git config core.hooksPath .githooks || true"
   },
   "devDependencies": {
