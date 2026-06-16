@@ -5,6 +5,7 @@ import * as os from 'os';
 import * as cp from 'child_process';
 import * as slang from './slang_server/SlangInterface'
 import { absolutizeFlist } from './flist';
+import { isNoOpNavigation } from './nav_history';
 
 // Must use require instead of import somehow
 let kuzu: any | undefined; // require("kuzu");
@@ -1638,6 +1639,11 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
     private async setContextForGoBackOrForward(element: NetlistItem, action: string, isGoBackOrForward: boolean) {
         if (!this.activeDesign) { return; }
         if (!isGoBackOrForward) {
+            // Re-navigating to the exact same target we're already at is not a jump — don't record a
+            // duplicate history entry (else back/forward would step through identical entries that
+            // appear to do nothing).
+            if (isNoOpNavigation(this.activeDesign.lastContext, element, action)) { return; }
+
             if (this.activeDesign.lastContext) {
                 this.activeDesign.backwardStack.push(this.activeDesign.lastContext);
                 await vscode.commands.executeCommand('setContext', 'sv-pathfinder.isGoBackEnabled', true);
