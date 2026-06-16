@@ -268,20 +268,16 @@ export class SchematicViewProvider {
         }
     }
 
-    // The scope whose source we just navigated to — activate it so the editor value annotation
-    // follows (and back/forward includes the jump). A child-instance box (subcircuit) activates that
-    // child's scope; anything else (wire/port/gate) lives in the currently-rendered scope, so we
-    // activate that. activateScope reveals in the tree only if that view is open.
-    private async activateScopeForContext(msg: ContextActionMessage) {
+    // Resolve a scope NetlistItem at a path RELATIVE to the rendered scope (current.instance). Empty
+    // path → the rendered scope itself. Walks the in-memory tree first (children already loaded),
+    // falling back to an absolute lookup. Used to pick the scope to make active after a nav.
+    private async resolveScopeByRelPath(relParts: (string | undefined)[]): Promise<NetlistItem | undefined> {
         const shown = this.current;
-        if (!shown) { return; }
-        let scope: NetlistItem | undefined = shown.instance;
-        if (msg.kind === 'subcircuit') {
-            const relPath = [...(msg.path ?? []), msg.leafName].filter(Boolean).join('.');
-            const fullName = [shown.ctx.instancePath, relPath].filter(Boolean).join('.');
-            scope = await shown.instance.findChild(relPath, shown.design) ?? await shown.design.findTreeItem(fullName);
-        }
-        if (scope) { await this.hierarchyProvider.activateScope(scope); }
+        if (!shown) { return undefined; }
+        const relPath = relParts.filter(Boolean).join('.');
+        if (!relPath) { return shown.instance; }
+        const fullName = [shown.ctx.instancePath, relPath].filter(Boolean).join('.');
+        return await shown.instance.findChild(relPath, shown.design) ?? await shown.design.findTreeItem(fullName);
     }
 
     // Right-click context-menu actions. Reuses the existing tree commands by resolving the
@@ -315,15 +311,22 @@ export class SchematicViewProvider {
                 if (child) { await this.render(shown.design, child, shown.preset); }
                 return;
             }
-            case 'gotoSource':
+            case 'gotoSource': {
                 // reuse the precise source nav (Yosys source_positions → declaration fallback)
                 await this.handleElementClick({ ...msg, type: 'elementClick', action: 'source' } as ElementClickMessage);
-                await this.activateScopeForContext(msg); // set active scope so editor value annotation follows
+                // Source lands in the CONTAINER scope — a net's declaration, or a child instance's
+                // INSTANTIATION in the parent — so activate that container (the rendered scope on the
+                // main page; the popup's scope for nested clicks), NOT the child instance itself.
+                const scope = await this.resolveScopeByRelPath(msg.path ?? []);
+                if (scope) { await this.hierarchyProvider.activateScope(scope); }
                 return;
+            }
             case 'gotoDefinition': {
                 if (msg.kind === 'subcircuit' && msg.celltype) {
                     await this.gotoModuleDefinition(msg.celltype);
-                    await this.activateScopeForContext(msg); // activate the child instance's scope
+                    // Definition lands in the child module → activate the child instance's scope.
+                    const scope = await this.resolveScopeByRelPath([...(msg.path ?? []), msg.leafName]);
+                    if (scope) { await this.hierarchyProvider.activateScope(scope); }
                     return;
                 }
                 const item = await shown.design.findTreeItem(fullName);
