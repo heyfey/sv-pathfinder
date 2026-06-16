@@ -1430,6 +1430,10 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
         const wavefrom = element.addWaveform(selectedFile);
         element.collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
         this.refresh();
+        // addWaveform makes the first waveform active on the DesignItem but does NOT fire the
+        // active-waveform change event — so a schematic (or editor annotation) that was already open
+        // wouldn't pick up the newly opened waveform. Fire it so they push values immediately.
+        if (wavefrom) { this.setActiveWaveformForDesign(element, wavefrom); }
         return wavefrom;
     }
 
