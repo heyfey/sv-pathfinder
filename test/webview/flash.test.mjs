@@ -29,13 +29,24 @@ const after = await anim();
 await page.evaluate(() => { for (let i = 0; i < 3; i++) { window.postMessage({ type: 'setValues', updates: [{ name: 'clk', values: ['0', '1'] }] }, '*'); } });
 await page.waitForTimeout(150);
 const repeated = await anim();
-console.log('mid:', JSON.stringify(mid), '| after:', JSON.stringify(after), '| repeated:', JSON.stringify(repeated));
+
+// Flash CAP: a mass change (a clock edge transitions ~every net) must NOT flash — that's the
+// per-marker bottleneck and visual noise. Same real net (clk) transitions here, but padded past
+// FLASH_MAX_NETS (200), so it must stay un-animated — contrast `mid`, where it animates among few.
+await page.waitForTimeout(700); // let prior animations finish
+const pad = Array.from({ length: 250 }, (_, i) => ({ name: `__pad${i}`, values: ['0', '1'] }));
+await page.evaluate((updates) => window.postMessage({ type: 'setValues', updates }, '*'),
+    [{ name: 'clk', values: ['0', '1'] }, ...pad]);
+await page.waitForTimeout(150);
+const capped = await anim();
+console.log('mid:', JSON.stringify(mid), '| after:', JSON.stringify(after), '| repeated:', JSON.stringify(repeated), '| capped:', JSON.stringify(capped));
 
 const ok = report('flash', [
     ['transitioning clk+din animate', mid.clk >= 1 && mid.din >= 1],
     ['stable full+empty do NOT animate', mid.full === 0 && mid.empty === 0],
     ['animation auto-finishes', after.clk === 0 && after.din === 0],
     ['repeated setValues still flashes (no rAF cancel)', repeated.clk >= 1],
+    ['mass change (>200 nets) skips flash', capped.clk === 0],
     ['no page errors', !logs.some(l => l.startsWith('PAGEERROR'))],
 ], logs);
 await browser.close();
