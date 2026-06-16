@@ -22,21 +22,23 @@ export function showModulesViewEnabled(): boolean {
 // Must use require instead of import somehow
 let kuzu: any | undefined; // require("kuzu");
 
-// Scopes
-const moduleIcon = new vscode.ThemeIcon('chip', new vscode.ThemeColor('charts.purple'));
-const taskIcon = new vscode.ThemeIcon('debug-stackframe', new vscode.ThemeColor('charts.blue'));
-const funcIcon = new vscode.ThemeIcon('symbol-module', new vscode.ThemeColor('charts.blue'));
-const beginIcon = new vscode.ThemeIcon('debug-start', new vscode.ThemeColor('charts.blue'));
-const forkIcon = new vscode.ThemeIcon('repo-forked', new vscode.ThemeColor('charts.blue'));
-const structIcon = new vscode.ThemeIcon('symbol-structure', new vscode.ThemeColor('charts.blue'));
-const unionIcon = new vscode.ThemeIcon('surround-with', new vscode.ThemeColor('charts.blue'));
-const classIcon = new vscode.ThemeIcon('symbol-misc', new vscode.ThemeColor('charts.blue'));
-const interfaceIcon = new vscode.ThemeIcon('debug-disconnect', new vscode.ThemeColor('charts.purple'));
-const packageIcon = new vscode.ThemeIcon('package', new vscode.ThemeColor('charts.purple'));
-const scopeIcon = new vscode.ThemeIcon('symbol-module', new vscode.ThemeColor('charts.purple'));
+// Scopes — icon set aligned with VaporView (one scope color for all scope kinds).
+const scopeColor = new vscode.ThemeColor('charts.purple');
+const moduleIcon = new vscode.ThemeIcon('chip', scopeColor);
+const taskIcon = new vscode.ThemeIcon('debug-stackframe', scopeColor);
+const funcIcon = new vscode.ThemeIcon('symbol-module', scopeColor);
+const beginIcon = new vscode.ThemeIcon('debug-start', scopeColor);
+const forkIcon = new vscode.ThemeIcon('repo-forked', scopeColor);
+const structIcon = new vscode.ThemeIcon('symbol-structure', scopeColor);
+const unionIcon = new vscode.ThemeIcon('surround-with', scopeColor);
+const classIcon = new vscode.ThemeIcon('symbol-misc', scopeColor);
+const interfaceIcon = new vscode.ThemeIcon('debug-disconnect', scopeColor);
+const packageIcon = new vscode.ThemeIcon('package', scopeColor);
+const scopeIcon = new vscode.ThemeIcon('symbol-module', scopeColor);
+// sv-pathfinder extras (not in VaporView's scheme): a Modules-view def, modports, clocking blocks.
 const moduleDefIcon = new vscode.ThemeIcon('symbol-enum');
 const modportIcon = new vscode.ThemeIcon('plug', new vscode.ThemeColor('charts.orange'));
-const clockIcon = new vscode.ThemeIcon('watch', new vscode.ThemeColor('charts.blue'));
+const clockIcon = new vscode.ThemeIcon('watch', scopeColor);
 
 export function createScope(fullName: string, type: string, file: string, lineNumber: number, columnNumber: number, moduleName: string, contextValue: string, parent: NetlistItem | undefined, handle: any | undefined) {
 
@@ -48,7 +50,7 @@ export function createScope(fullName: string, type: string, file: string, lineNu
         case 'function': { icon = funcIcon; break; }
         case 'begin': { icon = beginIcon; break; }
         case 'fork': { icon = forkIcon; break; }
-        case 'generate': { icon = beginIcon; break; }
+        case 'generate': { icon = scopeIcon; break; }
         case 'struct': { icon = structIcon; break; }
         case 'union': { icon = unionIcon; break; }
         case 'class': { icon = classIcon; break; }
@@ -62,9 +64,9 @@ export function createScope(fullName: string, type: string, file: string, lineNu
         case 'vhdlrecord': { icon = scopeIcon; break; }
         case 'vhdlprocess': { icon = scopeIcon; break; }
         case 'vhdlblock': { icon = scopeIcon; break; }
-        case 'vhdlforgenerate': { icon = beginIcon; break; }
-        case 'vhdlifgenerate': { icon = beginIcon; break; }
-        case 'vhdlgenerate': { icon = beginIcon; break; }
+        case 'vhdlforgenerate': { icon = scopeIcon; break; }
+        case 'vhdlifgenerate': { icon = scopeIcon; break; }
+        case 'vhdlgenerate': { icon = scopeIcon; break; }
         case 'vhdlpackage': { icon = packageIcon; break; }
         case 'ghwgeneric': { icon = scopeIcon; break; }
         case 'vhdlarray': { icon = scopeIcon; break; }
@@ -92,16 +94,19 @@ export function createScope(fullName: string, type: string, file: string, lineNu
 }
 
 // Variables
-const regIcon = new vscode.ThemeIcon('symbol-array', new vscode.ThemeColor('charts.green'));
-const wireIcon = new vscode.ThemeIcon('symbol-interface', new vscode.ThemeColor('charts.pink'));
-const intIcon = new vscode.ThemeIcon('symbol-number', new vscode.ThemeColor('charts.green'));
-const paramIcon = new vscode.ThemeIcon('settings', new vscode.ThemeColor('charts.green'));
+// Variables — icon set aligned with VaporView.
+const chartsGreen = new vscode.ThemeColor('charts.green');
+const regIcon = new vscode.ThemeIcon('symbol-array', chartsGreen);
+const wireIcon = new vscode.ThemeIcon('symbol-interface', chartsGreen);
+const intIcon = new vscode.ThemeIcon('symbol-variable', chartsGreen);
+const paramIcon = new vscode.ThemeIcon('settings', new vscode.ThemeColor('charts.blue'));
 const realIcon = new vscode.ThemeIcon('pulse', new vscode.ThemeColor('charts.orange'));
-const defaultIcon = new vscode.ThemeIcon('file-binary', new vscode.ThemeColor('charts.green'));
+const defaultIcon = new vscode.ThemeIcon('file-binary', chartsGreen);
 const stringIcon = new vscode.ThemeIcon('symbol-key', new vscode.ThemeColor('charts.yellow'));
-const portIcon = new vscode.ThemeIcon('plug', new vscode.ThemeColor('charts.green'));
-const timeIcon = new vscode.ThemeIcon('watch', new vscode.ThemeColor('charts.green'));
-const variableIcon = new vscode.ThemeIcon('symbol-variable', new vscode.ThemeColor('charts.green'));
+const portIcon = new vscode.ThemeIcon('plug', chartsGreen);
+const timeIcon = new vscode.ThemeIcon('watch', chartsGreen);
+const enumIcon = new vscode.ThemeIcon('symbol-parameter', chartsGreen);
+const variableIcon = new vscode.ThemeIcon('symbol-variable', chartsGreen);
 
 export function createVar(fullName: string, type: string, width: number, file: string, lineNumber: number, columnNumber: number, moduleName: string, contextValue: string, parent: NetlistItem | undefined) {
     //   const field = bitRangeString(msb, lsb);
@@ -135,13 +140,14 @@ export function createVar(fullName: string, type: string, width: number, file: s
         case 'port': { icon = portIcon; break; }
         case 'sparsearray': { icon = defaultIcon; break; }
         case 'realtime': { icon = timeIcon; break; }
+        case 'realparameter': { icon = paramIcon; break; }
         case 'bit': { icon = defaultIcon; break; }
         case 'logic': { icon = defaultIcon; break; }
         case 'int': { icon = intIcon; break; }
         case 'shortint': { icon = intIcon; break; }
         case 'longint': { icon = intIcon; break; }
         case 'byte': { icon = defaultIcon; break; }
-        case 'enum': { icon = defaultIcon; break; }
+        case 'enum': { icon = enumIcon; break; }
         case 'shortreal': { icon = defaultIcon; break; }
         case 'boolean': { icon = defaultIcon; break; }
         case 'bitvector': { icon = defaultIcon; break; }
