@@ -264,12 +264,12 @@ html, body {
 .djs .sv-hover rect.body, .djs .sv-hover circle.body,
 .djs .sv-hover polygon.body, .djs .sv-hover path.body {
     stroke: var(--sv-accent, var(--vscode-charts-blue));
-    stroke-width: 2px;
+    stroke-width: 3px;
 }
 .djs .sv-hover path.connection,
 .djs .sv-hover .connection,
 .djs .sv-hover line.wire {
-    stroke-width: 2.5px;
+    stroke-width: 4px;
 }
 
 /* persistent selection: latched accent outline (click to toggle, many at once → trace a
