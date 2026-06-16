@@ -5,6 +5,7 @@ import { EditorMenuProvider } from './editor_menu';
 import { WaveformValueAnnotationProvider } from './value_annotation';
 import { Parser } from './parser';
 import { SchematicViewProvider } from './schematic/schematic_view';
+import { SourceStalenessMonitor } from './source_staleness';
 
 export function activate(context: vscode.ExtensionContext) {
 	console.log('sv-pathfinder: there are venoms and virtues aplenty in the wilds, if you know where to look.');
@@ -79,8 +80,12 @@ export function activate(context: vscode.ExtensionContext) {
 		designProvider.closeDesign(e);
 	}));
 
+	const stalenessMonitor = new SourceStalenessMonitor(context, hierarchyProvider);
+	context.subscriptions.push(stalenessMonitor.register());
+
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.reloadDesign', async (e) => {
-		designProvider.reloadDesign(e);
+		await designProvider.reloadDesign(e);
+		stalenessMonitor.resetForDesign(e); // views are fresh again → allow a future stale warning
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.openWaveform', async (e) => {
