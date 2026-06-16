@@ -348,7 +348,7 @@
       },
       {
         "command": "sv-pathfinder.addToWaveform",
-        "title": "Add to Waveform Viewer"
+        "title": "Show in Waveform Viewer"
       },
       {
         "command": "sv-pathfinder.addAllInScopeToWaveform",
@@ -375,7 +375,7 @@
       },
       {
         "command": "sv-pathfinder.addToWaveformViewer",
-        "title": "Add to Waveform Viewer",
+        "title": "Show in Waveform Viewer",
         "enablement": "sv-pathfinder.isCommandEnabled"
       },
       {

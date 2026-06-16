@@ -1138,7 +1138,7 @@ const CTX_ITEMS = [
     { sep: true },
     { label: 'Copy name', applies: (i) => !!i.leafName, action: 'copyName' },
     { label: 'Copy value', applies: (i) => currentValue(i.model) !== undefined, action: 'copyValue' },
-    { label: 'Add to waveform', applies: (i) => i.isSub || realName(i), action: 'addToWaveform' },
+    { label: 'Show in waveform', applies: (i) => i.isSub || realName(i), action: 'addToWaveform' },
 ];
 // The primary "go to source" navigation for an item, shared by the context menu and double-click:
 // prefer the explicit source position ("Go to source" — instances → their instantiation, gates,

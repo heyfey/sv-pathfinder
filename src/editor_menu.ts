@@ -134,8 +134,9 @@ export class EditorMenuProvider {
         await this.designProvider.openWaveformIfNotPresent(activeDesign);
         const activeWaveform = activeDesign.getActiveWaveform();
         if (activeWaveform) {
-            // Add to waveform viewer
-            vscode.commands.executeCommand("waveformViewer.addVariable", { uri: activeWaveform.resourceUri.toString(), instancePath: hierarchyName });
+            // Show in waveform viewer: reveal:true selects an already-displayed signal instead of
+            // adding a duplicate row.
+            vscode.commands.executeCommand("waveformViewer.addVariable", { uri: activeWaveform.resourceUri.toString(), instancePath: hierarchyName, reveal: true });
         }
     }
 

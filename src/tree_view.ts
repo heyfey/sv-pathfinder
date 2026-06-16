@@ -1835,9 +1835,10 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
             }
         }
 
-        // Add to waveform viewer
+        // Show in waveform viewer: reveal:true selects an already-displayed signal instead of
+        // adding a duplicate row.
         for (const instancePath of instancePaths) {
-            vscode.commands.executeCommand("waveformViewer.addVariable", { uri: waveformUri.toString(), instancePath: instancePath });
+            vscode.commands.executeCommand("waveformViewer.addVariable", { uri: waveformUri.toString(), instancePath: instancePath, reveal: true });
         }
     }
 
