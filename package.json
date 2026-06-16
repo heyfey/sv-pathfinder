@@ -396,7 +396,7 @@
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
     "test": "vscode-test",
-    "test:unit": "npm run compile-tests && mocha --ui tdd out/test/converter.test.js out/test/flist.test.js",
+    "test:unit": "npm run compile-tests && mocha --ui tdd \"out/test/*.test.js\" --ignore \"out/test/extension.test.js\"",
     "test:converter": "npm run compile-tests && mocha --ui tdd out/test/converter.test.js",
     "test:webview": "node esbuild.js && node test/webview/run.mjs",
     "test:all": "npm run check-types && npm run lint && npm run test:unit && npm run test:webview",
