@@ -691,19 +691,23 @@ function refreshValueText() {
 }
 
 // Transient flash: briefly pulse the wires of nets that transition AT the current marker (value
-// chain length > 1). A distinct CSS animation (sv-changed) that auto-fades — separate from the
-// accent drop-shadow glow used by hover/select, so the two never look the same. Re-added on the next
-// frame so the keyframe restarts each marker move.
+// chain length > 1). Uses the Web Animations API directly on the wire LINE — each call starts a
+// fresh, self-contained animation, so rapid/repeated setValues (debounced marker moves) can't cancel
+// it the way a CSS-class toggle on the next animation frame could. A thickness+brightness pulse,
+// deliberately a different effect from the accent drop-shadow glow used by hover/select.
 function flashChanged(nets) {
-    if (!paper || !labelIndex) { return; }
+    if (!paper || !labelIndex || !nets || nets.size === 0) { return; }
     for (const l of labelIndex.graph.getLinks()) {
+        if (!nets.has(l.get('netname'))) { continue; }
         const v = paper.findViewByModel(l);
-        if (!v) { continue; }
-        const el = v.el;
-        el.classList.remove('sv-changed'); // clear the previous cursor's flashes (and restart this one)
-        if (nets && nets.has(l.get('netname'))) {
-            requestAnimationFrame(() => { el.classList.add('sv-changed'); });
-        }
+        const line = v && v.el.querySelector('.connection');
+        if (!line || typeof line.animate !== 'function') { continue; }
+        if (line.getAnimations) { line.getAnimations().forEach(a => a.cancel()); } // restart, don't stack
+        const cur = getComputedStyle(line).strokeWidth || '2px';
+        line.animate(
+            [{ strokeWidth: '7px', filter: 'brightness(2.2)' }, { strokeWidth: cur, filter: 'none' }],
+            { duration: 600, easing: 'ease-out' },
+        );
     }
 }
 
