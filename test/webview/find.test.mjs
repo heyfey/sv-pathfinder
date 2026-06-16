@@ -1,0 +1,51 @@
+// Find (Ctrl+F): a search box that jumps to a signal/instance/port by name on a large schematic.
+// Ctrl+F opens it, typing matches, Enter cycles, the current match is highlighted + centered, Esc
+// closes.
+import { launchPage, loadSchematic, report } from './helpers.mjs';
+
+const { browser, page, logs } = await launchPage();
+await loadSchematic(page, 'fifo.digitaljs.json', { scopePath: 'tb.u_fifo', moduleName: 'param_fifo' });
+
+// Open via Ctrl+F, type a query, and report the find state.
+const r = await page.evaluate(() => {
+    const fire = (key, opts = {}) => document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, ...opts }));
+    const state = () => {
+        const box = document.getElementById('sv-find');
+        const cur = document.querySelector('.sv-find-current');
+        let curName = null;
+        if (cur) {
+            const id = cur.getAttribute('model-id');
+            const m = id && window.__schematic.labelIndex.graph.getCell(id);
+            curName = m ? (m.get('netname') || m.get('net') || m.get('label')) : null;
+        }
+        return { open: !!box && getComputedStyle(box).display !== 'none', count: document.getElementById('sv-find-count')?.textContent, hasCurrent: !!cur, curName };
+    };
+
+    fire('f', { ctrlKey: true });                         // open find
+    const opened = state();
+    const input = document.getElementById('sv-find-input');
+    const focused = document.activeElement === input;
+    input.value = 'din'; input.dispatchEvent(new Event('input'));  // search "din"
+    const t0 = window.__schematic.paper.translate();
+    const din = state();
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); // next
+    const next = state();
+    const t1 = window.__schematic.paper.translate();
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); // close
+    const closed = state();
+    return { opened, focused, din, next, closed, panned: t0.tx !== t1.tx || t0.ty !== t1.ty };
+});
+console.log(JSON.stringify(r, null, 1));
+
+const matchCount = parseInt((r.din.count || '0/0').split('/')[1], 10);
+const ok = report('find', [
+    ['Ctrl+F opens the box + focuses input', r.opened.open && r.focused],
+    ['query "din" finds matches', matchCount >= 1 && r.din.hasCurrent],
+    ['current match is a "din" net/port', /din/i.test(r.din.curName || '')],
+    ['Enter advances the match', r.next.hasCurrent && (matchCount === 1 || r.next.count !== r.din.count)],
+    ['navigating pans the viewport', r.panned || matchCount === 1],
+    ['Esc closes + clears highlight', !r.closed.open && !r.closed.hasCurrent],
+    ['no page errors', !logs.some(l => l.startsWith('PAGEERROR'))],
+], logs);
+await browser.close();
+process.exit(ok ? 0 : 1);

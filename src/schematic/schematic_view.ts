@@ -202,6 +202,7 @@ export class SchematicViewProvider {
 <div id="toolbar">
   <span id="breadcrumb"></span>
   <span id="toolbar-right">
+    <button id="sv-find-btn" class="codicon codicon-search" title="Find signal / instance (Ctrl+F)"></button>
     <button id="go-parent" class="codicon codicon-debug-step-out" title="Go to parent scope" disabled></button>
     <button id="zoom-out" class="codicon codicon-zoom-out" title="Zoom out"></button>
     <button id="zoom-in" class="codicon codicon-zoom-in" title="Zoom in"></button>

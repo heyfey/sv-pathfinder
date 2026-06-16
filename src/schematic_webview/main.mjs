@@ -1160,6 +1160,91 @@ function showContextMenu(cellView, clientX, clientY) {
 document.addEventListener('pointerdown', (e) => { if (_ctxMenu && _ctxMenu.style.display !== 'none' && !_ctxMenu.contains(e.target)) { hideContextMenu(); } }, true);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { hideContextMenu(); } });
 window.addEventListener('blur', hideContextMenu);
+
+// ---- find (Ctrl+F): jump to a signal / instance / port by name on the main paper ----
+let _findBox = null, _findItems = [], _findMatches = [], _findIdx = -1, _findHi = null;
+// Index every searchable thing on the main paper: named wires, child instances, IO ports, and named
+// gates ($-prefixed synthetic names are skipped — not user-meaningful).
+function buildFindIndex() {
+    const items = [];
+    if (!labelIndex) { return items; }
+    for (const [name, w] of Object.entries(labelIndex.wires)) { items.push({ label: name, key: name.toLowerCase(), model: w, kind: 'net' }); }
+    for (const el of labelIndex.graph.getElements()) {
+        const celltype = el.get('celltype'), type = el.get('type');
+        let label = null, kind = null;
+        if (celltype) { label = el.get('label'); kind = 'instance'; }
+        else if (type === 'Input' || type === 'Output') { label = el.get('net'); kind = 'port'; }
+        else { const l = el.get('label'); if (l && !String(l).startsWith('$')) { label = l; kind = 'gate'; } }
+        if (label) { items.push({ label: String(label), key: String(label).toLowerCase(), model: el, kind }); }
+    }
+    return items;
+}
+function runFindQuery(raw) {
+    const q = raw.trim().toLowerCase();
+    if (!q) { _findMatches = []; _findIdx = -1; clearFindHighlight(); updateFindCount(); return; }
+    _findMatches = _findItems.filter(it => it.key.includes(q))
+        .sort((a, b) => (a.key === q ? 0 : a.key.startsWith(q) ? 1 : 2) - (b.key === q ? 0 : b.key.startsWith(q) ? 1 : 2));
+    if (_findMatches.length) { gotoFindMatch(0); } else { _findIdx = -1; clearFindHighlight(); updateFindCount(); }
+}
+function clearFindHighlight() { if (_findHi) { _findHi.classList.remove('sv-find-current'); _findHi = null; } }
+function gotoFindMatch(i) {
+    if (!_findMatches.length || !paper) { return; }
+    _findIdx = ((i % _findMatches.length) + _findMatches.length) % _findMatches.length;
+    const view = paper.findViewByModel(_findMatches[_findIdx].model);
+    clearFindHighlight();
+    if (view) {
+        _findHi = view.el; _findHi.classList.add('sv-find-current');
+        autoFit = false;                                 // user is navigating — don't auto-fit over them
+        if (paper.scale().sx < 0.5) { paper.scale(0.75); } // make the match readable if zoomed way out
+        centerOnView(paper, view);
+    }
+    updateFindCount();
+}
+// Center a cell view in the viewport (works for elements AND wires): shift the current translate by
+// the gap between the viewport centre and the view's current on-screen centre, then clamp.
+function centerOnView(p, view) {
+    const bb = view.getBBox();                           // paper coords (post-transform)
+    const sz = p.getComputedSize(), t = p.translate();
+    panTo(p, t.tx + sz.width / 2 - (bb.x + bb.width / 2), t.ty + sz.height / 2 - (bb.y + bb.height / 2));
+}
+function updateFindCount() {
+    const c = document.getElementById('sv-find-count');
+    if (c) { c.textContent = _findMatches.length ? `${_findIdx + 1}/${_findMatches.length}` : '0/0'; }
+}
+function buildFindBox() {
+    _findBox = document.createElement('div');
+    _findBox.id = 'sv-find';
+    _findBox.innerHTML = '<input id="sv-find-input" type="text" placeholder="Find signal / instance…" spellcheck="false">'
+        + '<span id="sv-find-count">0/0</span>'
+        + '<button id="sv-find-prev" class="codicon codicon-arrow-up" title="Previous (Shift+Enter)"></button>'
+        + '<button id="sv-find-next" class="codicon codicon-arrow-down" title="Next (Enter)"></button>'
+        + '<button id="sv-find-close" class="codicon codicon-close" title="Close (Esc)"></button>';
+    document.getElementById('paper-container').appendChild(_findBox);
+    const input = _findBox.querySelector('#sv-find-input');
+    input.addEventListener('input', () => runFindQuery(input.value));
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); gotoFindMatch(_findIdx + (e.shiftKey ? -1 : 1)); }
+        else if (e.key === 'Escape') { e.preventDefault(); closeFind(); }
+    });
+    _findBox.querySelector('#sv-find-next').addEventListener('click', () => gotoFindMatch(_findIdx + 1));
+    _findBox.querySelector('#sv-find-prev').addEventListener('click', () => gotoFindMatch(_findIdx - 1));
+    _findBox.querySelector('#sv-find-close').addEventListener('click', closeFind);
+}
+function openFind() {
+    if (!_findBox) { buildFindBox(); }
+    _findItems = buildFindIndex();
+    _findBox.style.display = 'flex';
+    const input = document.getElementById('sv-find-input');
+    input.focus(); input.select();
+    runFindQuery(input.value);
+}
+function closeFind() { if (_findBox) { _findBox.style.display = 'none'; } clearFindHighlight(); }
+function findOpen() { return _findBox && _findBox.style.display !== 'none'; }
+document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); openFind(); }
+    else if (e.key === 'F3' && findOpen()) { e.preventDefault(); gotoFindMatch(_findIdx + (e.shiftKey ? -1 : 1)); }
+});
+
 // suppress the native (VS Code) context menu inside the schematic webview
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 function bindContextMenu(p) {
@@ -1627,6 +1712,7 @@ function buildPngExport() {
 document.getElementById('zoom-in').addEventListener('click', () => zoomBy(1.25));
 document.getElementById('zoom-out').addEventListener('click', () => zoomBy(0.8));
 document.getElementById('zoom-fit').addEventListener('click', fitToView);
+document.getElementById('sv-find-btn')?.addEventListener('click', openFind);
 document.getElementById('refresh').addEventListener('click', () => post({ type: 'refresh' }));
 document.getElementById('go-parent').addEventListener('click', () => post({ type: 'goToParent' }));
 document.getElementById('export').addEventListener('click', () => { _exportPaper = null; post({ type: 'export' }); });
