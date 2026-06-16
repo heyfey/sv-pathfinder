@@ -382,6 +382,34 @@ html, body {
 .ui-dialog .btn .codicon { font-size: 14px; vertical-align: middle; }
 
 /* ---- right-click context menu ---- */
+/* Hover tooltip. Uses the editor-hover-widget theme tokens so it's readable in BOTH light and dark
+ * themes (the old digitaljs bus tooltip was light-only). */
+#sv-tooltip {
+    position: fixed;
+    z-index: 1000;
+    display: none;
+    max-width: 360px;
+    padding: 6px 9px;
+    pointer-events: none;
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--vscode-editorHoverWidget-foreground, var(--vscode-editor-foreground, #cccccc));
+    background: var(--vscode-editorHoverWidget-background, var(--vscode-editorWidget-background, #252526));
+    border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-editorWidget-border, #454545));
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.36);
+}
+#sv-tooltip .sv-tip-header {
+    font-weight: 600;
+    margin-bottom: 2px;
+    color: var(--vscode-editorHoverWidget-foreground, var(--vscode-editor-foreground, #ffffff));
+    word-break: break-all;
+}
+#sv-tooltip .sv-tip-row { display: flex; gap: 10px; }
+#sv-tooltip .sv-tip-k { color: var(--vscode-descriptionForeground, #999999); min-width: 44px; }
+#sv-tooltip .sv-tip-v { word-break: break-all; font-variant-numeric: tabular-nums; }
+
 #sv-ctxmenu {
     position: fixed;
     z-index: 1000;

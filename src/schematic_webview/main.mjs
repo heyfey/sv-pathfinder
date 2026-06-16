@@ -241,10 +241,11 @@ cells.SubcircuitView.prototype._updatePortSignals = function (dir) {
 // Drop the wire hover-tools (delete-wire ✕, monitor 🔍, endpoint reconnect, reshape) —
 // these are digitaljs editor/simulator affordances inappropriate for a read-only viewer
 // (the ✕ deletes a wire from the schematic; the 🔍 routes to digitaljs's own waveform
-// monitor, which we don't use — VaporView is the waveform). WireView.mouseenter calls
-// addTools() then _addTooltip() independently, so no-opping addTools keeps the useful
-// value-on-hover tooltip while removing the toolset.
+// monitor, which we don't use — VaporView is the waveform).
 cells.WireView.prototype.addTools = function () { return this; };
+// Replace digitaljs's bus value tooltip (Hex/Dec/Oct/Bin, not theme-aware, bus-only) with our own
+// richer, theme-aware hover tooltip (see showTip), which covers every net/port/instance/gate.
+cells.WireView.prototype._addTooltip = function () { return this; };
 
 // Read-only viewer: don't open digitaljs's editable Memory / FSM content editors (the 🔍
 // on those cells). Subcircuit 🔍 navigation is a different handler and stays.
@@ -929,26 +930,102 @@ function describe(model) {
     return `${type}: ${model.get('label') || ''}`.trim();
 }
 
-// Hover: glow the element/wire in the accent color (CSS drop-shadow on the cell's <g>)
-// and name it in the status bar. A class toggle avoids fighting the wire value colors and
-// any duplicate-JointJS-instance issues with the highlighter API. Bound per paper (main +
-// popups). Reuses the wire value tooltip digitaljs already shows.
+// ---- rich hover tooltip (theme-aware; replaces digitaljs's bus-only Hex/Dec/Oct/Bin box) ----
+// Rows describing the hovered model: a bold header (the name/identity) + key/value detail lines.
+// Covers every net/bus/port/instance/gate so a user on a zoomed-out schematic can read name + type
+// + value without zooming in.
+function tipRows(model) {
+    const rows = [];
+    if (typeof model.isLink === 'function' && model.isLink()) {       // a wire / bus
+        const name = model.get('netname');
+        const bits = model.get('bits') || 1;
+        rows.push({ v: name || '(unnamed net)', header: true });
+        rows.push({ k: 'type', v: bits > 1 ? `bus [${bits - 1}:0]` : 'net (1 bit)' });
+        valueRows(model, name, bits).forEach(r => rows.push(r));
+        return rows;
+    }
+    const celltype = model.get('celltype');
+    const type = model.get('type');
+    if (celltype) {                                                   // a child-instance box
+        rows.push({ v: model.get('label') || '(instance)', header: true });
+        rows.push({ k: 'module', v: cleanModuleName(celltype) });
+    } else if (type === 'Input' || type === 'Output') {              // a boundary IO port
+        const net = model.get('net'), bits = model.get('bits') || 1;
+        rows.push({ v: net || '(port)', header: true });
+        rows.push({ k: 'type', v: model.get('bidir') ? 'inout' : type.toLowerCase() });
+        if (bits > 1) { rows.push({ k: 'width', v: `[${bits - 1}:0]` }); }
+        valueRows(model, net, bits).forEach(r => rows.push(r));
+    } else {                                                          // a gate / primitive
+        rows.push({ v: type || 'cell', header: true });
+        const label = model.get('label');
+        if (label && !String(label).startsWith('$')) { rows.push({ k: 'name', v: label }); }
+    }
+    return rows;
+}
+// Value detail rows: the cursor value (x/z-aware display), plus dec/bin for a fully-defined bus.
+function valueRows(model, name, bits) {
+    let sig = model.get('signal');
+    if (!sig) { const outs = model.get('outputSignals'); if (outs) { sig = Object.values(outs)[0]; } }
+    const disp = name ? valueText(name, sig) : (currentValue(model) ?? '');
+    if (!disp) { return [{ k: 'value', v: '— (no waveform)' }]; }
+    const rows = [{ k: 'value', v: disp }];
+    const m = /^0x([0-9a-f]+)$/i.exec(disp); // a single, fully-defined bus value → add radices
+    if (bits > 1 && m) {
+        const n = BigInt('0x' + m[1]);
+        rows.push({ k: 'dec', v: n.toString() });
+        rows.push({ k: 'bin', v: '0b' + n.toString(2).padStart(bits, '0') });
+    }
+    return rows;
+}
+let _tip = null;
+function hideTip() { if (_tip) { _tip.style.display = 'none'; } }
+function showTip(model, clientX, clientY) {
+    const rows = tipRows(model);
+    if (!rows.length) { hideTip(); return; }
+    if (!_tip) { _tip = document.createElement('div'); _tip.id = 'sv-tooltip'; document.body.appendChild(_tip); }
+    _tip.innerHTML = '';
+    for (const r of rows) {
+        const el = document.createElement('div');
+        if (r.header) { el.className = 'sv-tip-header'; el.textContent = r.v; }
+        else {
+            el.className = 'sv-tip-row';
+            const k = document.createElement('span'); k.className = 'sv-tip-k'; k.textContent = r.k;
+            const v = document.createElement('span'); v.className = 'sv-tip-v'; v.textContent = r.v;
+            el.append(k, v);
+        }
+        _tip.appendChild(el);
+    }
+    _tip.style.display = 'block';
+    const tw = _tip.offsetWidth, th = _tip.offsetHeight;
+    let px = clientX + 14, py = clientY + 14;
+    if (px + tw > window.innerWidth) { px = clientX - tw - 14; }
+    if (py + th > window.innerHeight) { py = clientY - th - 14; }
+    _tip.style.left = Math.max(4, px) + 'px';
+    _tip.style.top = Math.max(4, py) + 'px';
+}
+
+// Hover: glow the element/wire in the accent color (CSS drop-shadow on the cell's <g>), name it in
+// the status bar, and show the rich tooltip. A class toggle avoids fighting the wire value colors
+// and any duplicate-JointJS-instance issues with the highlighter API. Bound per paper (main +
+// popups). Child instances get the tooltip but no accent glow (the user drills in via right-click).
 let hovered = null;
 function bindHover(p) {
-    p.on('cell:mouseenter', (cv) => {
-        // Child instances get no hover affordance (the user drills in via right-click → Expand,
-        // not by hovering); their name is already the box caption.
-        if (cv.model.get('celltype')) { return; }
-        if (hovered) { hovered.classList.remove('sv-hover'); }
-        hovered = cv.el;
-        hovered.classList.add('sv-hover');
+    p.on('cell:mouseenter', (cv, evt) => {
+        if (!cv.model.get('celltype')) {
+            if (hovered) { hovered.classList.remove('sv-hover'); }
+            hovered = cv.el;
+            hovered.classList.add('sv-hover');
+        }
         document.getElementById('status-text').textContent = describe(cv.model);
+        showTip(cv.model, evt ? evt.clientX : 0, evt ? evt.clientY : 0);
     });
     p.on('cell:mouseleave', (cv) => {
         cv.el.classList.remove('sv-hover');
         if (hovered === cv.el) { hovered = null; }
         document.getElementById('status-text').textContent = baseStatus;
+        hideTip();
     });
+    p.on('blank:pointerdown cell:pointerdown', () => hideTip()); // don't linger during pan/click
 }
 
 // ---- right-click context menu ----
