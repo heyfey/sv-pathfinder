@@ -1,0 +1,10 @@
+{ "creator": "synthetic test fixture",
+  "modules": {
+    "tb": { "ports": {},
+      "cells": {
+        "u_a": { "hide_name": 0, "type": "iobuf", "port_directions": { "bus": "inout" }, "connections": { "bus": [2,3,4,5] } },
+        "u_b": { "hide_name": 0, "type": "iobuf", "port_directions": { "bus": "inout" }, "connections": { "bus": [2,3,4,5] } } },
+      "netnames": { "bus": { "hide_name": 0, "bits": [2,3,4,5] } } },
+    "iobuf": { "ports": { "bus": { "direction": "inout", "bits": [2,3,4,5] } }, "cells": {},
+      "netnames": { "bus": { "hide_name": 0, "bits": [2,3,4,5] } } }
+  } }

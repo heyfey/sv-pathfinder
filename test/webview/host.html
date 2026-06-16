@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<!-- the built schematic webview bundle (run `node esbuild.js` first) -->
+<link href="../../dist/schematic_webview.css" rel="stylesheet">
+<style>
+  /* simulate VS Code theme variables (dark+). Some vars (charts-yellow,
+     descriptionForeground, disabledForeground) are intentionally left undefined so the
+     webview's fallbacks apply — the tests assert against those fallbacks. */
+  :root {
+    --vscode-editor-background: #1e1e1e;
+    --vscode-editor-foreground: #d4d4d4;
+    --vscode-font-family: sans-serif;
+    --vscode-font-size: 13px;
+    --vscode-editor-font-family: monospace;
+    --vscode-editorWidget-border: #454545;
+    --vscode-editorWidget-background: #252526;
+    --vscode-button-secondaryBackground: #3a3d41;
+    --vscode-button-secondaryForeground: #ffffff;
+    --vscode-charts-blue: #4a9cff;
+    --vscode-charts-green: #2fb344;
+    --vscode-charts-red: #f14c4c;
+    --vscode-debugTokenExpression-error: #f14c4c;
+    --sv-accent: #4a9cff;
+  }
+</style>
+<title>schematic webview test host</title>
+</head>
+<body>
+<div id="toolbar">
+  <span id="breadcrumb"></span>
+  <span id="toolbar-right">
+    <button id="go-parent" class="codicon codicon-debug-step-out" disabled></button>
+    <button id="zoom-out" class="codicon codicon-zoom-out"></button>
+    <button id="zoom-in" class="codicon codicon-zoom-in"></button>
+    <button id="zoom-fit" class="codicon codicon-screen-full"></button>
+    <span id="preset-toggle" class="sv-seg"><span class="sv-seg-label active" data-side="rtl">RTL</span><label class="sv-switch"><input type="checkbox" id="preset-switch"><span class="sv-slider"></span></label><span class="sv-seg-label" data-side="gls">Gate-Level</span></span>
+    <button id="refresh" class="codicon codicon-refresh"></button>
+    <button id="export" class="codicon codicon-export"></button>
+  </span>
+</div>
+<div id="paper-container"><div id="paper"></div></div>
+<div id="status"><span id="sv-taskbar"></span><span id="status-text"></span></div>
+<script>
+  // mock the VS Code webview API; record outbound messages for assertions
+  window.__sent = [];
+  window.acquireVsCodeApi = () => ({
+    postMessage: (m) => { window.__sent.push(m); },
+    getState: () => undefined,
+    setState: () => undefined,
+  });
+</script>
+<script src="../../dist/schematic_webview.js"></script>
+</body>
+</html>

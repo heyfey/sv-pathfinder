@@ -1,0 +1,1 @@
+{"subcircuits":{"iobuf":{"devices":{"dev0":{"type":"Output","net":"bus","order":0,"bits":4,"bidir":true}},"connectors":[]}},"devices":{"dev0":{"label":"u_a","type":"Subcircuit","celltype":"iobuf"},"dev1":{"label":"u_b","type":"Subcircuit","celltype":"iobuf"}},"connectors":[{"to":{"id":"dev1","port":"bus"},"from":{"id":"dev0","port":"bus"},"name":"bus","source_positions":[]}]}
