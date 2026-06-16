@@ -1,0 +1,8 @@
+#!/bin/sh
+# Fast pre-commit gate: type-check, lint, and the vscode-free unit tests (no browser, ~10s).
+# The full headless webview suite runs on pre-push (it needs Chromium). The complete suite also
+# runs in CI on pull requests. Bypass in a pinch with `git commit --no-verify`.
+set -e
+echo "[pre-commit] check-types…"; npm run --silent check-types
+echo "[pre-commit] lint…";        npm run --silent lint
+echo "[pre-commit] unit tests…";  npm run --silent test:unit

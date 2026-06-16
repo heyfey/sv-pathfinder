@@ -1,0 +1,6 @@
+#!/bin/sh
+# Full pre-push gate: build the bundle and run the headless webview suite. Needs Chromium and its
+# system libs/fonts (installed system-wide, or supplied via a local bundle — see
+# test/webview/README.md). Bypass in a pinch with `git push --no-verify`.
+set -e
+echo "[pre-push] webview suite…"; npm run --silent test:webview
