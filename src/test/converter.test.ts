@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import path from 'path';
 
-import { convertToDigitalJs } from '../schematic/converter';
+import { convertToDigitalJs, findDanglingNets } from '../schematic/converter';
 
 // Fixtures live in src/ (not copied to out/ by tsc), so resolve from the repo root.
 const FIXTURES = path.resolve(__dirname, '../../src/test/fixtures');
@@ -45,5 +45,27 @@ suite('convertToDigitalJs — inout handling', () => {
         const busPort: any = ports.find((d: any) => d.net === 'bus');
         assert.ok(busPort, 'iobuf has a bus port device');
         assert.strictEqual(busPort.bidir, true, 'bus port is tagged bidirectional');
+    });
+});
+
+// A declared-but-unconnected named net has no edge to draw. The schematicShowDanglingNets path keeps
+// such nets through Yosys, finds them, and adds a labelled stub so the webview can show one. The
+// fixture's top module has a connected `a`/`y` (input -> $not -> output) plus a fully unconnected
+// public `dead_bus` and a private `$auto$internal` (which must be ignored).
+suite('findDanglingNets / showDangling', () => {
+    test('finds only the unconnected public net (skips connected + private)', () => {
+        const dangling = findDanglingNets(fixture('synth_dangling.yosys.json'));
+        assert.deepStrictEqual(dangling, [{ name: 'dead_bus', bits: 4 }]);
+    });
+
+    test('showDangling adds a labelled stub device; off by default adds none', () => {
+        const on = convertToDigitalJs(fixture('synth_dangling.yosys.json'), { showDangling: true });
+        const stubs = Object.values(on.devices).filter((d: any) => d.dangling);
+        assert.strictEqual(stubs.length, 1, 'one stub for dead_bus');
+        assert.strictEqual((stubs[0] as any).net, 'dead_bus');
+        assert.strictEqual((stubs[0] as any).bits, 4);
+
+        const off = convertToDigitalJs(fixture('synth_dangling.yosys.json'));
+        assert.strictEqual(Object.values(off.devices).filter((d: any) => d.dangling).length, 0, 'none without the flag');
     });
 });

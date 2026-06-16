@@ -61,7 +61,11 @@ export class SchematicViewProvider {
         try {
             const ctx = await resolveScope(design, instance);
             this.current = { design, instance, ctx, preset };
-            const key = scopeCacheKey(ctx, preset);
+            // Optional: surface declared-but-unconnected nets. In the cache key so toggling the
+            // setting + reloading re-elaborates (it changes the Yosys keeps + converter output).
+            const showDangling = vscode.workspace.getConfiguration('sv-pathfinder')
+                .get<boolean>('schematicShowDanglingNets', false);
+            const key = scopeCacheKey(ctx, preset) + (showDangling ? '+dangling' : '');
 
             let digitalJsJson = !force ? this.cache.get(key) : undefined;
             if (!digitalJsJson) {
@@ -70,8 +74,8 @@ export class SchematicViewProvider {
                     title: `Schematic: elaborating ${ctx.moduleName} (${preset.toUpperCase()})…`,
                     cancellable: false,
                 }, async () => {
-                    const result = await runYosys(ctx, preset);
-                    return convertToDigitalJs(result.yosysJson);
+                    const result = await runYosys(ctx, preset, { showDangling });
+                    return convertToDigitalJs(result.yosysJson, { showDangling });
                 });
                 this.cache.set(key, digitalJsJson);
             }

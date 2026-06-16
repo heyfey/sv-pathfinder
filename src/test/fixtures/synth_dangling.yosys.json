@@ -1,0 +1,71 @@
+{
+  "creator": "Yosys 0.64+345 (git sha1 948c3d639, Release, Clang /usr/bin/clang++ 18.1.8)",
+  "modules": {
+    "top": {
+      "attributes": {
+        "keep": 1,
+        "top": 1,
+        "src": "dangle_fix.sv:1.8"
+      },
+      "ports": {
+        "a": {
+          "direction": "input",
+          "bits": [ 2 ]
+        },
+        "y": {
+          "direction": "output",
+          "bits": [ 3 ]
+        }
+      },
+      "cells": {
+        "$0": {
+          "hide_name": 1,
+          "type": "$not",
+          "parameters": {
+            "A_SIGNED": 0,
+            "A_WIDTH": 1,
+            "Y_WIDTH": 1
+          },
+          "attributes": {
+            "src": "dangle_fix.sv:3.14-3.16"
+          },
+          "port_directions": {
+            "A": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 2 ],
+            "Y": [ 3 ]
+          }
+        }
+      },
+      "netnames": {
+        "a": {
+          "hide_name": 0,
+          "bits": [ 2 ],
+          "attributes": {
+            "hdlname": "a",
+            "keep": 1
+          }
+        },
+        "dead_bus": {
+          "hide_name": 0,
+          "bits": [ 4, 5, 6, 7 ],
+          "attributes": {
+            "hdlname": "dead_bus",
+            "keep": 1,
+            "unused_bits": "0 1 2 3"
+          }
+        },
+        "y": {
+          "hide_name": 0,
+          "bits": [ 3 ],
+          "attributes": {
+            "hdlname": "y",
+            "keep": 1
+          }
+        }
+      }
+    }
+  }
+}

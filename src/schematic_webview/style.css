@@ -295,6 +295,18 @@ html, body {
     stroke-width: 3px;
 }
 
+/* dangling-net stub (sv-pathfinder.schematicShowDanglingNets): a declared-but-unconnected net,
+ * shown as a dashed, muted, port-less label box so it reads as "this net exists but connects to
+ * nothing" rather than a real IO port. */
+.djs .sv-dangling [joint-selector="body"],
+.djs .sv-dangling rect.body {
+    stroke: var(--vscode-descriptionForeground, #888);
+    stroke-dasharray: 4 3;
+    fill-opacity: 0.4;
+}
+.djs .sv-dangling .ioname { fill: var(--vscode-descriptionForeground, #888); font-style: italic; }
+.djs .sv-dangling .joint-port { display: none; }
+
 /* NOTE: wire value colors are NOT set here. digitaljs colors the wire's `line` selector
  * by signal value via SVG attributes (high/low/def/undef); a CSS `stroke` rule on the
  * connection path overrides those attributes and would flatten every wire to one color.

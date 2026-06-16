@@ -86,6 +86,9 @@ const _ioBaseConfirmUpdate = cells.IOView.prototype.confirmUpdate;
 cells.IOView.prototype.confirmUpdate = function (flags) {
     const r = _ioBaseConfirmUpdate.apply(this, arguments);
     this._updateIoValue(); // value (signal-driven) + the static bidirectional glyph; idempotent
+    // Dangling-net stub (showDanglingNets): a declared-but-unconnected net rendered as a labelled
+    // box. Mark it so CSS can dash it and hide the (meaningless) port magnet — it isn't a real port.
+    if (this.model.get('dangling')) { this.el.classList.add('sv-dangling'); }
     return r;
 };
 cells.IOView.prototype._updateIoValue = function () {

@@ -92,7 +92,7 @@ export function getResolvedBackendName(): string | undefined {
 }
 
 // Build the read + elaborate + lowering script (Spike 1 presets).
-function buildScript(backend: Backend, ctx: ScopeContext, preset: SchematicPreset, outJson: string): string {
+function buildScript(backend: Backend, ctx: ScopeContext, preset: SchematicPreset, outJson: string, showDangling = false): string {
     const files = ctx.dotF
         ? (backend.slang ? `-F ${quote(ctx.dotF)}` : ctx.fileSet.map(quote).join(' '))
         : ctx.fileSet.map(quote).join(' ');
@@ -125,10 +125,13 @@ function buildScript(backend: Backend, ctx: ScopeContext, preset: SchematicPrese
     // are unused; the $mem keep preserves inferred-memory cells whose read-output is unused at this
     // elaboration (module-keep only covers instances, not $mem cells — without it, isolating a scope
     // as top silently drops memories the rest of the design reads, e.g. a RAM bank).
-    return common + `proc; memory_collect; setattr -mod -set keep 1; setattr -set keep 1 t:$mem*; opt_clean; write_json -compat-int ${quote(outJson)}`;
+    // showDangling additionally keeps PUBLIC wires (all wires minus $-private) so declared-but-
+    // unconnected named nets survive opt_clean for the converter to surface (see findDanglingNets).
+    const keepDangling = showDangling ? 'setattr -set keep 1 w:* w:$* %d; ' : '';
+    return common + `proc; memory_collect; setattr -mod -set keep 1; setattr -set keep 1 t:$mem*; ${keepDangling}opt_clean; write_json -compat-int ${quote(outJson)}`;
 }
 
-export async function runYosys(ctx: ScopeContext, preset: SchematicPreset): Promise<YosysResult> {
+export async function runYosys(ctx: ScopeContext, preset: SchematicPreset, opts?: { showDangling?: boolean }): Promise<YosysResult> {
     const backend = await findBackend();
     if (!backend) {
         throw new Error(
@@ -155,7 +158,7 @@ export async function runYosys(ctx: ScopeContext, preset: SchematicPreset): Prom
 
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sv-pathfinder-schematic-'));
     const outJson = path.join(tmpDir, 'schematic.json');
-    const script = buildScript(backend, effectiveCtx, preset, outJson);
+    const script = buildScript(backend, effectiveCtx, preset, outJson, opts?.showDangling);
 
     const log = await new Promise<string>((resolve, reject) => {
         const proc = cp.spawn(backend.command, ['-p', script], { cwd: ctx.workDir });

@@ -232,11 +232,51 @@ function tagBidirPorts(djs: any, inoutByModule: Map<string, Set<string>>): void 
     if (topName) { tagGraph(djs, inoutByModule.get(topName)); }
 }
 
-export function convertToDigitalJs(yosysJson: any): any {
+// A declared-but-unconnected named net has no driver and no load, so yosys2digitaljs emits no edge
+// for it and opt_clean deletes it outright. When the caller wants them shown, find the public nets
+// in the top module whose bits aren't connected to any cell port or module port (requires the Yosys
+// run to have kept public wires — see buildScript's showDangling path; otherwise they're gone).
+export function findDanglingNets(yosysJson: any): { name: string; bits: number }[] {
+    const modules = yosysJson?.modules;
+    if (!modules) { return []; }
+    const top: any = Object.values(modules).find((m: any) => m?.attributes?.top) || Object.values(modules)[0];
+    if (!top) { return []; }
+    const connected = new Set<number>();
+    const add = (bits: any) => { if (Array.isArray(bits)) { for (const b of bits) { if (typeof b === 'number') { connected.add(b); } } } };
+    for (const cell of Object.values(top.cells || {})) { for (const c of Object.values((cell as any).connections || {})) { add(c); } }
+    for (const p of Object.values(top.ports || {})) { add((p as any).bits); }
+    const out: { name: string; bits: number }[] = [];
+    for (const [name, net] of Object.entries(top.netnames || {})) {
+        if (name.startsWith('$')) { continue; } // internal/auto net, not user-meaningful
+        const numeric = ((net as any).bits || []).filter((b: any) => typeof b === 'number');
+        // dangling = has real bits, none of which are connected anywhere (constant-tied nets are driven)
+        if (numeric.length && numeric.every((b: number) => !connected.has(b))) { out.push({ name, bits: numeric.length }); }
+    }
+    return out;
+}
+
+// Add a labelled stub device per dangling net so the webview can render it (there's no wire to draw,
+// so it shows as a dashed, port-less box bearing the net name). Marked `dangling` for styling.
+function addDanglingNetStubs(djs: any, dangling: { name: string; bits: number }[]): void {
+    if (!djs.devices) { djs.devices = {}; }
+    let order = 0;
+    for (const d of Object.values(djs.devices) as any[]) {
+        if (typeof d.order === 'number' && d.order >= order) { order = d.order + 1; }
+    }
+    let i = 0;
+    for (const { name, bits } of dangling) {
+        djs.devices[`$dangling${i++}`] = { type: 'Input', net: name, order: order++, bits: bits || 1, dangling: true };
+    }
+}
+
+export function convertToDigitalJs(yosysJson: any, opts?: { showDangling?: boolean }): any {
+    // compute BEFORE normalizeForDigitaljs mutates the netlist
+    const dangling = opts?.showDangling ? findDanglingNets(yosysJson) : [];
     try {
         const inoutByModule = normalizeForDigitaljs(yosysJson); // mutates yosysJson, returns inout ports
         const djs = yosys2digitaljs(yosysJson);
         tagBidirPorts(djs, inoutByModule);
+        if (dangling.length) { addDanglingNetStubs(djs, dangling); }
         return djs;
     } catch (e: any) {
         const msg = String(e?.message ?? e);

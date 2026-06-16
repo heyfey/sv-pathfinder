@@ -97,6 +97,11 @@
           ],
           "default": "compact",
           "markdownDescription": "Layout density for the schematic: controls block spacing, the clearance reserved around wire net-name labels, and box padding so signal names fit. Applies on the next render (reopen or refresh the schematic)."
+        },
+        "sv-pathfinder.schematicShowDanglingNets": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Show declared-but-unconnected named nets (no driver and no load) as dashed, floating labels in the schematic. Off by default; normally such nets have nothing to draw and are omitted. Applies on the next render (reopen or refresh the schematic)."
         }
       }
     },
