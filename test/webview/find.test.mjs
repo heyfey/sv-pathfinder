@@ -56,6 +56,18 @@ const multi = await page.evaluate(() => {
 });
 console.log('clk segments:', JSON.stringify(multi));
 
+// The find highlight must NOT override a wire's value colour (the stroke encodes the value) — it uses
+// a glow + width instead. Drive full=1 (green), find it, check the matched wire is still green.
+await page.evaluate(() => window.postMessage({ type: 'setValues', updates: [{ name: 'full', values: ['1'] }] }, '*'));
+await page.waitForTimeout(400);
+const valColour = await page.evaluate(() => {
+    const inp = document.getElementById('sv-find-input'); inp.value = 'full'; inp.dispatchEvent(new Event('input'));
+    const cur = document.querySelector('.sv-find-current');
+    const line = cur && cur.querySelector('.connection');
+    return { stroke: line ? getComputedStyle(line).stroke : null, hasGlow: cur ? getComputedStyle(cur).filter !== 'none' : false };
+});
+console.log('found valued wire:', JSON.stringify(valColour));
+
 const matchCount = parseInt((r.din.count || '0/0').split('/')[1], 10);
 const ok = report('find', [
     ['Ctrl+F opens the box + focuses input', r.opened.open && r.focused],
@@ -66,6 +78,7 @@ const ok = report('find', [
     ['Esc closes + clears highlight', !r.closed.open && !r.closed.hasCurrent],
     ['Find still works after a re-render', afterRerender.open && afterRerender.inputFocusable],
     ['every wire segment is findable (multi-segment net not deduped)', multi.segs > 1 && multi.total > multi.segs],
+    ['find highlight keeps the wire value colour (green), adds a glow', valColour.stroke === 'rgb(47, 179, 68)' && valColour.hasGlow],
     ['no page errors', !logs.some(l => l.startsWith('PAGEERROR'))],
 ], logs);
 await browser.close();

@@ -303,8 +303,14 @@ html, body {
     stroke-width: 3px;
 }
 
-/* current find match: a bright, distinct highlight (find-match colour, not the accent used by
- * hover/select) so the matched signal/instance stands out after Find jumps to it. */
+/* current find match: a distinct find-match GLOW (not the accent used by hover/select) so the match
+ * stands out after Find jumps to it. The glow is on a single element per navigate, so the drop-shadow
+ * filter is fine here (unlike hover). Crucially, on a WIRE we do NOT recolour the stroke — that's the
+ * value colour — only glow + thicken it, so the signal's value stays readable while it's the match. */
+.djs .sv-find-current {
+    filter: drop-shadow(0 0 4px var(--vscode-charts-yellow, #e2c08d))
+            drop-shadow(0 0 2px var(--vscode-charts-yellow, #e2c08d));
+}
 .djs .sv-find-current [joint-selector="body"],
 .djs .sv-find-current rect.body, .djs .sv-find-current circle.body,
 .djs .sv-find-current polygon.body, .djs .sv-find-current path.body {
@@ -314,7 +320,6 @@ html, body {
 .djs .sv-find-current path.connection,
 .djs .sv-find-current .connection,
 .djs .sv-find-current line.wire {
-    stroke: var(--vscode-charts-yellow, #e2c08d);
     stroke-width: 6px;
 }
 
