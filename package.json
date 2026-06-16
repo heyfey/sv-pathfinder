@@ -102,6 +102,21 @@
           "type": "boolean",
           "default": false,
           "markdownDescription": "Show declared-but-unconnected named nets (no driver and no load) as dashed, floating labels in the schematic. Off by default; normally such nets have nothing to draw and are omitted. Applies on the next render (reopen or refresh the schematic)."
+        },
+        "sv-pathfinder.valueAnnotationFormat": {
+          "type": "string",
+          "enum": [
+            "hexadecimal",
+            "decimal",
+            "binary"
+          ],
+          "enumDescriptions": [
+            "Bus values in hexadecimal (e.g. 0x1a). Bits that are x/z render as x/z digits.",
+            "Bus values in decimal. Values containing x/z fall back to binary (a 4-state value has no decimal).",
+            "Bus values in binary (the raw bit vector)."
+          ],
+          "default": "hexadecimal",
+          "markdownDescription": "Number format for bus (multi-bit) value annotations shown inline in the editor and in the hierarchy view. Single-bit signals are always shown as `0`/`1`/`x`/`z`."
         }
       }
     },

@@ -2,8 +2,13 @@ import * as vscode from 'vscode';
 
 import { HierarchyTreeProvider, NetlistItem } from './tree_view';
 import { Parser } from './parser';
+import { formatBusValue, ValueFormat } from './value_format';
 
-function parseWaveformValue(values: any): string | undefined {
+function valueAnnotationFormat(): ValueFormat {
+    return vscode.workspace.getConfiguration('sv-pathfinder').get<ValueFormat>('valueAnnotationFormat', 'hexadecimal');
+}
+
+function parseWaveformValue(values: any, format: ValueFormat): string | undefined {
     let v: string[];
     if (typeof values === 'string') {
         v = JSON.parse(values);
@@ -13,15 +18,9 @@ function parseWaveformValue(values: any): string | undefined {
         console.error(`Unexpected type for values: ${typeof values}`);
         return undefined;
     }
-    let result: string = v[0];
-    if (v.length === 1) {
-        return `${result}`;
-    }
-    for (let i = 1; i < v.length; i++) {
-        result += '->';
-        result += v[i];
-    }
-    return `${result}`;
+    // VaporView returns raw binary bit-vectors; render each token (current, or previous->current)
+    // in the user's chosen radix.
+    return v.map((t) => formatBusValue(t, format)).join('->');
 }
 
 // #region WaveformValueAnnotationProvider
@@ -166,10 +165,11 @@ export class WaveformValueAnnotationProvider {
         );
 
         // Store [variableName, waveform value] in a map
+        const format = valueAnnotationFormat();
         const waveformValueMap = new Map<string, string>();
         for (const v of waveformValues) {
             const variableName = v.instancePath.split('.').pop()!;
-            const value = parseWaveformValue(v.value);
+            const value = parseWaveformValue(v.value, format);
             if (value === undefined) { continue; }
             waveformValueMap.set(variableName, value);
         }
