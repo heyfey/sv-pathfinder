@@ -31,9 +31,22 @@ node test/webview/run.mjs xvalue  # run only tests whose filename contains "xval
   `npx playwright install chromium` (or point `PLAYWRIGHT_BROWSERS_PATH` at an existing cache).
 - **The built bundle.** `npm run test:webview` runs `node esbuild.js` first; if you invoke `run.mjs`
   directly, build the bundle yourself.
-- **Bare Linux / WSL only:** if Chromium can't find system libs or fonts, provide them via
-  `LD_LIBRARY_PATH` and `FONTCONFIG_FILE` before the command. A desktop Linux or CI image with the
-  usual Chromium dependencies needs neither.
+- **Chromium's system libraries and fonts.** A desktop Linux or CI image with the usual Chromium
+  dependencies already has these. On a minimal box (e.g. a headless server / WSL distro) Chromium fails
+  to launch with `error while loading shared libraries: libatk-1.0.so.0` or similar. Two ways to fix it:
+  - **Install them system-wide (preferred):** `npx playwright install-deps chromium`, or your distro's
+    packages — e.g. on RHEL/AlmaLinux 8: `sudo dnf install atk at-spi2-atk at-spi2-core libX11
+    libXcomposite libXdamage libXext libXfixes libXrandr mesa-libgbm libxcb dejavu-sans-fonts`. After
+    this no env config is needed.
+  - **No sudo? Supply a local bundle.** Point the run at a directory of the needed `.so` files and a
+    fontconfig file, and the harness injects them into the browser's environment only — without
+    touching your shell. Configure either via env vars
+    (`SV_WEBVIEW_CHROMIUM_LIBS=/path/to/libs SV_WEBVIEW_FONTCONFIG=/path/to/fonts.conf npm run test:webview`)
+    or a gitignored `test/webview/local-env.json`:
+
+    ```json
+    { "LD_LIBRARY_PATH": "/path/to/libs", "FONTCONFIG_FILE": "/path/to/fonts.conf" }
+    ```
 
 ## Related
 

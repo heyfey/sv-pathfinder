@@ -6,3 +6,4 @@ node_modules
 *.vcd
 *.fsdb
 build/
+test/webview/local-env.json
