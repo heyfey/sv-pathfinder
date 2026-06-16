@@ -497,6 +497,18 @@ function addZoomTooltips(div) {
         b.innerHTML = `<i class="codicon codicon-zoom-${zin ? 'in' : 'out'}"></i>`;
     }
 }
+// Add a Find (🔍) button to the popup toolbar that opens THIS popup's finder (content.__svFinder).
+function addPopupFindButton(content) {
+    const group = content && content.querySelector('.btn-group');
+    if (!group || !content.__svFinder || group.querySelector('.sv-popup-find')) { return; }
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-secondary sv-popup-find';
+    btn.title = 'Find in this view (Ctrl+F)';
+    btn.innerHTML = '<i class="codicon codicon-search"></i>';
+    btn.addEventListener('click', () => content.__svFinder.open());
+    group.insertBefore(btn, group.firstChild);
+}
 // Add an export (⤓) button to the popup's button group so this child view can be exported too.
 function addPopupExport(div) {
     const root = div && div.get ? div.get(0) : null;
@@ -1161,110 +1173,108 @@ document.addEventListener('pointerdown', (e) => { if (_ctxMenu && _ctxMenu.style
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { hideContextMenu(); } });
 window.addEventListener('blur', hideContextMenu);
 
-// ---- find (Ctrl+F): jump to a signal / instance / port by name on the main paper ----
-let _findBox = null, _findItems = [], _findMatches = [], _findIdx = -1, _findHi = null, _findSoft = new Set();
-// Index every searchable thing on the main paper: named wires, child instances, IO ports, and named
-// gates ($-prefixed synthetic names are skipped — not user-meaningful).
-function buildFindIndex() {
-    const items = [];
-    if (!labelIndex) { return items; }
-    // Index EVERY named wire SEGMENT (labelIndex.wires is keyed by name → one per net, so a net drawn
-    // as several fan-out segments would otherwise be findable only once). Browser-find locates every
-    // occurrence; so do we — each segment is a separate result you can cycle to.
-    for (const l of labelIndex.graph.getLinks()) {
-        const name = l.get('netname');
-        if (name) { items.push({ label: String(name), key: String(name).toLowerCase(), model: l, kind: 'net' }); }
-    }
-    for (const el of labelIndex.graph.getElements()) {
-        const celltype = el.get('celltype'), type = el.get('type');
-        let label = null, kind = null;
-        if (celltype) { label = el.get('label'); kind = 'instance'; }
-        else if (type === 'Input' || type === 'Output') { label = el.get('net'); kind = 'port'; }
-        else { const l = el.get('label'); if (l && !String(l).startsWith('$')) { label = l; kind = 'gate'; } }
-        if (label) { items.push({ label: String(label), key: String(label).toLowerCase(), model: el, kind }); }
-    }
-    return items;
-}
-function runFindQuery(raw) {
-    const q = raw.trim().toLowerCase();
-    if (!q) { _findMatches = []; _findIdx = -1; clearFindHighlight(); clearSoftHighlights(); updateFindCount(); return; }
-    _findMatches = _findItems.filter(it => it.key.includes(q))
-        .sort((a, b) => (a.key === q ? 0 : a.key.startsWith(q) ? 1 : 2) - (b.key === q ? 0 : b.key.startsWith(q) ? 1 : 2));
-    applySoftHighlights();                          // soft-highlight EVERY match (editor/browser style)...
-    if (_findMatches.length) { gotoFindMatch(0); }  // ...and focus the first
-    else { _findIdx = -1; clearFindHighlight(); updateFindCount(); }
-}
-// Soft highlight on every match (the focused one additionally gets sv-find-current). A plain class
-// toggle — no per-element filter — so it stays cheap even for a net with many fan-out segments.
-function clearSoftHighlights() { for (const el of _findSoft) { el.classList.remove('sv-find-match'); } _findSoft.clear(); }
-function applySoftHighlights() {
-    clearSoftHighlights();
-    if (!paper) { return; }
-    for (const it of _findMatches) {
-        const v = paper.findViewByModel(it.model);
-        if (v) { v.el.classList.add('sv-find-match'); _findSoft.add(v.el); }
-    }
-}
-function clearFindHighlight() { if (_findHi) { _findHi.classList.remove('sv-find-current'); _findHi = null; } }
-function gotoFindMatch(i) {
-    if (!_findMatches.length || !paper) { return; }
-    _findIdx = ((i % _findMatches.length) + _findMatches.length) % _findMatches.length;
-    const view = paper.findViewByModel(_findMatches[_findIdx].model);
-    clearFindHighlight();
-    if (view) {
-        _findHi = view.el; _findHi.classList.add('sv-find-current');
-        autoFit = false;                                 // user is navigating — don't auto-fit over them
-        if (paper.scale().sx < 0.5) { paper.scale(0.75); } // make the match readable if zoomed way out
-        centerOnView(paper, view);
-    }
-    updateFindCount();
-}
-// Center a cell view in the viewport (works for elements AND wires): shift the current translate by
-// the gap between the viewport centre and the view's current on-screen centre, then clamp.
+// ---- find (Ctrl+F): jump to a signal/instance/port by name. A reusable per-PAPER component, so each
+// subcircuit popup gets its OWN find (scoped to that popup), independent of the main page's. ----
+function rankKey(key, q) { return key === q ? 0 : key.startsWith(q) ? 1 : 2; }
+// Center a cell view in its paper's viewport (works for elements AND wires): shift the current
+// translate by the gap between the viewport centre and the view's on-screen centre, then clamp.
 function centerOnView(p, view) {
     const bb = view.getBBox();                           // paper coords (post-transform)
     const sz = p.getComputedSize(), t = p.translate();
     panTo(p, t.tx + sz.width / 2 - (bb.x + bb.width / 2), t.ty + sz.height / 2 - (bb.y + bb.height / 2));
 }
-function updateFindCount() {
-    const c = document.getElementById('sv-find-count');
-    if (c) { c.textContent = _findMatches.length ? `${_findIdx + 1}/${_findMatches.length}` : '0/0'; }
+// A find controller bound to ONE paper. getPaper/getGraph are functions: the main finder reads the
+// current (post-re-render) globals; a popup finder stays bound to its window. container() is where the
+// box lives. onGoto runs before centring (the main paper uses it to stop auto-fit).
+function makeFinder({ getPaper, getGraph, container, onGoto }) {
+    let box = null, input = null, countEl = null, items = [], matches = [], idx = -1, hi = null;
+    const soft = new Set();
+    function buildIndex() {
+        const g = getGraph(), out = [];
+        if (!g) { return out; }
+        // every named wire SEGMENT (a fan-out net is findable at each segment, browser-style)
+        for (const l of g.getLinks()) { const n = l.get('netname'); if (n) { out.push({ key: String(n).toLowerCase(), model: l }); } }
+        for (const el of g.getElements()) {
+            const celltype = el.get('celltype'), type = el.get('type');
+            let label = null;
+            if (celltype) { label = el.get('label'); }                                  // child instance
+            else if (type === 'Input' || type === 'Output') { label = el.get('net'); }   // IO port
+            else { const l = el.get('label'); if (l && !String(l).startsWith('$')) { label = l; } } // named gate
+            if (label) { out.push({ key: String(label).toLowerCase(), model: el }); }
+        }
+        return out;
+    }
+    const clearSoft = () => { for (const e of soft) { e.classList.remove('sv-find-match'); } soft.clear(); };
+    function applySoft() {
+        clearSoft(); const p = getPaper(); if (!p) { return; }
+        for (const it of matches) { const v = p.findViewByModel(it.model); if (v) { v.el.classList.add('sv-find-match'); soft.add(v.el); } }
+    }
+    const clearHi = () => { if (hi) { hi.classList.remove('sv-find-current'); hi = null; } };
+    const updateCount = () => { if (countEl) { countEl.textContent = matches.length ? `${idx + 1}/${matches.length}` : '0/0'; } };
+    function go(i) {
+        const p = getPaper(); if (!matches.length || !p) { return; }
+        idx = ((i % matches.length) + matches.length) % matches.length;
+        const view = p.findViewByModel(matches[idx].model);
+        clearHi();
+        if (view) {
+            hi = view.el; hi.classList.add('sv-find-current');
+            if (onGoto) { onGoto(); }
+            if (p.scale().sx < 0.5) { p.scale(0.75); }   // make the match readable if zoomed way out
+            centerOnView(p, view);
+        }
+        updateCount();
+    }
+    function run(raw) {
+        const q = raw.trim().toLowerCase();
+        if (!q) { matches = []; idx = -1; clearHi(); clearSoft(); updateCount(); return; }
+        matches = items.filter(it => it.key.includes(q)).sort((a, b) => rankKey(a.key, q) - rankKey(b.key, q));
+        applySoft();                                     // soft-highlight EVERY match...
+        if (matches.length) { go(0); } else { idx = -1; clearHi(); updateCount(); } // ...focus the first
+    }
+    function build() {
+        box = document.createElement('div'); box.className = 'sv-find';
+        box.innerHTML = '<input class="sv-find-input" type="text" placeholder="Find signal / instance…" spellcheck="false">'
+            + '<span class="sv-find-count">0/0</span>'
+            + '<button class="sv-find-nav codicon codicon-arrow-up" data-d="-1" title="Previous (Shift+Enter)"></button>'
+            + '<button class="sv-find-nav codicon codicon-arrow-down" data-d="1" title="Next (Enter)"></button>'
+            + '<button class="sv-find-close codicon codicon-close" title="Close (Esc)"></button>';
+        container().appendChild(box);
+        input = box.querySelector('.sv-find-input'); countEl = box.querySelector('.sv-find-count');
+        input.addEventListener('input', () => run(input.value));
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); go(idx + (e.shiftKey ? -1 : 1)); }
+            else if (e.key === 'Escape') { e.preventDefault(); close(); }
+        });
+        for (const b of box.querySelectorAll('.sv-find-nav')) { b.addEventListener('click', () => go(idx + Number(b.dataset.d))); }
+        box.querySelector('.sv-find-close').addEventListener('click', close);
+    }
+    function open() {
+        if (!box) { build(); }
+        else if (!box.isConnected) { container().appendChild(box); } // a re-render detaches the box → re-attach
+        items = buildIndex();
+        box.style.display = 'flex';
+        input.focus(); input.select();
+        run(input.value);
+    }
+    function close() { if (box) { box.style.display = 'none'; } clearHi(); clearSoft(); }
+    function next(back) { if (box && box.style.display !== 'none') { go(idx + (back ? -1 : 1)); } }
+    return { open, close, next };
 }
-function buildFindBox() {
-    _findBox = document.createElement('div');
-    _findBox.id = 'sv-find';
-    _findBox.innerHTML = '<input id="sv-find-input" type="text" placeholder="Find signal / instance…" spellcheck="false">'
-        + '<span id="sv-find-count">0/0</span>'
-        + '<button id="sv-find-prev" class="codicon codicon-arrow-up" title="Previous (Shift+Enter)"></button>'
-        + '<button id="sv-find-next" class="codicon codicon-arrow-down" title="Next (Enter)"></button>'
-        + '<button id="sv-find-close" class="codicon codicon-close" title="Close (Esc)"></button>';
-    document.getElementById('paper-container').appendChild(_findBox);
-    const input = _findBox.querySelector('#sv-find-input');
-    input.addEventListener('input', () => runFindQuery(input.value));
-    input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); gotoFindMatch(_findIdx + (e.shiftKey ? -1 : 1)); }
-        else if (e.key === 'Escape') { e.preventDefault(); closeFind(); }
-    });
-    _findBox.querySelector('#sv-find-next').addEventListener('click', () => gotoFindMatch(_findIdx + 1));
-    _findBox.querySelector('#sv-find-prev').addEventListener('click', () => gotoFindMatch(_findIdx - 1));
-    _findBox.querySelector('#sv-find-close').addEventListener('click', closeFind);
+// Main-page finder: tracks the current globals (so it survives a re-render) and stops the main paper's
+// auto-fit while you navigate.
+const mainFinder = makeFinder({
+    getPaper: () => paper, getGraph: () => labelIndex && labelIndex.graph,
+    container: () => document.getElementById('paper-container'), onGoto: () => { autoFit = false; },
+});
+// Ctrl+F / F3 act on the FOCUSED window — a subcircuit popup if focus is inside one (its finder is
+// stashed on the dialog content as __svFinder), else the main page.
+function activeFinder() {
+    const c = document.activeElement && document.activeElement.closest && document.activeElement.closest('.ui-dialog-content');
+    return (c && c.__svFinder) || mainFinder;
 }
-function openFind() {
-    if (!_findBox) { buildFindBox(); }
-    // A re-render (step-into / new schematic) resets #paper-container's innerHTML, detaching the box;
-    // re-attach it (its inner elements + listeners are preserved in the detached subtree).
-    else if (!_findBox.isConnected) { document.getElementById('paper-container').appendChild(_findBox); }
-    _findItems = buildFindIndex();
-    _findBox.style.display = 'flex';
-    const input = document.getElementById('sv-find-input');
-    input.focus(); input.select();
-    runFindQuery(input.value);
-}
-function closeFind() { if (_findBox) { _findBox.style.display = 'none'; } clearFindHighlight(); clearSoftHighlights(); }
-function findOpen() { return _findBox && _findBox.style.display !== 'none'; }
 document.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); openFind(); }
-    else if (e.key === 'F3' && findOpen()) { e.preventDefault(); gotoFindMatch(_findIdx + (e.shiftKey ? -1 : 1)); }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); activeFinder().open(); }
+    else if (e.key === 'F3') { e.preventDefault(); activeFinder().next(e.shiftKey); }
 });
 
 // suppress the native (VS Code) context menu inside the schematic webview
@@ -1405,7 +1415,13 @@ function setupPopupPaper(p) {
     // p.el = the .joint-paper container div; its parent is the jquery-ui dialog content
     // (gets class `ui-dialog-content` once the dialog is created on render:done).
     const content = p.el.parentElement;
-    if (content) { content.__svPaper = p; } // so the popup's export button can target this paper
+    if (content) {
+        content.__svPaper = p; // so the popup's export button can target this paper
+        // Each popup gets its OWN find, scoped to this popup's paper/graph (Ctrl+F routes here when
+        // focus is inside this dialog; see activeFinder). The box lives in the popup content.
+        content.__svFinder = makeFinder({ getPaper: () => p, getGraph: () => p.model, container: () => content });
+        p.once('render:done', () => addPopupFindButton(content));
+    }
     // initial fit (centered) once the dialog + child layout exist
     const fit = () => { const s = popupAvailSize(content, w, h); fitPaper(p, s.w, s.h); };
     p.once('render:done', fit);
@@ -1734,7 +1750,7 @@ function buildPngExport() {
 document.getElementById('zoom-in').addEventListener('click', () => zoomBy(1.25));
 document.getElementById('zoom-out').addEventListener('click', () => zoomBy(0.8));
 document.getElementById('zoom-fit').addEventListener('click', fitToView);
-document.getElementById('sv-find-btn')?.addEventListener('click', openFind);
+document.getElementById('sv-find-btn')?.addEventListener('click', () => mainFinder.open());
 document.getElementById('refresh').addEventListener('click', () => post({ type: 'refresh' }));
 document.getElementById('go-parent').addEventListener('click', () => post({ type: 'goToParent' }));
 document.getElementById('export').addEventListener('click', () => { _exportPaper = null; post({ type: 'export' }); });

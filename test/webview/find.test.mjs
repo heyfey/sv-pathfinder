@@ -10,7 +10,7 @@ await loadSchematic(page, 'fifo.digitaljs.json', { scopePath: 'tb.u_fifo', modul
 const r = await page.evaluate(() => {
     const fire = (key, opts = {}) => document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, ...opts }));
     const state = () => {
-        const box = document.getElementById('sv-find');
+        const box = document.querySelector('.sv-find');
         const cur = document.querySelector('.sv-find-current');
         let curName = null;
         if (cur) {
@@ -18,12 +18,12 @@ const r = await page.evaluate(() => {
             const m = id && window.__schematic.labelIndex.graph.getCell(id);
             curName = m ? (m.get('netname') || m.get('net') || m.get('label')) : null;
         }
-        return { open: !!box && getComputedStyle(box).display !== 'none', count: document.getElementById('sv-find-count')?.textContent, hasCurrent: !!cur, curName };
+        return { open: !!box && getComputedStyle(box).display !== 'none', count: document.querySelector('.sv-find-count')?.textContent, hasCurrent: !!cur, curName };
     };
 
     fire('f', { ctrlKey: true });                         // open find
     const opened = state();
-    const input = document.getElementById('sv-find-input');
+    const input = document.querySelector('.sv-find-input');
     const focused = document.activeElement === input;
     input.value = 'din'; input.dispatchEvent(new Event('input'));  // search "din"
     const t0 = window.__schematic.paper.translate();
@@ -41,8 +41,8 @@ console.log(JSON.stringify(r, null, 1));
 await loadSchematic(page, 'fifo.digitaljs.json', { scopePath: 'tb.u_fifo', moduleName: 'param_fifo' });
 const afterRerender = await page.evaluate(() => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, bubbles: true }));
-    const box = document.getElementById('sv-find');
-    const input = document.getElementById('sv-find-input');
+    const box = document.querySelector('.sv-find');
+    const input = document.querySelector('.sv-find-input');
     return { open: !!box && getComputedStyle(box).display !== 'none', inputFocusable: !!input && document.activeElement === input };
 });
 console.log('after re-render:', JSON.stringify(afterRerender));
@@ -50,8 +50,8 @@ console.log('after re-render:', JSON.stringify(afterRerender));
 // A net drawn as several fan-out segments must be findable at EACH segment (not deduped by name).
 const multi = await page.evaluate(() => {
     const segs = window.__schematic.labelIndex.graph.getLinks().filter(l => l.get('netname') === 'clk').length;
-    const inp = document.getElementById('sv-find-input'); inp.value = 'clk'; inp.dispatchEvent(new Event('input'));
-    const total = parseInt((document.getElementById('sv-find-count').textContent || '0/0').split('/')[1], 10);
+    const inp = document.querySelector('.sv-find-input'); inp.value = 'clk'; inp.dispatchEvent(new Event('input'));
+    const total = parseInt((document.querySelector('.sv-find-count').textContent || '0/0').split('/')[1], 10);
     return { segs, total, soft: document.querySelectorAll('.sv-find-match').length, cur: document.querySelectorAll('.sv-find-current').length };
 });
 console.log('clk segments:', JSON.stringify(multi));
@@ -61,7 +61,7 @@ console.log('clk segments:', JSON.stringify(multi));
 await page.evaluate(() => window.postMessage({ type: 'setValues', updates: [{ name: 'full', values: ['1'] }] }, '*'));
 await page.waitForTimeout(400);
 const valColour = await page.evaluate(() => {
-    const inp = document.getElementById('sv-find-input'); inp.value = 'full'; inp.dispatchEvent(new Event('input'));
+    const inp = document.querySelector('.sv-find-input'); inp.value = 'full'; inp.dispatchEvent(new Event('input'));
     const cur = document.querySelector('.sv-find-current');
     const line = cur && cur.querySelector('.connection');
     return { stroke: line ? getComputedStyle(line).stroke : null, hasGlow: cur ? getComputedStyle(cur).filter !== 'none' : false };
