@@ -68,6 +68,17 @@ const valColour = await page.evaluate(() => {
 });
 console.log('found valued wire:', JSON.stringify(valColour));
 
+// Selecting a found signal must be VISIBLE — the find glow must not mask the selection glow.
+const selVisible = await page.evaluate(() => {
+    const cur = document.querySelector('.sv-find-current');
+    if (!cur) { return { changed: false, accent: false }; }
+    const before = getComputedStyle(cur).filter;
+    cur.classList.add('sv-selected');                 // select the current find match
+    const after = getComputedStyle(cur).filter;
+    return { changed: before !== after, accent: after.includes('74, 156, 255') }; // host --sv-accent
+});
+console.log('select visible on found:', JSON.stringify(selVisible));
+
 const matchCount = parseInt((r.din.count || '0/0').split('/')[1], 10);
 const ok = report('find', [
     ['Ctrl+F opens the box + focuses input', r.opened.open && r.focused],
@@ -79,6 +90,7 @@ const ok = report('find', [
     ['Find still works after a re-render', afterRerender.open && afterRerender.inputFocusable],
     ['every wire segment is findable (multi-segment net not deduped)', multi.segs > 1 && multi.total > multi.segs],
     ['find highlight keeps the wire value colour (green), adds a glow', valColour.stroke === 'rgb(47, 179, 68)' && valColour.hasGlow],
+    ['selecting a found signal is visible (accent glow, not masked by find)', selVisible.changed && selVisible.accent],
     ['no page errors', !logs.some(l => l.startsWith('PAGEERROR'))],
 ], logs);
 await browser.close();

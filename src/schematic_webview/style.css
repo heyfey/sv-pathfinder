@@ -322,6 +322,18 @@ html, body {
 .djs .sv-find-current line.wire {
     stroke-width: 6px;
 }
+/* When a found signal is ALSO selected, show the SELECTION (accent) glow — otherwise the find glow
+ * masks it (same specificity, find is later in the cascade) and a click-to-select looks like nothing
+ * happened. The two-class selector outranks the single-class find rule, so selection wins here. */
+.djs .sv-find-current.sv-selected {
+    filter: drop-shadow(0 0 4px var(--sv-accent, var(--vscode-charts-blue)))
+            drop-shadow(0 0 2px var(--sv-accent, var(--vscode-charts-blue)));
+}
+.djs .sv-find-current.sv-selected [joint-selector="body"],
+.djs .sv-find-current.sv-selected rect.body, .djs .sv-find-current.sv-selected circle.body,
+.djs .sv-find-current.sv-selected polygon.body, .djs .sv-find-current.sv-selected path.body {
+    stroke: var(--sv-accent, var(--vscode-charts-blue));
+}
 
 /* dangling-net stub (sv-pathfinder.schematicShowDanglingNets): a declared-but-unconnected net,
  * shown as a dashed, muted, port-less label box so it reads as "this net exists but connects to
