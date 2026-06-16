@@ -9,9 +9,10 @@ import * as path from 'path';
 import * as os from 'os';
 import { DesignItem, NetlistItem, HierarchyTreeProvider, replaceFilePathIfNeeded, showTextDocumentLocation } from '../tree_view';
 import { resolveScope, scopeCacheKey, ScopeContext } from './scope_resolver';
-import { runYosys, SchematicPreset, getResolvedBackendName } from './yosys_runner';
+import { runYosys, SchematicPreset, getResolvedBackendName, isResolvedBackendLimited } from './yosys_runner';
 import { convertToDigitalJs } from './converter';
 import { findParentModuleScope } from './scope_nav';
+import { isNoYosysBackendError, limitedBackendWarning } from './backend_policy';
 import { FromWebviewMessage, ToWebviewMessage, ElementClickMessage, ContextActionMessage, ExportRequestMessage, ExportContentMessage, SourcePosition } from './messages';
 
 interface ShownSchematic {
@@ -29,6 +30,8 @@ export class SchematicViewProvider {
     private cache = new Map<string, any>(); // scopeCacheKey -> DigitalJS JSON
     private timestamp = -1;
     private valueTimer: NodeJS.Timeout | undefined;
+    private limitedBackendWarned = false; // one-time-per-session warning for the limited fallback
+    private static readonly SUPPRESS_LIMITED_KEY = 'sv-pathfinder.suppressLimitedBackendWarning';
 
     constructor(
         private readonly context: vscode.ExtensionContext,
@@ -97,11 +100,45 @@ export class SchematicViewProvider {
                 overview,
                 spacing,
                 backend: getResolvedBackendName(),
+                limited: isResolvedBackendLimited(),
             });
             // push current waveform values onto the fresh schematic
             this.debouncePushValues();
+            this.maybeWarnLimitedBackend();
         } catch (e: any) {
-            vscode.window.showErrorMessage(`sv-pathfinder schematic: ${e?.message ?? e}`);
+            this.showRenderError(e);
+        }
+    }
+
+    // Warn once per session when the schematic was rendered with the limited (yowasp) fallback, so a
+    // partial/incorrect render isn't mistaken for a bug in the design or this extension.
+    private async maybeWarnLimitedBackend() {
+        if (this.limitedBackendWarned || !isResolvedBackendLimited()) { return; }
+        if (this.context.globalState.get<boolean>(SchematicViewProvider.SUPPRESS_LIMITED_KEY, false)) { return; }
+        this.limitedBackendWarned = true;
+        const settings = 'Open Settings';
+        const suppress = "Don't show again";
+        const pick = await vscode.window.showWarningMessage(
+            limitedBackendWarning(getResolvedBackendName() ?? 'yowasp-yosys'), settings, suppress);
+        if (pick === settings) {
+            await vscode.commands.executeCommand('workbench.action.openSettings', 'sv-pathfinder.ossCadSuitePath');
+        } else if (pick === suppress) {
+            await this.context.globalState.update(SchematicViewProvider.SUPPRESS_LIMITED_KEY, true);
+        }
+    }
+
+    // Surface a render failure. The "no Yosys backend" case gets an actionable button to the setting
+    // that fixes it instead of a dead-end message.
+    private async showRenderError(e: any) {
+        const msg = `sv-pathfinder schematic: ${e?.message ?? e}`;
+        if (isNoYosysBackendError(e)) {
+            const settings = 'Open Settings';
+            const pick = await vscode.window.showErrorMessage(msg, settings);
+            if (pick === settings) {
+                await vscode.commands.executeCommand('workbench.action.openSettings', 'sv-pathfinder.ossCadSuitePath');
+            }
+        } else {
+            vscode.window.showErrorMessage(msg);
         }
     }
 

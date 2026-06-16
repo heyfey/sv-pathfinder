@@ -65,12 +65,33 @@ wires — rendered with [digitaljs](https://github.com/tilk/digitaljs).
   signal values at the cursor time (green = 1, red = 0, gray = x/undriven; `z` shown as `x`).
 - It is a read-only viewer (no editing/simulation of the schematic).
 
-Requires [Yosys](https://github.com/YosysHQ/yosys). The recommended setup is
-[OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build), which bundles Yosys with
-the [yosys-slang](https://github.com/povik/yosys-slang) SystemVerilog frontend — set
-`"sv-pathfinder.ossCadSuitePath"` to the installation directory. Without it, `yosys`
-from PATH (limited SystemVerilog support) or `pip install yowasp-yosys` (zero-install)
-are used as fallbacks for simple designs.
+### Set up Yosys (OSS CAD Suite)
+
+The schematic needs **Yosys + the `slang` SystemVerilog frontend**, which both ship in
+[OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build):
+
+1. Download the suite for your platform from the
+   [releases](https://github.com/YosysHQ/oss-cad-suite-build/releases) (Linux x64 is the tested
+   platform).
+2. Extract it, e.g. `tar xzf oss-cad-suite-linux-x64-YYYYMMDD.tgz`.
+3. Point the setting at the extracted **`oss-cad-suite`** folder (the one containing `bin/yosys`):
+   ```jsonc
+   // settings.json
+   "sv-pathfinder.ossCadSuitePath": "/path/to/oss-cad-suite"
+   ```
+4. Open a schematic to verify; the RTL / Gate-Level toggle works once it's set.
+
+**Backend tiers (read honestly):**
+- **OSS CAD Suite / any slang-capable Yosys** — full SystemVerilog via `read_slang`. Recommended and
+  supported.
+- **`yowasp-yosys`** (`pip install yowasp-yosys`) — a zero-install WASM **fallback with major
+  SystemVerilog gaps**; many designs render incompletely or fail to elaborate. The schematic shows a
+  "limited engine" badge and warns once when it falls back to this. Such failures are a limitation of
+  the fallback toolchain, not your design or this extension.
+- A plain `yosys` on PATH **without** the slang frontend is **not used** (Verilog-only).
+
+If no usable Yosys is found, the schematic error offers a button to open the
+`sv-pathfinder.ossCadSuitePath` setting.
 
 ## Waveform Integration
 

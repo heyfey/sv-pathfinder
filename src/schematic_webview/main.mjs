@@ -820,6 +820,7 @@ function loadSchematic(msg) {
     currentScopePath = msg.scopePath; // root for popup hierarchical titles
     currentMainName = msg.moduleName;
     currentBackend = msg.backend || '';
+    updateBackendBadge(!!msg.limited, currentBackend);
     if (_mainTab) { _mainTab.querySelector('.sv-tab-name').textContent = currentMainName; }
     spacing = SPACING[msg.spacing] || SPACING.compact; // density tier for this render (read by the patches below)
     _wireLabelDims.clear();    // net-label sizes are re-recorded as this design's wires build (at current tier)
@@ -932,6 +933,23 @@ let baseStatus = ''; // persistent status (load / value count); hover overlays i
 function setStatus(text) {
     baseStatus = text;
     document.getElementById('status-text').textContent = text;
+}
+
+// Persistent "limited engine" badge in the status bar when the schematic was produced by the limited
+// (yowasp) fallback — so an incomplete render is recognizably the fallback's doing, not a bug.
+function updateBackendBadge(limited, backendName) {
+    let badge = document.getElementById('sv-backend-badge');
+    if (!limited) { if (badge) { badge.remove(); } return; }
+    if (!badge) {
+        badge = document.createElement('span');
+        badge.id = 'sv-backend-badge';
+        badge.className = 'sv-backend-badge';
+        const status = document.getElementById('status');
+        status.insertBefore(badge, document.getElementById('status-text'));
+    }
+    badge.innerHTML = '<i class="codicon codicon-warning"></i> limited engine';
+    badge.title = `Schematic rendered with ${backendName || 'yowasp-yosys'} — a limited fallback with `
+        + 'major SystemVerilog gaps. Install OSS CAD Suite and set sv-pathfinder.ossCadSuitePath for full support.';
 }
 
 // One-line identity of a hovered model, shown in the status bar.

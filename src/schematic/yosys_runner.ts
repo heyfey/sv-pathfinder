@@ -10,6 +10,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { ScopeContext } from './scope_resolver';
 import { absolutizeFlist } from '../flist';
+import { NoYosysBackendError, noBackendMessage } from './backend_policy';
 
 export type SchematicPreset = 'rtl' | 'gls';
 
@@ -24,9 +25,13 @@ interface Backend {
     command: string;
     prelude: string;   // e.g. "plugin -i slang; "
     slang: boolean;    // read_slang available?
+    limited: boolean;  // lacks slang (yowasp) → major SystemVerilog gaps
 }
 
 let cachedBackend: Backend | null | undefined; // undefined = not probed yet
+// Set by findBackend(): a plain Yosys was seen on PATH but rejected for lacking the slang frontend.
+// Used to tailor the "no backend" message so the user understands why their yosys "isn't detected".
+let sawYosysWithoutSlang = false;
 
 function quote(p: string): string {
     return p.includes(' ') ? `"${p}"` : p;
@@ -47,9 +52,13 @@ async function probeCommand(cmd: string, args: string[]): Promise<boolean> {
     });
 }
 
-// Resolve the yosys binary: explicit setting > OSS CAD Suite path setting > PATH.
+// Resolve the yosys backend. Policy: prefer Yosys + the slang frontend (OSS CAD Suite path, or a PATH
+// yosys that carries slang). A plain Yosys WITHOUT slang is NOT used — its Verilog-only read_verilog
+// makes failures look like our bug. The sole non-slang fallback is yowasp-yosys (WASM), flagged
+// `limited`.
 async function findBackend(): Promise<Backend | null> {
     if (cachedBackend !== undefined) { return cachedBackend; }
+    sawYosysWithoutSlang = false;
     const config = vscode.workspace.getConfiguration('sv-pathfinder');
     const candidates: string[] = [];
     const ossPath = config.get<string>('ossCadSuitePath', '');
@@ -63,16 +72,16 @@ async function findBackend(): Promise<Backend | null> {
         if (!await probeCommand(cmd, ['--version'])) { continue; }
         // slang.so ships in OSS CAD Suite but is NOT auto-registered (Spike 1)
         if (await probeCommand(cmd, ['-p', 'plugin -i slang'])) {
-            cachedBackend = { name: `yosys+slang (${cmd})`, command: cmd, prelude: 'plugin -i slang; ', slang: true };
+            cachedBackend = { name: `yosys+slang (${cmd})`, command: cmd, prelude: 'plugin -i slang; ', slang: true, limited: false };
             return cachedBackend;
         }
-        cachedBackend = { name: `yosys native (${cmd})`, command: cmd, prelude: '', slang: false };
-        return cachedBackend;
+        // A Yosys without slang would only do limited Verilog — deliberately not used (see policy).
+        sawYosysWithoutSlang = true;
     }
-    // WASM fallback: yowasp-yosys CLI (pip install yowasp-yosys); native frontend only
+    // Sole non-slang fallback: yowasp-yosys CLI (pip install yowasp-yosys). Flagged limited.
     for (const cmd of ['yowasp-yosys', path.join(os.homedir(), '.local', 'bin', 'yowasp-yosys')]) {
         if (await probeCommand(cmd, ['--version'])) {
-            cachedBackend = { name: `yowasp-yosys WASM (${cmd})`, command: cmd, prelude: '', slang: false };
+            cachedBackend = { name: `yowasp-yosys WASM (${cmd})`, command: cmd, prelude: '', slang: false, limited: true };
             return cachedBackend;
         }
     }
@@ -89,6 +98,12 @@ export function resetBackendCache(): void {
 // e.g. when another extension (TerosHDL) puts a different `yosys` on PATH and it gets picked up.
 export function getResolvedBackendName(): string | undefined {
     return cachedBackend ? cachedBackend.name : undefined;
+}
+
+// True when the resolved backend lacks the slang frontend (the limited yowasp fallback). The UI uses
+// this to warn the user and badge the schematic so a limited render isn't mistaken for our bug.
+export function isResolvedBackendLimited(): boolean {
+    return !!cachedBackend && cachedBackend.limited;
 }
 
 // Build the read + elaborate + lowering script (Spike 1 presets).
@@ -134,9 +149,7 @@ function buildScript(backend: Backend, ctx: ScopeContext, preset: SchematicPrese
 export async function runYosys(ctx: ScopeContext, preset: SchematicPreset, opts?: { showDangling?: boolean }): Promise<YosysResult> {
     const backend = await findBackend();
     if (!backend) {
-        throw new Error(
-            'No Yosys found. Install OSS CAD Suite (bundles Yosys + the slang frontend) and set ' +
-            '"sv-pathfinder.ossCadSuitePath", or put yosys on PATH, or `pip install yowasp-yosys`.');
+        throw new NoYosysBackendError(noBackendMessage(sawYosysWithoutSlang));
     }
     if (!backend.slang && ctx.dotF) {
         // native read_verilog can't consume .f command files; warn but try the raw file list

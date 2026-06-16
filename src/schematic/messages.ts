@@ -66,6 +66,7 @@ export interface LoadSchematicMessage {
     overview: 'minimap' | 'scrollbars'; // main-paper overview style (popups always use scrollbars)
     spacing: 'compact' | 'comfortable' | 'spacious'; // layout density (ELK spacing + box padding)
     backend?: string;        // resolved yosys backend name (for diagnostics on a render failure)
+    limited?: boolean;       // backend lacks the slang frontend (yowasp) → show a "limited engine" badge
 }
 
 export interface SetValuesMessage {

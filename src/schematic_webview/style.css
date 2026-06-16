@@ -466,6 +466,21 @@ html, body {
 
 /* Find box (Ctrl+F): a floating search widget at the top-right of a canvas. One per paper — the main
  * #paper-container and each subcircuit popup's content (made a positioning context below). */
+/* "limited engine" status-bar badge: shown when the schematic was produced by the limited (yowasp)
+   fallback. Amber so it reads as a caution without being an error. */
+.sv-backend-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-right: 10px;
+    padding: 0 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    color: var(--vscode-editorWarning-foreground, #cca700);
+    border: 1px solid var(--vscode-editorWarning-foreground, #cca700);
+}
+.sv-backend-badge .codicon { font-size: 12px; }
+
 .sv-find {
     position: absolute;
     top: 8px;
