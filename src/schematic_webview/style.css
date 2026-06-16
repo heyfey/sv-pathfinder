@@ -221,6 +221,14 @@ html, body {
     fill: var(--vscode-editor-foreground, #cccccc);
 }
 
+/* gate decorations drawn as paths: the clock-edge marker (>) on flip-flop / memory clk ports and the
+ * mux's selected-input arrow. digitaljs strokes these 'black', which is invisible on the dark gate
+ * body — recolor to the theme foreground so they're visible in both light and dark themes. */
+.djs .joint-cell path.decor,
+.djs .joint-cell .decor {
+    stroke: var(--vscode-editor-foreground, #cccccc);
+}
+
 /* live value annotation text: under each child-instance port name (.iovalue, also the boxed IO
  * ports) and under each wire net name (.wirevalue). Small, monospace; blank when there's no
  * waveform value. The fill is set per-node in JS to match the signal's wire colour (high/low/

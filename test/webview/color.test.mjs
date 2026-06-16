@@ -12,7 +12,13 @@ const r = await page.evaluate(() => {
     const fillOf = (m, sel) => { const v = paper.findViewByModel(m); const b = v && v.el.querySelector(sel); return b ? getComputedStyle(b).fill : null; };
     const sub = g.getElements().find(e => e.get('type') === 'Subcircuit');
     const gate = g.getElements().find(e => !['Subcircuit', 'Input', 'Output'].includes(e.get('type')));
-    return { subFill: fillOf(sub, '[joint-selector="body"]'), gateFill: fillOf(gate, '[joint-selector="body"]') };
+    // gate decorations (clock-edge '>' on Dff clk ports, mux select arrow) must be recoloured off
+    // black so they show on the dark body — sample one with actual path data.
+    const decor = [...paper.el.querySelectorAll('path.decor')].find(d => d.getAttribute('d'));
+    return {
+        subFill: fillOf(sub, '[joint-selector="body"]'), gateFill: fillOf(gate, '[joint-selector="body"]'),
+        decorStroke: decor ? getComputedStyle(decor).stroke : null,
+    };
 });
 console.log('FILLS:', JSON.stringify(r));
 
@@ -29,6 +35,7 @@ console.log('WIRE full=1:', JSON.stringify(wire));
 const green = 'rgb(47, 179, 68)';
 const ok = report('color', [
     ['instance body tinted (differs from gate body)', !!r.subFill && r.subFill !== r.gateFill],
+    ['gate decoration (clock/mux) recoloured off black', !!r.decorStroke && r.decorStroke !== 'rgb(0, 0, 0)'],
     ['driven full=1 -> green wire', wire.sig === '1' && wire.stroke === green],
     ['no page errors', !logs.some(l => l.startsWith('PAGEERROR'))],
 ], logs);
