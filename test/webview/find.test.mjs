@@ -47,6 +47,15 @@ const afterRerender = await page.evaluate(() => {
 });
 console.log('after re-render:', JSON.stringify(afterRerender));
 
+// A net drawn as several fan-out segments must be findable at EACH segment (not deduped by name).
+const multi = await page.evaluate(() => {
+    const segs = window.__schematic.labelIndex.graph.getLinks().filter(l => l.get('netname') === 'clk').length;
+    const inp = document.getElementById('sv-find-input'); inp.value = 'clk'; inp.dispatchEvent(new Event('input'));
+    const total = parseInt((document.getElementById('sv-find-count').textContent || '0/0').split('/')[1], 10);
+    return { segs, total };
+});
+console.log('clk segments:', JSON.stringify(multi));
+
 const matchCount = parseInt((r.din.count || '0/0').split('/')[1], 10);
 const ok = report('find', [
     ['Ctrl+F opens the box + focuses input', r.opened.open && r.focused],
@@ -56,6 +65,7 @@ const ok = report('find', [
     ['navigating pans the viewport', r.panned || matchCount === 1],
     ['Esc closes + clears highlight', !r.closed.open && !r.closed.hasCurrent],
     ['Find still works after a re-render', afterRerender.open && afterRerender.inputFocusable],
+    ['every wire segment is findable (multi-segment net not deduped)', multi.segs > 1 && multi.total > multi.segs],
     ['no page errors', !logs.some(l => l.startsWith('PAGEERROR'))],
 ], logs);
 await browser.close();

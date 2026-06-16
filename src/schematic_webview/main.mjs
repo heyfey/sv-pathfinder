@@ -1168,7 +1168,13 @@ let _findBox = null, _findItems = [], _findMatches = [], _findIdx = -1, _findHi 
 function buildFindIndex() {
     const items = [];
     if (!labelIndex) { return items; }
-    for (const [name, w] of Object.entries(labelIndex.wires)) { items.push({ label: name, key: name.toLowerCase(), model: w, kind: 'net' }); }
+    // Index EVERY named wire SEGMENT (labelIndex.wires is keyed by name → one per net, so a net drawn
+    // as several fan-out segments would otherwise be findable only once). Browser-find locates every
+    // occurrence; so do we — each segment is a separate result you can cycle to.
+    for (const l of labelIndex.graph.getLinks()) {
+        const name = l.get('netname');
+        if (name) { items.push({ label: String(name), key: String(name).toLowerCase(), model: l, kind: 'net' }); }
+    }
     for (const el of labelIndex.graph.getElements()) {
         const celltype = el.get('celltype'), type = el.get('type');
         let label = null, kind = null;
