@@ -30,6 +30,7 @@ export function activate(context: vscode.ExtensionContext) {
 		manageCheckboxStateManually: false,
 		canSelectMany: true,
 	});
+	hierarchyProvider.setHierarchyTreeView(hierarchyView); // for reveal-when-visible
 
 	const moduleInstancesProvider = new ModuleInstancesTreeProvider();
 	const moduleInstancesView = vscode.window.createTreeView('moduleInstancesView', {
@@ -99,22 +100,24 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.selectDesign', async (e) => {
 		await designProvider.selectDesign(e);
-		hierarchyView.reveal(e.lastContext?.element, { select: true, focus: false, expand: 1 });
+		hierarchyProvider.revealIfVisible(e.lastContext?.element);
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.gotoDefinition', async (e) => {
 		const element = await hierarchyProvider.gotoDefinition(e);
-		// If called from modeuleInstancesView, reveal the coresponding scope in hierarchyView
-		if (element && e.contextValue === 'instanceItem') {
-			hierarchyView.reveal(element, { select: true, focus: false, expand: 1 });
+		// If called from moduleInstancesView, reveal the corresponding scope in hierarchyView (only
+		// when that view is open — never force it open).
+		if (e.contextValue === 'instanceItem') {
+			hierarchyProvider.revealIfVisible(element);
 		}
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.gotoInstantiation', async (e) => {
 		const element = await hierarchyProvider.gotoInstantiation(e);
-		// If called from modeuleInstancesView, reveal the coresponding scope in hierarchyView
-		if (element && e.contextValue === 'instanceItem') {
-			hierarchyView.reveal(element, { select: true, focus: false, expand: 1 });
+		// If called from moduleInstancesView, reveal the corresponding scope in hierarchyView (only
+		// when that view is open — never force it open).
+		if (e.contextValue === 'instanceItem') {
+			hierarchyProvider.revealIfVisible(element);
 		}
 	}));
 
@@ -141,16 +144,14 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.goBack', async (e) => {
 		const element = await hierarchyProvider.goBack();
-		if (element) {
-			hierarchyView.reveal(element, { select: true, focus: false, expand: 1 });
-		}
+		// back/forward change the active scope even when the hierarchy view is closed; only reveal
+		// when it's open (don't force it open).
+		hierarchyProvider.revealIfVisible(element);
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.goForward', async (e) => {
 		const element = await hierarchyProvider.goForward();
-		if (element) {
-			hierarchyView.reveal(element, { select: true, focus: false, expand: 1 });
-		}
+		hierarchyProvider.revealIfVisible(element);
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.selectInstance', (e) => {

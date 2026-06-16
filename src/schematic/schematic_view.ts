@@ -268,6 +268,22 @@ export class SchematicViewProvider {
         }
     }
 
+    // The scope whose source we just navigated to — activate it so the editor value annotation
+    // follows (and back/forward includes the jump). A child-instance box (subcircuit) activates that
+    // child's scope; anything else (wire/port/gate) lives in the currently-rendered scope, so we
+    // activate that. activateScope reveals in the tree only if that view is open.
+    private async activateScopeForContext(msg: ContextActionMessage) {
+        const shown = this.current;
+        if (!shown) { return; }
+        let scope: NetlistItem | undefined = shown.instance;
+        if (msg.kind === 'subcircuit') {
+            const relPath = [...(msg.path ?? []), msg.leafName].filter(Boolean).join('.');
+            const fullName = [shown.ctx.instancePath, relPath].filter(Boolean).join('.');
+            scope = await shown.instance.findChild(relPath, shown.design) ?? await shown.design.findTreeItem(fullName);
+        }
+        if (scope) { await this.hierarchyProvider.activateScope(scope); }
+    }
+
     // Right-click context-menu actions. Reuses the existing tree commands by resolving the
     // clicked element back to a NetlistItem (findTreeItem on its full hierarchical name).
     private async handleContextAction(msg: ContextActionMessage) {
@@ -302,11 +318,19 @@ export class SchematicViewProvider {
             case 'gotoSource':
                 // reuse the precise source nav (Yosys source_positions → declaration fallback)
                 await this.handleElementClick({ ...msg, type: 'elementClick', action: 'source' } as ElementClickMessage);
+                await this.activateScopeForContext(msg); // set active scope so editor value annotation follows
                 return;
             case 'gotoDefinition': {
-                if (msg.kind === 'subcircuit' && msg.celltype) { await this.gotoModuleDefinition(msg.celltype); return; }
+                if (msg.kind === 'subcircuit' && msg.celltype) {
+                    await this.gotoModuleDefinition(msg.celltype);
+                    await this.activateScopeForContext(msg); // activate the child instance's scope
+                    return;
+                }
                 const item = await shown.design.findTreeItem(fullName);
-                if (item) { await vscode.commands.executeCommand('sv-pathfinder.gotoDefinition', item); }
+                if (item) {
+                    await vscode.commands.executeCommand('sv-pathfinder.gotoDefinition', item); // sets active scope
+                    this.hierarchyProvider.revealIfVisible(item);                                // follow if the tree is open
+                }
                 return;
             }
             case 'addToWaveform': {

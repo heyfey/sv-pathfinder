@@ -1523,6 +1523,9 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
     private treeData: NetlistItem[] = [];
 
     private activeScopeStatusBarItem: vscode.StatusBarItem;
+    // The hierarchy TreeView is created AFTER this provider (it needs the provider), so it's injected
+    // later via setHierarchyTreeView. Used only to reveal the active scope WHEN the view is open.
+    private hierarchyTreeView: vscode.TreeView<NetlistItem> | undefined;
 
     constructor(
         public readonly driversView: vscode.TreeView<vscode.TreeItem>,
@@ -1531,6 +1534,28 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         public readonly loadsTreeProvider: DriversLoadsTreeProvider,
     ) {
         this.activeScopeStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 97);
+    }
+
+    public setHierarchyTreeView(view: vscode.TreeView<NetlistItem>) {
+        this.hierarchyTreeView = view;
+    }
+
+    // Reveal+select an element in the hierarchy tree ONLY if that view is currently open. Revealing
+    // when the view is closed would force it open (intrusive when navigating from the schematic);
+    // active-scope changes and back/forward must still work in that case — they just don't reveal.
+    public revealIfVisible(element: NetlistItem | undefined) {
+        if (element && this.hierarchyTreeView?.visible) {
+            this.hierarchyTreeView.reveal(element, { select: true, focus: false, expand: 1 });
+        }
+    }
+
+    // Set the active scope from an external navigator (the schematic) so the editor value annotation
+    // follows: set it active (fires onDidChangeActiveInstance), record history so back/forward
+    // includes the jump, and reveal in the tree only if it's open.
+    public async activateScope(element: NetlistItem) {
+        const changed = await this.setActiveInstance(element);
+        if (changed) { await this.setContextForGoBackOrForward(element, 'gotoDefinition', false); }
+        this.revealIfVisible(element);
     }
 
     private _onDidChangeTreeData: vscode.EventEmitter<NetlistItem | undefined | null | void> = new vscode.EventEmitter<NetlistItem | undefined | null | void>();
@@ -1678,13 +1703,14 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         this.loadsTreeProvider.setDriversLoadsData(element.loads, this.loadsView);
     }
 
-    private async setActiveInstance(element: NetlistItem) {
-        if (!this.activeDesign) { return; }
+    private async setActiveInstance(element: NetlistItem): Promise<boolean> {
+        if (!this.activeDesign) { return false; }
 
         const hasChange = await this.activeDesign.setActiveInstance(element);
-        if (!hasChange) { return; }
+        if (!hasChange) { return false; }
         this.activeScopeStatusBarItem.text = 'Active scope: ' + this.activeDesign.getActiveScope();
         this._onDidChangeActiveInstance.fire(this.activeDesign.getActiveInstance());
+        return true;
     }
 
     async goBack() {
