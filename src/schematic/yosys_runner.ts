@@ -120,9 +120,12 @@ function buildScript(backend: Backend, ctx: ScopeContext, preset: SchematicPrese
         return common + `synth -top ${ctx.moduleName} -noabc; opt_clean; write_json -compat-int ${quote(outJson)}`;
     }
     // RTL-structural (validated): proc -> coarse cells; memory_collect merges
-    // $memrd/$memwr_v2 into $mem_v2 (converter requirement); module-keep stops
-    // opt_clean from deleting child instances whose outputs are unused.
-    return common + `proc; memory_collect; setattr -mod -set keep 1; opt_clean; write_json -compat-int ${quote(outJson)}`;
+    // $memrd/$memwr_v2 into $mem_v2 (converter requirement). Two keeps stop opt_clean from deleting
+    // things a structural view must still show: module-keep preserves child INSTANCES whose outputs
+    // are unused; the $mem keep preserves inferred-memory cells whose read-output is unused at this
+    // elaboration (module-keep only covers instances, not $mem cells — without it, isolating a scope
+    // as top silently drops memories the rest of the design reads, e.g. a RAM bank).
+    return common + `proc; memory_collect; setattr -mod -set keep 1; setattr -set keep 1 t:$mem*; opt_clean; write_json -compat-int ${quote(outJson)}`;
 }
 
 export async function runYosys(ctx: ScopeContext, preset: SchematicPreset): Promise<YosysResult> {
