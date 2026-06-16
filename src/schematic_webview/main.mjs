@@ -492,7 +492,12 @@ function addZoomTooltips(div) {
     const root = div && div.get ? div.get(0) : null;
     if (!root) { return; }
     for (const b of root.querySelectorAll('.btn-group .btn')) {
-        const zin = (b.textContent || '').trim() === '+';
+        // Only digitaljs's native zoom buttons (text '+' / '–'). Skip our own find/export
+        // buttons (they carry a codicon, not +/- text) so we don't clobber their icons — and
+        // stay idempotent: an already-iconified zoom button has no +/- text, so it's skipped.
+        const txt = (b.textContent || '').trim();
+        if (txt !== '+' && txt !== '–' && txt !== '-') { continue; }
+        const zin = txt === '+';
         b.title = zin ? 'Zoom in' : 'Zoom out';
         b.innerHTML = `<i class="codicon codicon-zoom-${zin ? 'in' : 'out'}"></i>`;
     }

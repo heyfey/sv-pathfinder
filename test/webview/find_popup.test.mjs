@@ -17,6 +17,10 @@ const r = await page.evaluate(() => {
     const content = document.querySelector('.ui-dialog-content');
     const hasFinder = !!(content && content.__svFinder);
     const findBtn = !!(content && content.querySelector('.sv-popup-find'));
+    // The Find button must show the search glyph — NOT get clobbered into a zoom icon by the
+    // zoom-tooltip pass that iconifies the popup's +/- buttons. (regression)
+    const findIcon = content && content.querySelector('.sv-popup-find i.codicon');
+    const findIsSearch = !!(findIcon && findIcon.classList.contains('codicon-search') && !findIcon.classList.contains('codicon-zoom-out'));
 
     // open the POPUP's find and search a net inside it
     content.__svFinder.open();
@@ -30,12 +34,13 @@ const r = await page.evaluate(() => {
     const minp = mainBox.querySelector('.sv-find-input'); minp.value = 'clk'; minp.dispatchEvent(new Event('input'));
     const mainTotal = parseInt((mainBox.querySelector('.sv-find-count').textContent || '0/0').split('/')[1], 10);
 
-    return { hasFinder, findBtn, popTotal, popHi, mainTotal, boxes: document.querySelectorAll('.sv-find').length };
+    return { hasFinder, findBtn, findIsSearch, popTotal, popHi, mainTotal, boxes: document.querySelectorAll('.sv-find').length };
 });
 console.log(JSON.stringify(r));
 
 const ok = report('find_popup', [
     ['popup has its own finder + Find button', r.hasFinder && r.findBtn],
+    ['popup Find button shows the search glyph (not clobbered to zoom-out)', r.findIsSearch],
     ['popup find matches + highlights inside the popup', r.popTotal > 0 && r.popHi],
     ['main + popup finds coexist, each its own scope', r.boxes >= 2 && r.mainTotal > 0 && r.mainTotal !== r.popTotal],
     ['no page errors', !logs.some(l => l.startsWith('PAGEERROR'))],
