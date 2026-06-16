@@ -175,6 +175,12 @@ export async function runYosys(ctx: ScopeContext, preset: SchematicPreset): Prom
         const yosysJson = JSON.parse(await fs.readFile(outJson, 'utf8'));
         return { yosysJson, backend: backend.name, log };
     } finally {
-        fs.rm(tmpDir, { recursive: true, force: true }).catch(() => { });
+        // Debugging aid: set SV_PATHFINDER_KEEP_SCHEMATIC_JSON to keep the generated Yosys JSON
+        // (e.g. to inspect why a cell/instance isn't rendering) instead of deleting the temp dir.
+        if (process.env.SV_PATHFINDER_KEEP_SCHEMATIC_JSON) {
+            console.warn(`sv-pathfinder schematic: kept generated Yosys JSON at ${outJson}`);
+        } else {
+            fs.rm(tmpDir, { recursive: true, force: true }).catch(() => { });
+        }
     }
 }
