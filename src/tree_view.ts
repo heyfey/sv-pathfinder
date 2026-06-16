@@ -275,12 +275,13 @@ export class NetlistItem extends vscode.TreeItem {
         if (this.children.length === 0) { return; }
         // Assume children are already loaded
         for (const child of this.children) {
-            if (child.contextValue === 'varItem' && child.type !== 'parameter') {
-                let parts: string[] = [];
-                if (typeof child.description === 'string') {
-                    parts = child.description.split('=');
-                }
-                child.description = parts[0].trim();
+            // Strip any "= value" annotation back to the base name. Only touch string descriptions:
+            // a var that was never annotated has an undefined description, and splitting that yields
+            // an empty array whose [0] is undefined -> `.trim()` would throw (crashed go-to-source
+            // from the schematic, which resets the previously-active scope).
+            if (child.contextValue === 'varItem' && child.type !== 'parameter'
+                && typeof child.description === 'string') {
+                child.description = child.description.split('=')[0].trim();
             }
         }
     }
