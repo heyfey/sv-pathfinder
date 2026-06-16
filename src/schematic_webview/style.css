@@ -240,6 +240,17 @@ html, body {
     pointer-events: none;
 }
 
+/* transient flash on nets that transition AT the cursor (value change is what designers chase): a
+ * brightness pulse on the wire line that auto-fades. Deliberately a different effect from the accent
+ * drop-shadow glow that hover/select use, so the two channels never look the same. */
+@keyframes sv-flash {
+    0%   { filter: brightness(2.6); }
+    100% { filter: none; }
+}
+.djs .joint-link.sv-changed .connection {
+    animation: sv-flash 0.65s ease-out;
+}
+
 /* read-only viewer: hide the box zoom (🔍) affordance; child instances open via
  * right-click → Expand. (Wire value tooltips are on .joint-link, not .joint-cell.) */
 .djs .joint-cell .tooltip { display: none; }

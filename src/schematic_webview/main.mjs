@@ -94,10 +94,11 @@ cells.IOView.prototype._updateIoValue = function () {
     const dir = this.model._portDirection; // 'out' for Input (drives net), 'in' for Output (reads)
     const sigs = this.model.get(dir === 'out' ? 'outputSignals' : 'inputSignals');
     const sig = sigs && sigs[dir];
-    const t = valueText(this.model.get('net'), sig);
+    const net = this.model.get('net');
+    const t = valueText(net, sig);
     node.textContent = t;
-    node.style.display = t ? 'inline' : 'none';          // JointJS display:none-s empty text
-    node.style.fill = _valuePalette[signalCategory(sig)]; // match the wire colour
+    node.style.display = t ? 'inline' : 'none';            // JointJS display:none-s empty text
+    node.style.fill = _valuePalette[colorCategory(net)];  // x/z-aware colour from the cursor value
     // caption under the box, centred to it (box-local coords; origin at the box top-left)
     const sz = this.model.size();
     node.setAttribute('x', sz.width / 2);
@@ -218,17 +219,19 @@ cells.SubcircuitView.prototype._updatePortSignals = function (dir) {
         : dir === 'out' ? m.get('outputSignals')
         : Object.assign({}, m.get('inputSignals'), m.get('outputSignals'));
     for (const port in sigs) {
-        // align the port circle with VaporView: any x bit ⇒ x colour (digitaljs only does all-x)
-        if (signalCategory(sigs[port]) === 'undef') { this._applyPortAttrs(port, this.attrs.signal.undef); }
+        const netname = this._portNetsCache[port];
+        const cat = colorCategory(netname); // x/z-aware colour from the connected net's cursor value
+        // recolour the port circle to match (digitaljs's own palette can't express x/z/calm-0)
+        this._applyPortAttrs(port, { port: { stroke: _valuePalette[cat] } });
         const cache = this._portElementsCache[port];
         const node = cache && cache.portSelectors && cache.portSelectors.iovalue;
         if (!node) { continue; }
-        const t = valueText(this._portNetsCache[port], sigs[port]);
+        const t = valueText(netname, sigs[port]);
         node.textContent = t;
         // JointJS hides a text node whose `text` attr is empty (display:none); we set textContent
         // directly, so force display back on when there's a value (and off when blank).
         node.style.display = t ? 'inline' : 'none';
-        node.style.fill = _valuePalette[signalCategory(sigs[port])]; // match the wire colour
+        node.style.fill = _valuePalette[cat]; // value text matches the port/wire colour
     }
 };
 
@@ -298,16 +301,18 @@ const _origWireUpdateSignal = cells.WireView.prototype._updateSignal;
 cells.WireView.prototype._updateSignal = function () {
     _origWireUpdateSignal.apply(this, arguments);
     const sig = this.model.get('signal');
-    // Align the line with VaporView: ANY x bit ⇒ x colour. digitaljs only treats an ALL-x net as
-    // undef, so a partially-x bus would stay a defined (blue) line — override it to undef here.
-    if (sig && signalCategory(sig) === 'undef') { this._applyAttrs(this.attrs.signal.undef); }
+    const netname = this.model.get('netname');
+    // Colour from the RAW cursor value (x/z-aware — digitaljs/3vl can't tell z from x, and digitaljs
+    // only treats an ALL-x net as undef). Override the line stroke with our category colour.
+    const cat = colorCategory(netname);
+    this._applyAttrs({ line: { stroke: _valuePalette[cat] } });
     const node = this.el.querySelector('.wirevalue');
     if (!node) { return; }
-    const t = valueText(this.model.get('netname'), sig);
+    const t = valueText(netname, sig);
     node.textContent = t;
     // JointJS hides an empty-text node (display:none); force it back on when there's a value.
     node.style.display = t ? 'inline' : 'none';
-    node.style.fill = _valuePalette[signalCategory(sig)]; // match this wire's line colour
+    node.style.fill = _valuePalette[cat]; // value text matches the line colour
 };
 const _origElkLayout = ELK.prototype.layout;
 ELK.prototype.layout = function (graph, opts) {
@@ -532,15 +537,21 @@ function cssVar(name, fallback) {
 // signal value -> color, shared by the wire LINE stroke AND the value TEXT fill (ports, wires, IO
 // boxes) so the annotated value reads in the same color as its wire. Seeded with the theme
 // defaults; applyWireValuePalette() refreshes from the live CSS vars on load.
-let _valuePalette = { high: '#2fb344', low: '#f14c4c', def: '#4a9cff', undef: '#888888' };
+// Anomaly-forward: the states designers hunt for are the loud ones. x (unknown — uninitialised /
+// contention / X-prop, where bugs hide) = red; z (high-impedance / floating) = amber; 0 is calmed to
+// a neutral (NOT red); 1 = green; a defined bus = blue; no waveform value = recessive grey.
+let _valuePalette = { high: '#2fb344', low: '#bbbbbb', def: '#4a9cff', x: '#f14c4c', z: '#e5a000', undef: '#888888' };
 function applyWireValuePalette() {
     _valuePalette = {
-        high:  cssVar('--vscode-charts-green', '#2fb344'),       // 1
-        low:   cssVar('--vscode-charts-red', '#f14c4c'),         // 0
-        def:   cssVar('--vscode-charts-blue', '#4a9cff'),        // defined bus
-        undef: cssVar('--vscode-disabledForeground', '#888888'), // x / no data
+        high:  cssVar('--vscode-charts-green', '#2fb344'),          // 1
+        low:   cssVar('--vscode-descriptionForeground', '#bbbbbb'), // 0 — calm/neutral
+        def:   cssVar('--vscode-charts-blue', '#4a9cff'),           // defined bus
+        x:     cssVar('--vscode-charts-red', '#f14c4c'),            // unknown — the bug indicator
+        z:     cssVar('--vscode-charts-yellow', '#e5a000'),         // high-impedance / floating
+        undef: cssVar('--vscode-disabledForeground', '#888888'),   // no waveform value
     };
-    // the signal-color table lives on the WireView (read by its _updateSignal), not the model
+    // digitaljs's own WireView palette (read by its _updateSignal); we re-colour over it via
+    // colorCategory, but keep low non-red here so an un-annotated low never flashes red.
     cells.WireView.prototype.attrs.signal = {
         high:  { line: { stroke: _valuePalette.high } },
         low:   { line: { stroke: _valuePalette.low } },
@@ -548,16 +559,20 @@ function applyWireValuePalette() {
         undef: { line: { stroke: _valuePalette.undef } },
     };
 }
-// value bucket for a Vector3vl signal → high/low/def/undef color. NOTE: any x bit ⇒ undef, to
-// match VaporView (a bus with any unknown bit reads as x). This is stricter than digitaljs's own
-// `isDefined`, which is only false when EVERY bit is x — so a partially-x bus would otherwise be
-// coloured as a defined (blue) value.
-function signalCategory(sig) {
-    if (!sig || typeof sig.toBin !== 'function') { return 'undef'; }
-    if (sig.toBin().includes('x')) { return 'undef'; }
-    if (sig.isHigh) { return 'high'; }
-    if (sig.isLow) { return 'low'; }
-    return 'def';
+// Raw cursor value -> colour category. Derived from the RAW string (not the Vector3vl, which has no
+// z — it sanitises z->x). Any x bit ⇒ x (loudest); else any z ⇒ z; else all-1 high / all-0 low /
+// mixed def. Aligns with VaporView (any unknown/floating bit dominates the whole bus).
+function rawCategory(raw) {
+    const s = String(raw).toLowerCase().replace(/[^01xz]/g, 'x');
+    if (s.includes('x')) { return 'x'; }
+    if (s.includes('z')) { return 'z'; }
+    return s.includes('1') ? (s.includes('0') ? 'def' : 'high') : 'low';
+}
+// Per-net colour category (keyed by the leaf net name VaporView uses), set from the cursor value in
+// the setValues handler; a net with no entry is 'undef' (no waveform value -> recessive grey).
+const _valueCat = new Map();
+function colorCategory(netname) {
+    return (netname && _valueCat.get(netname)) || 'undef';
 }
 
 const vscode = acquireVsCodeApi();
@@ -640,6 +655,7 @@ function setWireValue(name, rawValue) {
 function clearValues() {
     if (!labelIndex || !circuit) { return; }
     _valueText.clear();
+    _valueCat.clear();
     for (const wire of Object.values(labelIndex.wires)) {
         const bits = wire.get('bits');
         const vec = Vector3vl.xes(bits);
@@ -671,6 +687,23 @@ function refreshValueText() {
     for (const l of labelIndex.graph.getLinks()) {
         const v = paper.findViewByModel(l);
         if (v && typeof v._updateSignal === 'function') { v._updateSignal(); }
+    }
+}
+
+// Transient flash: briefly pulse the wires of nets that transition AT the current marker (value
+// chain length > 1). A distinct CSS animation (sv-changed) that auto-fades — separate from the
+// accent drop-shadow glow used by hover/select, so the two never look the same. Re-added on the next
+// frame so the keyframe restarts each marker move.
+function flashChanged(nets) {
+    if (!paper || !labelIndex) { return; }
+    for (const l of labelIndex.graph.getLinks()) {
+        const v = paper.findViewByModel(l);
+        if (!v) { continue; }
+        const el = v.el;
+        el.classList.remove('sv-changed'); // clear the previous cursor's flashes (and restart this one)
+        if (nets && nets.has(l.get('netname'))) {
+            requestAnimationFrame(() => { el.classList.add('sv-changed'); });
+        }
     }
 }
 
@@ -942,18 +975,24 @@ function formatSig(sig) {
     if (/^x+$/i.test(bin)) { return ''; } // unannotated / released-to-x
     return (typeof sig.toHex === 'function' && bin.length > 4) ? '0x' + sig.toHex() : bin;
 }
-// One element of a value chain, formatted HONESTLY (unlike formatSig, which blanks all-x for the
-// no-waveform case). x is shown, not hidden: narrow nets as binary ('x', '10x'); wide nets as the
-// hex digits incl. x ('xx' all-unknown, 'ax' partially) — and only a fully-defined wide value gets
-// the 0x prefix, so an x-bearing value reads visibly different from a real hex.
+// One element of a value chain, formatted HONESTLY and x/z-aware (Vector3vl can't represent z, so we
+// format the RAW string per nibble). Narrow nets show the raw bits ('x', 'z', '10x'); wide nets show
+// hex with a nibble containing any x as 'x' and any z as 'z' ('xx'/'ax', 'zz'/'az') — and only a
+// fully-defined wide value gets the 0x prefix, so an x/z-bearing value reads visibly different from a
+// real hex. (formatSig still blanks all-x for the no-waveform fallback.)
 function fmtToken(raw, bits) {
-    const vec = Vector3vl.fromBin(toBinFor3vl(raw, bits), bits);
-    const bin = vec.toBin();
-    if (bin.length > 4) {
-        const hex = typeof vec.toHex === 'function' ? vec.toHex() : bin;
-        return bin.includes('x') ? hex : '0x' + hex;
+    let s = String(raw).toLowerCase().replace(/[^01xz]/g, 'x');
+    if (s.length < bits) { s = s.padStart(bits, '0'); } else if (s.length > bits) { s = s.slice(-bits); }
+    if (s.length <= 4) { return s; }
+    const padded = s.padStart(Math.ceil(s.length / 4) * 4, '0');
+    let out = '', defined = true;
+    for (let i = 0; i < padded.length; i += 4) {
+        const nib = padded.slice(i, i + 4);
+        if (nib.includes('x')) { out += 'x'; defined = false; }
+        else if (nib.includes('z')) { out += 'z'; defined = false; }
+        else { out += parseInt(nib, 2).toString(16); }
     }
-    return bin;
+    return defined ? '0x' + out : out;
 }
 // Display string for a net's value array AT the cursor: one value, `old→new` on a transition, or
 // the whole `v0→…→final` chain for a glitch (every element kept). Built only for ANNOTATED nets, so
@@ -1532,11 +1571,15 @@ window.addEventListener('message', (event) => {
             // re-renders value text) can read it while it runs. This batch is the full set, so a
             // clear+repopulate keeps no stale chains from the previous cursor position.
             _valueText.clear();
+            _valueCat.clear();
+            const changedNets = new Set();
             for (const u of msg.updates) {
                 if (!u.values || u.values.length === 0) { continue; }
                 const w = labelIndex && labelIndex.wires[u.name];
                 const bits = (w && w.get('bits')) || String(u.values[0]).length || 1;
                 _valueText.set(u.name, chainDisplay(u.values, bits));
+                _valueCat.set(u.name, rawCategory(u.values[u.values.length - 1])); // colour from cursor value
+                if (u.values.length > 1) { changedNets.add(u.name); } // transition AT the marker -> flash
             }
             let applied = 0;
             for (const u of msg.updates) {
@@ -1544,6 +1587,7 @@ window.addEventListener('message', (event) => {
                 if (setWireValue(u.name, u.values[u.values.length - 1])) { applied++; }
             }
             refreshValueText(); // catch nets whose value didn't change the signal (e.g. x while already x)
+            flashChanged(changedNets); // pulse the wires that transition at this cursor
             setStatus(`values @ cursor: ${applied}/${msg.updates.length} nets annotated`);
             break;
         }
