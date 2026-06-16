@@ -1232,6 +1232,9 @@ function buildFindBox() {
 }
 function openFind() {
     if (!_findBox) { buildFindBox(); }
+    // A re-render (step-into / new schematic) resets #paper-container's innerHTML, detaching the box;
+    // re-attach it (its inner elements + listeners are preserved in the detached subtree).
+    else if (!_findBox.isConnected) { document.getElementById('paper-container').appendChild(_findBox); }
     _findItems = buildFindIndex();
     _findBox.style.display = 'flex';
     const input = document.getElementById('sv-find-input');

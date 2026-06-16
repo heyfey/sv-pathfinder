@@ -37,6 +37,16 @@ const r = await page.evaluate(() => {
 });
 console.log(JSON.stringify(r, null, 1));
 
+// Re-render (step-into / new schematic resets #paper-container) must NOT break Find.
+await loadSchematic(page, 'fifo.digitaljs.json', { scopePath: 'tb.u_fifo', moduleName: 'param_fifo' });
+const afterRerender = await page.evaluate(() => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, bubbles: true }));
+    const box = document.getElementById('sv-find');
+    const input = document.getElementById('sv-find-input');
+    return { open: !!box && getComputedStyle(box).display !== 'none', inputFocusable: !!input && document.activeElement === input };
+});
+console.log('after re-render:', JSON.stringify(afterRerender));
+
 const matchCount = parseInt((r.din.count || '0/0').split('/')[1], 10);
 const ok = report('find', [
     ['Ctrl+F opens the box + focuses input', r.opened.open && r.focused],
@@ -45,6 +55,7 @@ const ok = report('find', [
     ['Enter advances the match', r.next.hasCurrent && (matchCount === 1 || r.next.count !== r.din.count)],
     ['navigating pans the viewport', r.panned || matchCount === 1],
     ['Esc closes + clears highlight', !r.closed.open && !r.closed.hasCurrent],
+    ['Find still works after a re-render', afterRerender.open && afterRerender.inputFocusable],
     ['no page errors', !logs.some(l => l.startsWith('PAGEERROR'))],
 ], logs);
 await browser.close();
