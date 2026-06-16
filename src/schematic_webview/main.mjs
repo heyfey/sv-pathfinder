@@ -875,6 +875,7 @@ function loadSchematic(msg) {
     circuit.on('new:paper', (p) => {
         p.options.interactive = READONLY; // new views inherit it (see READONLY below)
         p.on('cell:pointerclick', (cellView) => toggleSelect(cellView)); // latch highlight
+        p.on('cell:pointerdblclick', (cellView) => gotoSourceFor(cellView)); // dbl-click → go to source
         p.on('blank:pointerclick', () => clearSelection());              // click empty → clear
         bindHover(p);
         bindContextMenu(p);
@@ -1139,6 +1140,26 @@ const CTX_ITEMS = [
     { label: 'Copy value', applies: (i) => currentValue(i.model) !== undefined, action: 'copyValue' },
     { label: 'Add to waveform', applies: (i) => i.isSub || realName(i), action: 'addToWaveform' },
 ];
+// The primary "go to source" navigation for an item, shared by the context menu and double-click:
+// prefer the explicit source position ("Go to source" — instances → their instantiation, gates,
+// $-named nets) and fall back to "Go to definition" for named nets/ports (where the two coincide,
+// so only the latter is offered).
+const NAV_ACTIONS = new Set(['gotoSource', 'gotoDefinition']);
+function primaryNavItem(info) {
+    return CTX_ITEMS.find((it) => it.action && NAV_ACTIONS.has(it.action) && it.applies(info));
+}
+// Double-click a net/port/instance/gate → jump to its source (same payload the context menu sends).
+function gotoSourceFor(cellView) {
+    const info = elementInfo(cellView.model);
+    const item = primaryNavItem(info);
+    if (!item) { return; }
+    hideContextMenu();
+    post({
+        type: 'contextAction', action: item.action, kind: info.kind,
+        leafName: info.leafName, celltype: info.celltype, path: graphPath(info.model),
+        sourcePositions: info.model.get('source_positions') || [],
+    });
+}
 let _ctxMenu = null;
 function hideContextMenu() { if (_ctxMenu) { _ctxMenu.style.display = 'none'; } }
 function showContextMenu(cellView, clientX, clientY) {
