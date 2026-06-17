@@ -7,6 +7,7 @@ import * as slang from './slang_server/SlangInterface'
 import { absolutizeFlist } from './flist';
 import { isNoOpNavigation, findColumnForPath } from './nav_history';
 import { resolveRenamedBool } from './settings_util';
+import { InstanceSearchResult, toInstanceQuickPickItems } from './design_search';
 
 // Whether the "Modules" view is enabled. The setting was renamed showInstancesView → showModulesView;
 // honor the old key for users who set it before the rename.
@@ -388,6 +389,11 @@ export abstract class DesignItem extends vscode.TreeItem {
 
         this.tooltip = filePath;
     }
+
+    // Enumerate the design's instances for the global "find instance" picker. Default: not supported
+    // (empty); overridden per backend — slang first (then UHDM). Kept off the lazy tree: it asks the
+    // backend for the instance list, it does not build TreeItems.
+    public async searchInstances(): Promise<InstanceSearchResult[]> { return []; }
 
     // Abstract methods to load treeData for different kinds of design databases
     public abstract load(): Promise<boolean>;
@@ -964,6 +970,27 @@ class SlangDesignItem extends DesignItem {
         return element.children;
     }
 
+    // Enumerate every instance (one entry per instantiation) for the global search picker: each
+    // module's instances via getInstancesOfModule. Mirrors slang-server's own fuzzyFindInstance.
+    public async searchInstances(): Promise<InstanceSearchResult[]> {
+        if (this.moduleInstances.length === 0) { await this.loadModuleDefs(); }
+        const out: InstanceSearchResult[] = [];
+        for (const mod of this.moduleInstances) {
+            const insts = await slang.getInstancesOfModule(mod.name);
+            for (const inst of insts) {
+                const loc = inst.instLoc;
+                out.push({
+                    instPath: inst.instPath,
+                    declName: mod.name,
+                    file: vscode.Uri.parse(loc.uri.toString()).fsPath,
+                    line: loc.range.start.line + 1,
+                    column: loc.range.start.character + 1,
+                });
+            }
+        }
+        return out;
+    }
+
     private addInstanceChild(element: NetlistItem, inst: any/*slang.Item*/) {
         let uri = inst.instLoc.uri.toString();
         let file = vscode.Uri.parse(uri).fsPath;
@@ -1243,6 +1270,9 @@ class FDesignItem extends DesignItem {
         return;
     }
 
+    public async searchInstances(): Promise<InstanceSearchResult[]> {
+        return this.delegateDesign.searchInstances();
+    }
     public async getModuleInstancesExternal(element: NetlistItem | undefined): Promise<NetlistItem[]> {
         return this.delegateDesign.getModuleInstancesExternal(element);
     }
@@ -1600,6 +1630,43 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         const changed = await this.setActiveInstance(element);
         if (changed) { await this.setContextForGoBackOrForward(element, 'gotoDefinition', false); }
         this.revealIfVisible(element);
+    }
+
+    // Global "find instance in design": enumerate instances from the active design's backend (slang
+    // today; UHDM next), let VS Code fuzzy-filter the full hierarchy paths, then reveal + activate
+    // the chosen one. The tree stays lazy — only the picked instance is materialized.
+    public async searchDesign() {
+        const design = this.activeDesign;
+        if (!design) {
+            vscode.window.showInformationMessage('Open a design first to search it.');
+            return;
+        }
+        const results = await vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Window, title: 'sv-pathfinder: indexing instances…' },
+            () => design.searchInstances(),
+        );
+        if (results.length === 0) {
+            vscode.window.showInformationMessage(
+                'No instances to search. Design search currently supports the slang backend.');
+            return;
+        }
+        const picked = await vscode.window.showQuickPick(toInstanceQuickPickItems(results), {
+            placeHolder: 'Find instance by hierarchy path…',
+            matchOnDetail: true, // fuzzy-match the full instance path, not just the leaf name
+        });
+        if (!picked) { return; }
+
+        const item = await design.findTreeItem(picked.result.instPath);
+        if (!item) {
+            vscode.window.showWarningMessage('Instance not found in hierarchy: ' + picked.result.instPath);
+            return;
+        }
+        const changed = await this.setActiveInstance(item);
+        if (changed) { await this.setContextForGoBackOrForward(item, 'gotoInstantiation', false); }
+        // Deliberate action → force the Hierarchy view open and reveal (not the conditional reveal).
+        if (this.hierarchyTreeView) {
+            await this.hierarchyTreeView.reveal(item, { select: true, focus: true, expand: 1 });
+        }
     }
 
     private _onDidChangeTreeData: vscode.EventEmitter<NetlistItem | undefined | null | void> = new vscode.EventEmitter<NetlistItem | undefined | null | void>();

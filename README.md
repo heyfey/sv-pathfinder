@@ -46,6 +46,13 @@ Then you can open the `.uhdm` in sv-pathfinder.
 
 ![](https://github.com/heyfey/sv-pathfinder/blob/main/readme_assets/instances.gif?raw=true)
 
+### Find instance in design
+
+Click the search icon on the Hierarchy / Modules view title (or run **sv-pathfinder: Find Instance in
+Design** from the command palette) to fuzzy-find any instance by its hierarchy path and reveal it in
+the Hierarchy view. The tree stays lazily loaded — only the chosen instance is expanded. Currently
+available with the slang backend.
+
 ### Interactive schematic (preview)
 
 Right-click a scope in the Hierarchy view (or in the editor) and pick **Show Schematic**

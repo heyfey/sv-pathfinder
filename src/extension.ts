@@ -147,6 +147,10 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	}
 
+	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.searchDesign', async () => {
+		await hierarchyProvider.searchDesign();
+	}));
+
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.goBack', async (e) => {
 		const element = await hierarchyProvider.goBack();
 		// back/forward change the active scope even when the hierarchy view is closed; only reveal

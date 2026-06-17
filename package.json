@@ -171,14 +171,19 @@
           "group": "navigation"
         },
         {
+          "command": "sv-pathfinder.searchDesign",
+          "when": "view == hierarchyView || view == moduleInstancesView",
+          "group": "navigation@0"
+        },
+        {
           "command": "sv-pathfinder.goBack",
           "when": "view == hierarchyView",
-          "group": "navigation"
+          "group": "navigation@1"
         },
         {
           "command": "sv-pathfinder.goForward",
           "when": "view == hierarchyView",
-          "group": "navigation"
+          "group": "navigation@2"
         }
       ],
       "view/item/context": [
@@ -297,6 +302,12 @@
       ]
     },
     "commands": [
+      {
+        "command": "sv-pathfinder.searchDesign",
+        "title": "Find Instance in Design",
+        "category": "sv-pathfinder",
+        "icon": "$(search)"
+      },
       {
         "command": "sv-pathfinder.openDesign",
         "title": "Open Design",
