@@ -360,6 +360,9 @@ export abstract class DesignItem extends vscode.TreeItem {
     public forwardStack: gotoContext[] = [];
     // Module Instances
     protected moduleInstances: NetlistItem[] = [];
+    // Cached enumeration for the "find instance" picker (stable until the design is reloaded; the
+    // backend's instance index only changes on recompile). Cleared in unloadTreeData().
+    protected instanceSearchCache: InstanceSearchResult[] | undefined;
 
     // Waveform integration
     private waveforms: WaveformItem[] = [];
@@ -409,6 +412,7 @@ export abstract class DesignItem extends vscode.TreeItem {
     public unloadTreeData() {
         this.treeData = [];
         this.moduleInstances = [];
+        this.instanceSearchCache = undefined; // re-enumerate after a reload (source may have changed)
         this.activeInstance = undefined;
         // this.waveforms = [];
         // this.activeWaveform = undefined;
@@ -972,7 +976,10 @@ class SlangDesignItem extends DesignItem {
 
     // Enumerate every instance (one entry per instantiation) for the global search picker: each
     // module's instances via getInstancesOfModule. Mirrors slang-server's own fuzzyFindInstance.
+    // Cached after the first call — the result is stable until the design is reloaded (which clears
+    // the cache in unloadTreeData), so repeated searches don't re-hit the language server.
     public async searchInstances(): Promise<InstanceSearchResult[]> {
+        if (this.instanceSearchCache) { return this.instanceSearchCache; }
         if (this.moduleInstances.length === 0) { await this.loadModuleDefs(); }
         const out: InstanceSearchResult[] = [];
         for (const mod of this.moduleInstances) {
@@ -988,6 +995,7 @@ class SlangDesignItem extends DesignItem {
                 });
             }
         }
+        this.instanceSearchCache = out;
         return out;
     }
 
