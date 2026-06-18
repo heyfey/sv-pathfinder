@@ -4,7 +4,36 @@ import * as fsp from 'fs/promises';
 import * as os from 'os';
 import path from 'path';
 
-import { absolutizeFlist } from '../flist';
+import { absolutizeFlist, searchDirFlags } from '../flist';
+
+suite('searchDirFlags', () => {
+    test('read_slang form: each dir → -I and -y, plus .sv/.v libext', () => {
+        const f = searchDirFlags(['/a/rtl', '/vendor/prim'], true);
+        assert.ok(f.includes('-I /a/rtl') && f.includes('-y /a/rtl'));
+        assert.ok(f.includes('-I /vendor/prim') && f.includes('-y /vendor/prim'));
+        assert.ok(f.includes('--libext .sv') && f.includes('--libext .v'));
+    });
+
+    test('read_verilog form (withLibdir=false): include dirs only, no -y/--libext', () => {
+        const f = searchDirFlags(['/a/rtl'], false);
+        assert.strictEqual(f, '-I /a/rtl');
+    });
+
+    test('dedupes dirs and drops blanks', () => {
+        const f = searchDirFlags(['/a', '/a', '', '  '], true);
+        assert.strictEqual(f, '-I /a -y /a --libext .sv --libext .v');
+    });
+
+    test('empty input → empty string (no flags)', () => {
+        assert.strictEqual(searchDirFlags([], true), '');
+        assert.strictEqual(searchDirFlags(['', ' '], false), '');
+    });
+
+    test('quotes directories containing spaces', () => {
+        const f = searchDirFlags(['/a b/rtl'], false);
+        assert.strictEqual(f, '-I "/a b/rtl"');
+    });
+});
 
 // Tokens that introduce a nested command file (its contents are themselves a .f).
 const NESTED_FLAGS = new Set(['-f', '-F', '-C']);

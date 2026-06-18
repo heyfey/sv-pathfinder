@@ -9,7 +9,7 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { ScopeContext } from './scope_resolver';
-import { absolutizeFlist } from '../flist';
+import { absolutizeFlist, searchDirFlags } from '../flist';
 import { NoYosysBackendError, noBackendMessage } from './backend_policy';
 
 export type SchematicPreset = 'rtl' | 'gls';
@@ -107,10 +107,14 @@ export function isResolvedBackendLimited(): boolean {
 }
 
 // Build the read + elaborate + lowering script (Spike 1 presets).
-function buildScript(backend: Backend, ctx: ScopeContext, preset: SchematicPreset, outJson: string, showDangling = false): string {
+function buildScript(backend: Backend, ctx: ScopeContext, preset: SchematicPreset, outJson: string, showDangling = false, extraIncludeDirs: string[] = []): string {
     const files = ctx.dotF
         ? (backend.slang ? `-F ${quote(ctx.dotF)}` : ctx.fileSet.map(quote).join(' '))
         : ctx.fileSet.map(quote).join(' ');
+    // Search dirs so a curated/partial filelist still elaborates: the .f's own directory + each
+    // source file's directory (resolves co-located includes and sibling modules the .f omits), plus
+    // any user-provided include dirs (for headers outside the source tree, e.g. vendored prim/dv).
+    const searchDirs = [ctx.workDir, ...ctx.fileSet.map(f => path.dirname(f)), ...extraIncludeDirs];
     let read: string;
     let chparam = '';
     if (backend.slang) {
@@ -122,9 +126,11 @@ function buildScript(backend: Backend, ctx: ScopeContext, preset: SchematicPrese
         // selects, which slang rejects) behind `ifndef SYNTHESIS`, matching the
         // native read_verilog path below.
         const gFlags = ctx.resolvedParams.map(p => `-G ${p.name}=${p.verilogLiteral}`).join(' ');
-        read = `read_slang --keep-hierarchy --ignore-timing -D SYNTHESIS ${gFlags} --top ${ctx.moduleName} ${files}`;
+        const search = searchDirFlags(searchDirs, true); // -I + -y (libdir) so missing modules resolve
+        read = `read_slang --keep-hierarchy --ignore-timing -D SYNTHESIS ${search} ${gFlags} --top ${ctx.moduleName} ${files}`;
     } else {
-        read = `read_verilog -sv -DSYNTHESIS ${files}`;
+        const search = searchDirFlags(searchDirs, false); // read_verilog: include dirs only
+        read = `read_verilog -sv -DSYNTHESIS ${search} ${files}`;
         chparam = ctx.resolvedParams.map(p => ` -chparam ${p.name} ${p.verilogLiteral}`).join('');
     }
     const common = `${backend.prelude}${read}; hierarchy -top ${ctx.moduleName}${chparam}; `;
@@ -169,9 +175,14 @@ export async function runYosys(ctx: ScopeContext, preset: SchematicPreset, opts?
         effectiveCtx = { ...ctx, dotF: await absolutizeFlist(ctx.dotF) };
     }
 
+    // Extra include directories the filelist doesn't provide (e.g. vendored prim/dv headers), for
+    // curated filelists like ibex's where the assertion/coverage headers live outside the source tree.
+    const extraIncludeDirs = vscode.workspace.getConfiguration('sv-pathfinder')
+        .get<string[]>('schematicIncludeDirs', []);
+
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sv-pathfinder-schematic-'));
     const outJson = path.join(tmpDir, 'schematic.json');
-    const script = buildScript(backend, effectiveCtx, preset, outJson, opts?.showDangling);
+    const script = buildScript(backend, effectiveCtx, preset, outJson, opts?.showDangling, extraIncludeDirs);
 
     const log = await new Promise<string>((resolve, reject) => {
         const proc = cp.spawn(backend.command, ['-p', script], { cwd: ctx.workDir });
@@ -186,7 +197,16 @@ export async function runYosys(ctx: ScopeContext, preset: SchematicPreset, opts?
         proc.on('close', code => {
             clearTimeout(timer);
             if (code === 0) { resolve(out); }
-            else { reject(new Error(`Yosys (${backend.name}) failed with code ${code}:\n` + out.slice(-4000))); }
+            else {
+                // A missing include or unresolved module usually means the filelist is incomplete —
+                // point at the include-dirs setting (we already add the source dirs as -I/-y).
+                const incomplete = /No such file or directory|unknown module/.test(out);
+                const hint = incomplete
+                    ? '\n\nHint: the filelist looks incomplete. If a header (e.g. *.svh) or a module ' +
+                      "isn't found, add its directory to \"sv-pathfinder.schematicIncludeDirs\"."
+                    : '';
+                reject(new Error(`Yosys (${backend.name}) failed with code ${code}:\n` + out.slice(-4000) + hint));
+            }
         });
     });
 

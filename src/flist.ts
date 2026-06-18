@@ -20,6 +20,26 @@ export async function absolutizeFlist(flistPath: string): Promise<string> {
     return rewrite(path.resolve(flistPath), new Map(), new Set());
 }
 
+function quoteArg(p: string): string {
+    return /\s/.test(p) ? `"${p}"` : p;
+}
+
+// Build read_slang/read_verilog search-path flags from a set of directories, so a PARTIAL filelist
+// still elaborates. Each dir becomes an include path (-I) and, for read_slang (withLibdir), a
+// library search dir (-y, with .sv/.v libext) so slang auto-resolves instantiated modules the .f
+// doesn't list (e.g. a curated .f that omits sibling sources). Dirs are deduped; blanks dropped.
+export function searchDirFlags(dirs: string[], withLibdir: boolean): string {
+    const uniq = [...new Set(dirs.map((d) => (d || '').trim()).filter(Boolean))];
+    if (uniq.length === 0) { return ''; }
+    const flags: string[] = [];
+    for (const d of uniq) {
+        flags.push(`-I ${quoteArg(d)}`);
+        if (withLibdir) { flags.push(`-y ${quoteArg(d)}`); }
+    }
+    if (withLibdir) { flags.push('--libext .sv', '--libext .v'); }
+    return flags.join(' ');
+}
+
 // `cache` maps an original (resolved) .f path to its rewritten temp copy so a
 // file included from multiple parents is only rewritten once. `inProgress`
 // breaks include cycles: a file that includes itself (transitively) falls back

@@ -101,6 +101,14 @@ The schematic needs **Yosys + the `slang` SystemVerilog frontend**, which both s
 If no usable Yosys is found, the schematic error offers a button to open the
 `sv-pathfinder.ossCadSuitePath` setting.
 
+**Curated / partial filelists.** The schematic elaborates the `.f` with Yosys, which (unlike the
+slang language server) needs a self-contained filelist. The filelist's own directory and each source
+file's directory are searched automatically (so a `.f` that omits sibling modules — like ibex's
+`ibex_core.f` — still resolves them). If `\`include` headers live outside the source tree (e.g. ibex's
+vendored `prim_assert.sv` / `dv_fcov_macros.svh`), add their directories to
+`"sv-pathfinder.schematicIncludeDirs"`. A schematic error mentioning a missing file or unknown module
+points here.
+
 ## Waveform Integration
 
 sv-pathfinder is seamlessly integrated with VaporView – [Download](https://marketplace.visualstudio.com/items?itemName=lramseyer.vaporview)
