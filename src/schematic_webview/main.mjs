@@ -412,6 +412,8 @@ function onExpandResult(msg) {
     if (!pending) { return; }
     if (msg.error || !msg.circuit) { setStatus(`Expand failed: ${msg.error || 'no circuit'}`); return; }
     try {
+        sanitizeCircuit(msg.circuit); // same guard loadSchematic uses: drop connectors with a missing
+                                      // endpoint so digitaljs doesn't throw on `conn.from.id`
         const t = new Circuit(msg.circuit, { layoutEngine: 'elkjs', windowCallback: () => {} });
         pending.model.set('graph', t.getLabelIndex().graph);
         _expandedTemp.set(msg.key, t);
