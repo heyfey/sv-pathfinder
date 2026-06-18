@@ -136,6 +136,7 @@ typedef struct {
   vpiHandle design;
   ModuleDefContextMap moduleDefContextMap;
   InstContextMap instContextMap;
+  bool indexed = false;  // set once BuildDesignIndex has run (latches the build-once guarantee)
 } DesignContext;
 
 std::unordered_map<int, DesignContext> designContextMap;
@@ -227,13 +228,15 @@ void BuildDesignIndex(DesignContext& dc) {
     }
     vpi_release_handle(iter);
   }
+  dc.indexed = true;
 }
 
-// Build the instance index lazily if it hasn't been built yet (a real design has at least the top
-// instance, so an empty map means "not indexed"). Lets the search work even when the Modules view
-// (which calls getModuleDefs) was never opened.
+// Build the instance index lazily, exactly once per loaded design. Both getModuleDefs (Modules view)
+// and searchInstances funnel through here, so the full design is walked at most once regardless of
+// which runs first — and never again until a reload makes a fresh DesignContext. The `indexed` latch
+// (not instContextMap.empty()) guarantees this even for a degenerate design with no instances.
 void EnsureDesignIndex(DesignContext& dc) {
-  if (dc.instContextMap.empty()) {
+  if (!dc.indexed) {
     BuildDesignIndex(dc);
   }
 }
