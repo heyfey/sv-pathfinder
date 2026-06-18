@@ -7,3 +7,4 @@ node_modules
 *.fsdb
 build/
 test/webview/local-env.json
+docs/
