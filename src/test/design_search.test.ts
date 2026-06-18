@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 
-import { leafName, toInstanceQuickPickItems, InstanceSearchResult } from '../design_search';
+import { leafName, toInstanceQuickPickItems, fuzzySubsequenceMatch, filterAndCapInstances, InstanceSearchResult } from '../design_search';
 
 function res(instPath: string, declName = 'mod'): InstanceSearchResult {
     return { instPath, declName, file: '/x.sv', line: 1, column: 1 };
@@ -33,5 +33,41 @@ suite('toInstanceQuickPickItems', () => {
 
     test('empty input → empty list', () => {
         assert.deepStrictEqual(toInstanceQuickPickItems([]), []);
+    });
+});
+
+suite('fuzzySubsequenceMatch', () => {
+    test('matches a contiguous substring and a non-contiguous subsequence', () => {
+        assert.strictEqual(fuzzySubsequenceMatch('cpu', 'tb.cpu.alu'), true);   // substring
+        assert.strictEqual(fuzzySubsequenceMatch('tbalu', 'tb.cpu.alu'), true); // subsequence (skips)
+    });
+    test('is case-insensitive', () => {
+        assert.strictEqual(fuzzySubsequenceMatch('CPU', 'tb.cpu.alu'), true);
+    });
+    test('empty query matches anything; order matters', () => {
+        assert.strictEqual(fuzzySubsequenceMatch('', 'whatever'), true);
+        assert.strictEqual(fuzzySubsequenceMatch('ula', 'tb.cpu.alu'), false); // wrong order
+        assert.strictEqual(fuzzySubsequenceMatch('xyz', 'tb.cpu.alu'), false);
+    });
+});
+
+suite('filterAndCapInstances', () => {
+    const all: InstanceSearchResult[] = ['tb.cpu.alu', 'tb.cpu.regfile', 'tb.mem.bank0', 'tb.mem.bank1']
+        .map((p) => ({ instPath: p, declName: 'm', file: '/x.sv', line: 1, column: 1 }));
+
+    test('filters by subsequence, counts total, sorts by path', () => {
+        const hits = filterAndCapInstances(all, 'cpu', 100);
+        assert.strictEqual(hits.total, 2);
+        assert.deepStrictEqual(hits.results.map((r) => r.instPath), ['tb.cpu.alu', 'tb.cpu.regfile']);
+    });
+
+    test('caps results but reports the true total (for "showing N of M")', () => {
+        const hits = filterAndCapInstances(all, 'tb', 2); // all 4 match "tb"
+        assert.strictEqual(hits.total, 4);
+        assert.strictEqual(hits.results.length, 2);
+    });
+
+    test('no matches → empty with zero total', () => {
+        assert.deepStrictEqual(filterAndCapInstances(all, 'zzz', 100), { total: 0, results: [] });
     });
 });

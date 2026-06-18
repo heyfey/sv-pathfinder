@@ -50,8 +50,9 @@ Then you can open the `.uhdm` in sv-pathfinder.
 
 Click the search icon on the Hierarchy / Modules view title (or run **sv-pathfinder: Find Instance in
 Design** from the command palette) to fuzzy-find any instance by its hierarchy path and reveal it in
-the Hierarchy view. The tree stays lazily loaded — only the chosen instance is expanded. Currently
-available with the slang backend.
+the Hierarchy view. The query subsequence-matches the full path; results are capped (so the UI never
+floods), and the tree stays lazily loaded — only the chosen instance is expanded. Works with the
+slang and UHDM backends (UHDM matches and caps natively in the addon).
 
 ### Interactive schematic (preview)
 
