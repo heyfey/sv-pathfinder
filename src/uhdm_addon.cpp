@@ -282,10 +282,16 @@ class LoadDesignWorker : public Napi::AsyncWorker {
     static std::uniform_int_distribution<> dis(1, 1000000);
     designId = dis(gen);
 
+    // Build the instance index here, into a private DesignContext, BEFORE publishing it to the map.
+    // No other thread can observe `dc` yet, so the (single, full-design) traversal is race-free; once
+    // published the maps are never mutated again, so all concurrent readers (getModuleDefs,
+    // getModuleInstances, searchInstances) are safe without racing a lazy build on another worker
+    // thread. This runs on the load worker thread, so the main thread never blocks on it.
+    DesignContext dc{filename, std::move(serializer), design};
+    BuildDesignIndex(dc);
     {
       std::lock_guard<std::mutex> lock(designContextMapMutex);
-      designContextMap[designId] =
-          DesignContext{filename, std::move(serializer), design};
+      designContextMap[designId] = std::move(dc);
     }
   }
 
@@ -333,22 +339,21 @@ class GetModuleDefsWorker : public Napi::AsyncWorker {
         designId(designId) {}
 
   void Execute() override {
-    {
-      std::lock_guard<std::mutex> lock(designContextMapMutex);
-      auto it = designContextMap.find(designId);
-      if (it == designContextMap.end()) {
-        SetError("Design ID not found");
-        return;
-      }
-      dc = &it->second; // Store pointer for use outside lock
+    // Hold the lock for the whole body: the index is already built at load (immutable), so this is a
+    // brief find + no-op EnsureDesignIndex — but keeping it under the lock means there is no
+    // out-of-lock path that could ever mutate the index concurrently with searchInstances.
+    std::lock_guard<std::mutex> lock(designContextMapMutex);
+    auto it = designContextMap.find(designId);
+    if (it == designContextMap.end()) {
+      SetError("Design ID not found");
+      return;
     }
-    design = dc->design;
-    if (!design) {
+    dc = &it->second;
+    if (!dc->design) {
       SetError("Design not loaded");
       return;
     }
-
-    EnsureDesignIndex(*dc);  // build once; reuse if search (or a prior call) already indexed
+    EnsureDesignIndex(*dc);  // no-op post-load (already indexed); defensive only
   }
 
   void OnOK() override {
