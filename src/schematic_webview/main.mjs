@@ -379,6 +379,18 @@ const _openSubDialogs = new Map();  // key -> jquery-ui dialog div (to raise on 
 const _subTitles = new Map();       // key -> "full.hier.path  (module)" for the titlebar
 const _subShort = new Map();        // key -> short instance label (for the taskbar tab)
 function openSubcircuit(model, paper) {
+    // shallow mode: the child's internals aren't loaded (it was blackboxed at elaboration). There's
+    // nothing to peek at client-side, so re-elaborate on demand by stepping the MAIN page into the
+    // child (selected + 1) — the reliable re-elaborate path (same as "Step into"). A popup peek would
+    // need the loaded internals that shallow mode deliberately skips.
+    if (currentShallow) {
+        post({
+            type: 'contextAction', action: 'stepInto', kind: 'subcircuit',
+            leafName: model.get('label'), celltype: model.get('celltype'),
+            path: graphPath(model), sourcePositions: model.get('source_positions') || [],
+        });
+        return;
+    }
     const key = model.get('celltype') + ' ' + model.get('label');
     if (_openSubKeys.has(key)) { restorePopup(key); return; } // already open → restore + raise
     const hier = [currentScopePath, ...graphPath(model), model.get('label')].filter(Boolean).join('.');
@@ -606,6 +618,7 @@ let fitTimer = null;
 let currentScopePath = ''; // breadcrumb root for this render; used to build popup hier titles
 let currentMainName = '';  // main module name (label for the always-present main taskbar tab)
 let currentBackend = '';   // resolved yosys backend name, for diagnosing a malformed-circuit failure
+let currentShallow = false; // shallow mode: child boxes have no loaded internals → expand re-elaborates
 
 // digitaljs builds wires from `connectors` and crashes on `conn.from.id` if an endpoint is
 // undefined ("Cannot read properties of undefined (reading 'id')"). A well-formed netlist never
@@ -820,6 +833,7 @@ function loadSchematic(msg) {
     currentScopePath = msg.scopePath; // root for popup hierarchical titles
     currentMainName = msg.moduleName;
     currentBackend = msg.backend || '';
+    currentShallow = !!msg.shallow;
     updateBackendBadge(!!msg.limited, currentBackend);
     if (_mainTab) { _mainTab.querySelector('.sv-tab-name').textContent = currentMainName; }
     spacing = SPACING[msg.spacing] || SPACING.compact; // density tier for this render (read by the patches below)

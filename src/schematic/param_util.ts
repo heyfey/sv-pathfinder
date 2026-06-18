@@ -70,6 +70,29 @@ export interface CollectedParams {
 // resolved value, not the type), so the enum/type checks can't fire for UHDM — an enum param there
 // isn't detected and read_slang hard-fails. Matching this handling for UHDM would need the addon
 // (GetVars) to also report the parameter's type.
+export interface ScopeChildItem {
+    contextValue?: string;
+    type?: string;
+    moduleName?: string;
+}
+
+// The module names of a scope's DIRECT child instances — for shallow elaboration's
+// `--blackboxed-module` (so their interiors aren't elaborated). Deduped; skips the scope's own module
+// (recursion guard) and generate/instance arrays (no single module — their members would still
+// elaborate, a minor over-elaboration we accept for v1).
+export function collectChildModules(items: ScopeChildItem[], selfModule: string): string[] {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const c of items) {
+        if (c.contextValue !== 'scopeItem' || !c.moduleName) { continue; }
+        if (c.type === 'scopearray' || c.type === 'instancearray') { continue; }
+        if (c.moduleName === selfModule || seen.has(c.moduleName)) { continue; }
+        seen.add(c.moduleName);
+        out.push(c.moduleName);
+    }
+    return out;
+}
+
 export function collectParamOverrides(items: ParamItem[]): CollectedParams {
     const params: { name: string; verilogLiteral: string }[] = [];
     const skippedParams: SkippedParam[] = [];

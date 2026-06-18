@@ -9,7 +9,7 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { ScopeContext } from './scope_resolver';
-import { absolutizeFlist, searchDirFlags } from '../flist';
+import { absolutizeFlist, searchDirFlags, blackboxFlags } from '../flist';
 import { NoYosysBackendError, noBackendMessage } from './backend_policy';
 
 export type SchematicPreset = 'rtl' | 'gls';
@@ -107,7 +107,7 @@ export function isResolvedBackendLimited(): boolean {
 }
 
 // Build the read + elaborate + lowering script (Spike 1 presets).
-function buildScript(backend: Backend, ctx: ScopeContext, preset: SchematicPreset, outJson: string, showDangling = false, extraIncludeDirs: string[] = []): string {
+function buildScript(backend: Backend, ctx: ScopeContext, preset: SchematicPreset, outJson: string, showDangling = false, extraIncludeDirs: string[] = [], shallow = false): string {
     const files = ctx.dotF
         ? (backend.slang ? `-F ${quote(ctx.dotF)}` : ctx.fileSet.map(quote).join(' '))
         : ctx.fileSet.map(quote).join(' ');
@@ -127,7 +127,9 @@ function buildScript(backend: Backend, ctx: ScopeContext, preset: SchematicPrese
         // native read_verilog path below.
         const gFlags = ctx.resolvedParams.map(p => `-G ${p.name}=${p.verilogLiteral}`).join(' ');
         const search = searchDirFlags(searchDirs, true); // -I + -y (libdir) so missing modules resolve
-        read = `read_slang --keep-hierarchy --ignore-timing -D SYNTHESIS ${search} ${gFlags} --top ${ctx.moduleName} ${files}`;
+        // shallow ("selected + 1"): blackbox the direct children so only this scope's body elaborates.
+        const bb = shallow ? blackboxFlags(ctx.childModules) : '';
+        read = `read_slang --keep-hierarchy --ignore-timing -D SYNTHESIS ${search} ${bb} ${gFlags} --top ${ctx.moduleName} ${files}`;
     } else {
         const search = searchDirFlags(searchDirs, false); // read_verilog: include dirs only
         read = `read_verilog -sv -DSYNTHESIS ${search} ${files}`;
@@ -152,7 +154,7 @@ function buildScript(backend: Backend, ctx: ScopeContext, preset: SchematicPrese
     return common + `proc; memory_collect; setattr -mod -set keep 1; setattr -set keep 1 t:$mem*; ${keepDangling}opt_clean; write_json -compat-int ${quote(outJson)}`;
 }
 
-export async function runYosys(ctx: ScopeContext, preset: SchematicPreset, opts?: { showDangling?: boolean }): Promise<YosysResult> {
+export async function runYosys(ctx: ScopeContext, preset: SchematicPreset, opts?: { showDangling?: boolean; shallow?: boolean }): Promise<YosysResult> {
     const backend = await findBackend();
     if (!backend) {
         throw new NoYosysBackendError(noBackendMessage(sawYosysWithoutSlang));
@@ -182,7 +184,7 @@ export async function runYosys(ctx: ScopeContext, preset: SchematicPreset, opts?
 
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sv-pathfinder-schematic-'));
     const outJson = path.join(tmpDir, 'schematic.json');
-    const script = buildScript(backend, effectiveCtx, preset, outJson, opts?.showDangling, extraIncludeDirs);
+    const script = buildScript(backend, effectiveCtx, preset, outJson, opts?.showDangling, extraIncludeDirs, opts?.shallow);
 
     const log = await new Promise<string>((resolve, reject) => {
         const proc = cp.spawn(backend.command, ['-p', script], { cwd: ctx.workDir });

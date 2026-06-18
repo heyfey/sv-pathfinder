@@ -290,3 +290,53 @@ export function convertToDigitalJs(yosysJson: any, opts?: { showDangling?: boole
         throw e;
     }
 }
+
+// --- "full" elaboration mode: subtree extraction ----------------------------------------------
+// In full mode we elaborate the WHOLE design once into a single digitaljs circuit: the top module is
+// spread at the root, every other module is in a FLAT `subcircuits` map keyed by Yosys's per-instance
+// uniquified name `module$instance.path` (e.g. `ibex_cs_registers$ibex_core.cs_registers_i`), and a
+// `Subcircuit` device's `celltype` IS that key. To "show" any scope without re-elaborating, repackage
+// its subcircuit as a standalone TopModule: its own graph as the root + every transitively-referenced
+// descendant subcircuit.
+
+// Find the flat-map key for the scope `moduleName` at hierarchical `instancePath`.
+export function findSubcircuitKey(fullCircuit: any, moduleName: string, instancePath: string): string | undefined {
+    const subs = fullCircuit?.subcircuits ?? {};
+    const exact = `${moduleName}$${instancePath}`;
+    if (subs[exact]) { return exact; }
+    // Fallback for generate/array naming quirks: match on the path component after the first '$'.
+    for (const key of Object.keys(subs)) {
+        const i = key.indexOf('$');
+        if (i > 0 && key.slice(i + 1) === instancePath) { return key; }
+    }
+    return undefined;
+}
+
+// Repackage the scope at (moduleName, instancePath) as a standalone TopModule pulled from a
+// whole-design circuit. `topInstancePath` is the design top's path (a single segment) — showing the
+// top returns the whole circuit unchanged. Returns undefined if the scope isn't in the circuit (the
+// caller falls back to a per-scope elaboration).
+export function extractSubtree(fullCircuit: any, moduleName: string, instancePath: string, topInstancePath: string): any | undefined {
+    if (!fullCircuit) { return undefined; }
+    if (instancePath === topInstancePath) { return fullCircuit; } // the top is spread at the root
+    const subs = fullCircuit.subcircuits ?? {};
+    const rootKey = findSubcircuitKey(fullCircuit, moduleName, instancePath);
+    if (!rootKey || !subs[rootKey]) { return undefined; }
+    const root = subs[rootKey];
+    // BFS the descendant subcircuits reachable through Subcircuit devices' celltype.
+    const kept: Record<string, any> = {};
+    const seen = new Set<string>([rootKey]);
+    const queue: any[] = [root];
+    while (queue.length) {
+        const graph = queue.shift();
+        for (const dev of Object.values<any>(graph?.devices ?? {})) {
+            const ct: string | undefined = dev.type === 'Subcircuit' ? dev.celltype : undefined;
+            if (ct && !seen.has(ct) && subs[ct]) {
+                seen.add(ct);
+                kept[ct] = subs[ct];
+                queue.push(subs[ct]);
+            }
+        }
+    }
+    return { ...root, subcircuits: kept };
+}

@@ -2,7 +2,7 @@
 // values (formatted as Verilog literals) + file set for Yosys.
 import * as path from 'path';
 import { DesignItem, NetlistItem } from '../tree_view';
-import { collectParamOverrides, SkippedParam } from './param_util';
+import { collectParamOverrides, collectChildModules, SkippedParam } from './param_util';
 
 export interface ResolvedParam {
     name: string;
@@ -17,6 +17,9 @@ export interface ScopeContext {
     // possibly inaccurate). The schematic view warns for non-top scopes, naming these + their
     // declaration location. See collectParamOverrides.
     skippedParams: SkippedParam[];
+    // Module names of the scope's direct child instances — for shallow elaboration's
+    // --blackboxed-module (selected+1). See collectChildModules.
+    childModules: string[];
     // Either a .f command file (preferred: slang understands -f/-F) or an explicit file list.
     dotF?: string;
     fileSet: string[];
@@ -38,6 +41,7 @@ export async function resolveScope(design: DesignItem, instance: NetlistItem): P
 
     const children = await design.getChildrenExternal(instance);
     const { params: resolvedParams, skippedParams } = collectParamOverrides(children);
+    const childModules = collectChildModules(children, moduleName);
 
     const designPath = design.resourceUri.fsPath;
     let dotF: string | undefined;
@@ -59,5 +63,5 @@ export async function resolveScope(design: DesignItem, instance: NetlistItem): P
         workDir = fileSet.length > 0 ? path.dirname(fileSet[0]) : path.dirname(designPath);
     }
 
-    return { instancePath, moduleName, resolvedParams, skippedParams, dotF, fileSet, workDir };
+    return { instancePath, moduleName, resolvedParams, skippedParams, childModules, dotF, fileSet, workDir };
 }

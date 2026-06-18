@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 
-import { isCleanVerilogLiteral, isEnumParamType, collectParamOverrides } from '../schematic/param_util';
+import { isCleanVerilogLiteral, isEnumParamType, collectParamOverrides, collectChildModules } from '../schematic/param_util';
 
 suite('isCleanVerilogLiteral', () => {
     test('accepts plain ints, sized/based literals, and strings', () => {
@@ -83,5 +83,32 @@ suite('collectParamOverrides', () => {
             { contextValue: 'varItem', type: 'parameter', name: 'NoVal', description: 'int' }, // no '='
         ]);
         assert.deepStrictEqual(r, { params: [], skippedParams: [] });
+    });
+});
+
+suite('collectChildModules', () => {
+    const inst = (name: string, moduleName: string, type = 'module') =>
+        ({ contextValue: 'scopeItem', type, moduleName, name });
+
+    test('direct child instance modules, deduped', () => {
+        const r = collectChildModules([
+            inst('u_a', 'mod_a'), inst('u_b', 'mod_b'), inst('u_a2', 'mod_a'), // mod_a twice → once
+        ], 'top');
+        assert.deepStrictEqual(r, ['mod_a', 'mod_b']);
+    });
+
+    test('excludes the scope\'s own module (recursion guard), non-scopes, and generate/instance arrays', () => {
+        const r = collectChildModules([
+            inst('u_self', 'top'),                              // recursion → excluded
+            inst('gen', 'mod_g', 'scopearray'),                 // array → excluded
+            inst('arr', 'mod_h', 'instancearray'),              // array → excluded
+            { contextValue: 'varItem', type: 'parameter', moduleName: 'x', name: 'P' }, // not a scope
+            inst('u_real', 'mod_real'),
+        ], 'top');
+        assert.deepStrictEqual(r, ['mod_real']);
+    });
+
+    test('empty input → empty list', () => {
+        assert.deepStrictEqual(collectChildModules([], 'top'), []);
     });
 });

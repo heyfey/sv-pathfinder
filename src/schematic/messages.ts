@@ -67,6 +67,7 @@ export interface LoadSchematicMessage {
     spacing: 'compact' | 'comfortable' | 'spacious'; // layout density (ELK spacing + box padding)
     backend?: string;        // resolved yosys backend name (for diagnostics on a render failure)
     limited?: boolean;       // backend lacks the slang frontend (yowasp) → show a "limited engine" badge
+    shallow?: boolean;       // shallow mode: child boxes have no loaded internals → expand re-elaborates
 }
 
 export interface SetValuesMessage {

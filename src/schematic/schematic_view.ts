@@ -10,7 +10,7 @@ import * as os from 'os';
 import { DesignItem, NetlistItem, HierarchyTreeProvider, replaceFilePathIfNeeded, showTextDocumentLocation } from '../tree_view';
 import { resolveScope, scopeCacheKey, ScopeContext } from './scope_resolver';
 import { runYosys, SchematicPreset, getResolvedBackendName, isResolvedBackendLimited } from './yosys_runner';
-import { convertToDigitalJs } from './converter';
+import { convertToDigitalJs, extractSubtree } from './converter';
 import { findParentModuleScope } from './scope_nav';
 import { cleanCelltype } from './celltype';
 import { isNoYosysBackendError, limitedBackendWarning } from './backend_policy';
@@ -28,7 +28,8 @@ export class SchematicViewProvider {
     private webviewReady = false;
     private pendingMessages: ToWebviewMessage[] = [];
     private current: ShownSchematic | undefined;
-    private cache = new Map<string, any>(); // scopeCacheKey -> DigitalJS JSON
+    private cache = new Map<string, any>(); // scopeCacheKey -> DigitalJS JSON (per-scope: shallow + full-fallback)
+    private fullCircuitCache = new Map<string, any>(); // topInstance|preset(+dangling) -> whole-design DigitalJS (full mode)
     private timestamp = -1;
     private valueTimer: NodeJS.Timeout | undefined;
     private limitedBackendWarned = false; // one-time-per-session warning for the limited fallback
@@ -67,28 +68,24 @@ export class SchematicViewProvider {
         try {
             const ctx = await resolveScope(design, instance);
             this.current = { design, instance, ctx, preset };
+            const cfg = vscode.workspace.getConfiguration('sv-pathfinder');
             // Optional: surface declared-but-unconnected nets. In the cache key so toggling the
             // setting + reloading re-elaborates (it changes the Yosys keeps + converter output).
-            const showDangling = vscode.workspace.getConfiguration('sv-pathfinder')
-                .get<boolean>('schematicShowDanglingNets', false);
-            const key = scopeCacheKey(ctx, preset) + (showDangling ? '+dangling' : '');
+            const showDangling = cfg.get<boolean>('schematicShowDanglingNets', false);
+            const shallow = cfg.get<string>('schematicElaborationMode', 'full') === 'shallow';
 
-            let digitalJsJson = !force ? this.cache.get(key) : undefined;
+            // full mode: elaborate the whole design once, render this scope by extracting its subtree.
+            // Falls back to a per-scope elaboration if the scope isn't found in the whole-design circuit
+            // (e.g. a generate-name quirk). shallow mode: elaborate this scope + 1 level on demand.
+            let digitalJsJson = !shallow
+                ? await this.renderFromFullCircuit(design, instance, ctx, preset, showDangling, force)
+                : undefined;
             if (!digitalJsJson) {
-                digitalJsJson = await vscode.window.withProgress({
-                    location: vscode.ProgressLocation.Notification,
-                    title: `Schematic: elaborating ${ctx.moduleName} (${preset.toUpperCase()})…`,
-                    cancellable: false,
-                }, async () => {
-                    const result = await runYosys(ctx, preset, { showDangling });
-                    return convertToDigitalJs(result.yosysJson, { showDangling });
-                });
-                this.cache.set(key, digitalJsJson);
+                digitalJsJson = await this.elaborateScope(ctx, preset, showDangling, shallow, force);
             }
 
             this.createOrRevealPanel();
             this.panel!.title = `Schematic: ${ctx.instancePath}`;
-            const cfg = vscode.workspace.getConfiguration('sv-pathfinder');
             const overview = cfg.get<string>('schematicOverview', 'scrollbars') === 'minimap' ? 'minimap' : 'scrollbars';
             const rawSpacing = cfg.get<string>('schematicSpacing', 'compact');
             const spacing = (['compact', 'comfortable', 'spacious'].includes(rawSpacing) ? rawSpacing : 'compact') as
@@ -103,14 +100,60 @@ export class SchematicViewProvider {
                 spacing,
                 backend: getResolvedBackendName(),
                 limited: isResolvedBackendLimited(),
+                shallow, // webview: in shallow mode a child box has no loaded internals → expand re-elaborates
             });
             // push current waveform values onto the fresh schematic
             this.debouncePushValues();
             this.maybeWarnLimitedBackend();
-            this.maybeWarnSkippedParams(ctx);
+            // Param-override caveat only applies to shallow's per-scope elaboration; full mode
+            // elaborates from the real top so every scope's params are in-context accurate.
+            if (shallow) { this.maybeWarnSkippedParams(ctx); }
         } catch (e: any) {
             this.showRenderError(e);
         }
+    }
+
+    // Per-scope elaboration (shallow mode, and the full-mode fallback): run Yosys rooted at this
+    // scope. `shallow` blackboxes the direct children (selected + 1 level). Cached per scope.
+    private async elaborateScope(ctx: ScopeContext, preset: SchematicPreset, showDangling: boolean, shallow: boolean, force: boolean): Promise<any> {
+        const key = scopeCacheKey(ctx, preset) + (showDangling ? '+dangling' : '') + (shallow ? '+shallow' : '');
+        let json = !force ? this.cache.get(key) : undefined;
+        if (!json) {
+            json = await vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: `Schematic: elaborating ${ctx.moduleName}${shallow ? ' (+1 level)' : ''} (${preset.toUpperCase()})…`,
+                cancellable: false,
+            }, async () => {
+                const result = await runYosys(ctx, preset, { showDangling, shallow });
+                return convertToDigitalJs(result.yosysJson, { showDangling });
+            });
+            this.cache.set(key, json);
+        }
+        return json;
+    }
+
+    // Full mode: elaborate the ENTIRE design once (from its real top), cache it, and return the shown
+    // scope's subtree extracted from it (no re-elaboration). Returns undefined if the scope isn't found
+    // in the whole-design circuit, so the caller falls back to a per-scope elaboration.
+    private async renderFromFullCircuit(design: DesignItem, instance: NetlistItem, ctx: ScopeContext, preset: SchematicPreset, showDangling: boolean, force: boolean): Promise<any> {
+        const topPath = ctx.instancePath.split('.')[0]; // the design top's instance name
+        const fullKey = `${topPath}|${preset}` + (showDangling ? '+dangling' : '');
+        let full = !force ? this.fullCircuitCache.get(fullKey) : undefined;
+        if (!full) {
+            const rootInstance = ctx.instancePath === topPath ? instance : await design.findTreeItem(topPath);
+            if (!rootInstance) { return undefined; } // can't locate the top → per-scope fallback
+            const rootCtx = await resolveScope(design, rootInstance);
+            full = await vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: `Schematic: elaborating ${rootCtx.moduleName} (full design, ${preset.toUpperCase()})…`,
+                cancellable: false,
+            }, async () => {
+                const result = await runYosys(rootCtx, preset, { showDangling });
+                return convertToDigitalJs(result.yosysJson, { showDangling });
+            });
+            this.fullCircuitCache.set(fullKey, full);
+        }
+        return extractSubtree(full, ctx.moduleName, ctx.instancePath, topPath);
     }
 
     // Enum/struct/array (and other non-scalar) parameters can't be overridden in Yosys (see

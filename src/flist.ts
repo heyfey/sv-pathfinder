@@ -40,6 +40,14 @@ export function searchDirFlags(dirs: string[], withLibdir: boolean): string {
     return flags.join(' ');
 }
 
+// read_slang flags that blackbox a scope's direct child modules — "selected + 1 level" elaboration:
+// the child interiors are NOT elaborated (saves time/memory); they appear as port-only boxes. Deduped
+// and quoted like searchDirFlags. Empty input → empty string.
+export function blackboxFlags(childModules: string[]): string {
+    const uniq = [...new Set(childModules.map((m) => (m || '').trim()).filter(Boolean))];
+    return uniq.map((m) => `--blackboxed-module ${quoteArg(m)}`).join(' ');
+}
+
 // `cache` maps an original (resolved) .f path to its rewritten temp copy so a
 // file included from multiple parents is only rewritten once. `inProgress`
 // breaks include cycles: a file that includes itself (transitively) falls back

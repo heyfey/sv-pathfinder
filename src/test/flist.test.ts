@@ -4,7 +4,7 @@ import * as fsp from 'fs/promises';
 import * as os from 'os';
 import path from 'path';
 
-import { absolutizeFlist, searchDirFlags } from '../flist';
+import { absolutizeFlist, searchDirFlags, blackboxFlags } from '../flist';
 
 suite('searchDirFlags', () => {
     test('read_slang form: each dir → -I and -y, plus .sv/.v libext', () => {
@@ -32,6 +32,18 @@ suite('searchDirFlags', () => {
     test('quotes directories containing spaces', () => {
         const f = searchDirFlags(['/a b/rtl'], false);
         assert.strictEqual(f, '-I "/a b/rtl"');
+    });
+});
+
+suite('blackboxFlags', () => {
+    test('one --blackboxed-module per child module', () => {
+        assert.strictEqual(blackboxFlags(['mod_a', 'mod_b']), '--blackboxed-module mod_a --blackboxed-module mod_b');
+    });
+    test('dedupes and drops blanks', () => {
+        assert.strictEqual(blackboxFlags(['m', 'm', '', '  ']), '--blackboxed-module m');
+    });
+    test('empty input → empty string', () => {
+        assert.strictEqual(blackboxFlags([]), '');
     });
 });
 

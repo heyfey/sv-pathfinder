@@ -111,6 +111,19 @@
           "default": false,
           "markdownDescription": "Show declared-but-unconnected named nets (no driver and no load) as dashed, floating labels in the schematic. Off by default; normally such nets have nothing to draw and are omitted. Applies on the next render (reopen or refresh the schematic)."
         },
+        "sv-pathfinder.schematicElaborationMode": {
+          "type": "string",
+          "enum": [
+            "full",
+            "shallow"
+          ],
+          "enumDescriptions": [
+            "Elaborate the whole design once from its top, then render any scope (show/step-into/expand) from that single elaboration without re-elaborating. Parameters are in-context accurate. Best for small/medium designs.",
+            "Elaborate only the selected scope plus one level (direct children as boxes); stepping in or expanding re-elaborates the next level on demand. Cheaper to start on very large designs."
+          ],
+          "default": "full",
+          "markdownDescription": "How much of the design the schematic elaborates.\n\n- **full** (default): elaborate the entire design once from its top module, then show any scope — and step-into / expand — by re-rendering from that one elaboration (no re-elaboration; parameters are in-context accurate).\n- **shallow**: elaborate only the selected scope + its direct children (as boxes); stepping in or expanding re-elaborates the next level on demand. Use this when a design is too large to elaborate whole.\n\nApplies on the next render (reopen or refresh the schematic)."
+        },
         "sv-pathfinder.valueAnnotationFormat": {
           "type": "string",
           "enum": [
