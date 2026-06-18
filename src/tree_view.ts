@@ -519,9 +519,8 @@ export abstract class DesignItem extends vscode.TreeItem {
     }
 
     public async findTreeItem(fullName: string): Promise<NetlistItem | undefined> {
-        // Tree node names have the UHDM "work@" library prefix stripped (see NetlistItem ctor), so
-        // normalize the query the same way — otherwise a raw "work@top.a.b" never matches "top".
-        fullName = fullName.replace("work@", "");
+        // Tree node names are always clean (the NetlistItem ctor strips any UHDM "work@" prefix), so
+        // callers must pass a clean hierarchy path here too.
         const element = this.treeData.find((element) => element.name === fullName.split('.')[0]);
         if (!element) { return undefined; }
         return await element.findChild(fullName.split('.').slice(1).join('.'), this);
@@ -850,9 +849,10 @@ class UhdmDesignItem extends DesignItem {
     public async searchInstances(query: string, maxResults: number): Promise<InstanceSearchHits> {
         const hits = await this.uhdmAddon.searchInstances(this.designId, query, maxResults);
         const results: InstanceSearchResult[] = (hits.results || []).map((inst: any) => ({
-            instPath: inst.fullName,                              // raw "work@top…" — matches the tree for findTreeItem
-            displayPath: (inst.fullName || '').replace(/^work@/, ''), // cleaned for the UI
-            declName: (inst.declName || '').replace(/^work@/, ''),    // drop UHDM library prefix
+            // Strip the UHDM "work@" library prefix here so the path is clean for both display and
+            // navigation (the hierarchy tree is always clean — see NetlistItem ctor / findTreeItem).
+            instPath: (inst.fullName || '').replace(/^work@/, ''),
+            declName: (inst.declName || '').replace(/^work@/, ''),
             file: inst.file,
             line: inst.line,
             column: inst.column,

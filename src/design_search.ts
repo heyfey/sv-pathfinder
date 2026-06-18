@@ -5,14 +5,12 @@
 // matching against the full instance path. The TreeView stays lazy — we never build it to search.
 
 export interface InstanceSearchResult {
-    instPath: string;       // full hierarchy path used for navigation (findTreeItem). May carry a
-                            // backend-internal prefix (UHDM's "work@top…") that must match the tree.
-    displayPath?: string;   // optional cleaned path for the UI (e.g. UHDM's path without "work@").
-                            // Falls back to instPath when unset (slang paths are already clean).
-    declName: string;       // module/declaration name (shown as the item description)
+    instPath: string;   // clean full hierarchy path (no backend prefix) — used for both display and
+                        // navigation (findTreeItem). Backends strip any internal prefix before here.
+    declName: string;   // module/declaration name (shown as the item description)
     file: string;
-    line: number;           // 1-based
-    column: number;         // 1-based
+    line: number;       // 1-based
+    column: number;     // 1-based
 }
 
 // A QuickPick item carrying enough to navigate on accept. label = leaf instance name (what you
@@ -66,13 +64,10 @@ export function toInstanceQuickPickItems(results: InstanceSearchResult[]): Insta
     return results
         .slice()
         .sort((a, b) => a.instPath.localeCompare(b.instPath))
-        .map((r) => {
-            const shown = r.displayPath ?? r.instPath;
-            return {
-                label: leafName(shown),
-                description: r.declName,
-                detail: shown,
-                result: r,
-            };
-        });
+        .map((r) => ({
+            label: leafName(r.instPath),
+            description: r.declName,
+            detail: r.instPath,
+            result: r,
+        }));
 }
