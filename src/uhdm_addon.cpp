@@ -231,10 +231,12 @@ void BuildDesignIndex(DesignContext& dc) {
   dc.indexed = true;
 }
 
-// Build the instance index lazily, exactly once per loaded design. Both getModuleDefs (Modules view)
-// and searchInstances funnel through here, so the full design is walked at most once regardless of
-// which runs first — and never again until a reload makes a fresh DesignContext. The `indexed` latch
-// (not instContextMap.empty()) guarantees this even for a degenerate design with no instances.
+// Build the instance index lazily, exactly once per loaded design — only when something actually
+// needs it (the Modules view via getModuleDefs, or searchInstances); a Hierarchy-only browse never
+// triggers it. Both callers invoke this while holding designContextMapMutex, so concurrent builds
+// serialize and a build can't race a concurrent search read of the same maps. The `indexed` latch
+// (not instContextMap.empty()) makes the "build at most once" hold even for a design with no
+// instances. THREADING CONTRACT: call only while holding designContextMapMutex.
 void EnsureDesignIndex(DesignContext& dc) {
   if (!dc.indexed) {
     BuildDesignIndex(dc);
@@ -282,16 +284,14 @@ class LoadDesignWorker : public Napi::AsyncWorker {
     static std::uniform_int_distribution<> dis(1, 1000000);
     designId = dis(gen);
 
-    // Build the instance index here, into a private DesignContext, BEFORE publishing it to the map.
-    // No other thread can observe `dc` yet, so the (single, full-design) traversal is race-free; once
-    // published the maps are never mutated again, so all concurrent readers (getModuleDefs,
-    // getModuleInstances, searchInstances) are safe without racing a lazy build on another worker
-    // thread. This runs on the load worker thread, so the main thread never blocks on it.
-    DesignContext dc{filename, std::move(serializer), design};
-    BuildDesignIndex(dc);
+    // Don't build the instance index here: a full-design traversal is only needed for the Modules
+    // view (getModuleDefs) and instance search. Hierarchy-view browsing uses getTopModules + lazy
+    // getSubScopes/getVars and never touches it. The index is built lazily on first need, under
+    // designContextMapMutex (see EnsureDesignIndex), so it stays race-free without traversing eagerly.
     {
       std::lock_guard<std::mutex> lock(designContextMapMutex);
-      designContextMap[designId] = std::move(dc);
+      designContextMap[designId] =
+          DesignContext{filename, std::move(serializer), design};
     }
   }
 
@@ -339,9 +339,8 @@ class GetModuleDefsWorker : public Napi::AsyncWorker {
         designId(designId) {}
 
   void Execute() override {
-    // Hold the lock for the whole body: the index is already built at load (immutable), so this is a
-    // brief find + no-op EnsureDesignIndex — but keeping it under the lock means there is no
-    // out-of-lock path that could ever mutate the index concurrently with searchInstances.
+    // Hold the lock across EnsureDesignIndex: this is where the index is lazily built (first Modules-
+    // view load), and building under the lock is what keeps it from racing a concurrent search read.
     std::lock_guard<std::mutex> lock(designContextMapMutex);
     auto it = designContextMap.find(designId);
     if (it == designContextMap.end()) {
