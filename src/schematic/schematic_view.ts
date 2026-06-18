@@ -12,6 +12,7 @@ import { resolveScope, scopeCacheKey, ScopeContext } from './scope_resolver';
 import { runYosys, SchematicPreset, getResolvedBackendName, isResolvedBackendLimited } from './yosys_runner';
 import { convertToDigitalJs } from './converter';
 import { findParentModuleScope } from './scope_nav';
+import { cleanCelltype } from './celltype';
 import { isNoYosysBackendError, limitedBackendWarning } from './backend_policy';
 import { FromWebviewMessage, ToWebviewMessage, ElementClickMessage, ContextActionMessage, ExportRequestMessage, ExportContentMessage, SourcePosition } from './messages';
 
@@ -378,7 +379,24 @@ export class SchematicViewProvider {
                 const relPath = [...(msg.path ?? []), msg.leafName].filter(Boolean).join('.');
                 const child = await shown.instance.findChild(relPath, shown.design)
                     ?? await shown.design.findTreeItem(fullName);
-                if (child) { await this.render(shown.design, child, shown.preset); }
+                if (child) { await this.render(shown.design, child, shown.preset); return; }
+                // Tree miss: the schematic engine (Yosys) drew this instance, but the navigation index
+                // (slang) doesn't have it — typically the design's filelist (.f) omits the module's
+                // source, so the language server couldn't elaborate it (e.g. ibex's ibex_core.f omits
+                // ibex_wb_stage.sv). Don't dead-click: explain, and offer the instantiation site, which
+                // navigates off Yosys source positions (no tree item needed).
+                const mod = msg.celltype ? cleanCelltype(msg.celltype) : undefined;
+                const canSource = (msg.sourcePositions?.length ?? 0) > 0;
+                const gotoSrc = 'Go to source';
+                const pick = await vscode.window.showWarningMessage(
+                    `Can't step into ${msg.leafName}${mod ? ` (module ${mod})` : ''}: it's drawn by the ` +
+                    `schematic engine but isn't in the navigation hierarchy. This usually means the ` +
+                    `design's filelist doesn't include the module's source, so it couldn't be ` +
+                    `elaborated for navigation.`,
+                    ...(canSource ? [gotoSrc] : []));
+                if (pick === gotoSrc) {
+                    await this.handleElementClick({ ...msg, type: 'elementClick', action: 'source' } as ElementClickMessage);
+                }
                 return;
             }
             case 'gotoSource': {

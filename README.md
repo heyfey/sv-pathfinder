@@ -109,6 +109,12 @@ vendored `prim_assert.sv` / `dv_fcov_macros.svh`), add their directories to
 `"sv-pathfinder.schematicIncludeDirs"`. A schematic error mentioning a missing file or unknown module
 points here.
 
+The flip side: Yosys searches those directories, but the navigation backend (the language server)
+sees only the files the `.f` lists. So the schematic can show a sub-instance the hierarchy tree
+doesn't have — e.g. ibex's `wb_stage_i`, whose `ibex_wb_stage.sv` is omitted from `ibex_core.f`.
+**Step into** on such an instance can't open its scope (it isn't in the tree); it explains why and
+offers **Go to source** instead. Add the missing source to the `.f` to navigate it fully.
+
 ## Waveform Integration
 
 sv-pathfinder is seamlessly integrated with VaporView – [Download](https://marketplace.visualstudio.com/items?itemName=lramseyer.vaporview)
