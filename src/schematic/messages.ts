@@ -53,8 +53,18 @@ export interface ExportContentMessage {
     base64?: string; // binary content (png)
 }
 
+// webview -> extension: shallow mode, the user expanded a child box whose internals aren't loaded
+// (it was blackboxed). The extension re-elaborates that child (selected+1) and replies with its graph.
+export interface ExpandRequestMessage {
+    type: 'expandRequest';
+    key: string;             // celltype + ' ' + label — echoed back so the webview matches the box
+    celltype?: string;       // the box's (uniquified or plain) module name
+    leafName?: string;       // the box's instance label
+    path?: string[];         // enclosing subcircuit instance labels (clicks inside popups)
+}
+
 export type FromWebviewMessage = ElementClickMessage | WebviewReadyMessage | GoToParentMessage
-    | ContextActionMessage | ExportRequestMessage | ExportContentMessage;
+    | ContextActionMessage | ExportRequestMessage | ExportContentMessage | ExpandRequestMessage;
 
 // extension -> webview
 export interface LoadSchematicMessage {
@@ -90,4 +100,13 @@ export interface BuildExportMessage {
     format: 'svg' | 'png' | 'json';
 }
 
-export type ToWebviewMessage = LoadSchematicMessage | SetValuesMessage | ClearValuesMessage | BuildExportMessage;
+// extension -> webview: the re-elaborated child for an expandRequest, to open as a popup. `circuit`
+// is a standalone TopModule; absent + `error` set when elaboration failed.
+export interface ExpandResultMessage {
+    type: 'expandResult';
+    key: string;             // matches the requesting box (celltype + ' ' + label)
+    circuit?: any;           // DigitalJS TopModule for the child (its body + 1 level of boxes)
+    error?: string;
+}
+
+export type ToWebviewMessage = LoadSchematicMessage | SetValuesMessage | ClearValuesMessage | BuildExportMessage | ExpandResultMessage;

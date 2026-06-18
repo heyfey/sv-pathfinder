@@ -64,11 +64,13 @@ wires — rendered with [digitaljs](https://github.com/tilk/digitaljs).
   declaration. Boxes navigate to the module declaration.
 - Hovering any cell/instance/port/wire highlights it and names it in the status bar.
 - The schematic is elaborated with the instance's actual parameter values.
-- **Elaboration mode** (`sv-pathfinder.schematicElaborationMode`): by default (**full**) the whole
-  design is elaborated once from its top, and showing any scope — plus step-into and expand —
-  renders instantly from that single elaboration (parameters are in-context accurate). Switch to
-  **shallow** for very large designs: it elaborates only the selected scope + one level (children as
-  boxes) and re-elaborates the next level on demand as you step in or expand.
+- **Elaboration mode** (`sv-pathfinder.schematicElaborationMode`): by default (**full**) the scope
+  you open is elaborated once, and rendering it — plus step-into, expand, and stepping back up —
+  comes from that single elaboration with no re-elaboration; only navigating *above* what you've
+  opened elaborates again. (Rooting at the opened scope, not the design's absolute top, avoids
+  elaborating a non-synthesizable testbench above the DUT.) Switch to **shallow** for very large
+  designs: it elaborates only the selected scope + one level (children as boxes) and re-elaborates
+  the next level on demand as you step in or expand.
 - Navigate the hierarchy with the **↰ go-to-parent** button; child instances are filled
   with an accent color so they're easy to spot.
 - Pan by dragging the canvas or scrolling the wheel; zoom with **Ctrl+scroll** (or the
@@ -145,7 +147,7 @@ sv-pathfinder is seamlessly integrated with VaporView – [Download](https://mar
 - `"sv-pathfinder.schematicAccentColor": string`, Accent color for the schematic (child-instance fills and hover highlights). Any CSS color; empty uses a theme-aware default.
 - `"sv-pathfinder.schematicOverview": "scrollbars" | "minimap"`, Overview affordance for the main schematic. Popups always use scrollbars.
     - Default: `scrollbars`
-- `"sv-pathfinder.schematicElaborationMode": "full" | "shallow"`, How much of the design the schematic elaborates. `full` (default) elaborates the whole design once from its top and renders every scope (and step-into/expand) from that single elaboration with no re-elaboration; `shallow` elaborates only the selected scope + its direct children (as boxes) and re-elaborates the next level on demand — use it when a design is too large to elaborate whole. Applies on the next render.
+- `"sv-pathfinder.schematicElaborationMode": "full" | "shallow"`, How much of the design the schematic elaborates. `full` (default) elaborates the scope you open once and renders it and every descendant (step-into/expand, and stepping back up) from that single elaboration with no re-elaboration — only navigating above what you've opened elaborates again (rooting at the opened scope avoids elaborating a testbench above the DUT); `shallow` elaborates only the selected scope + its direct children (as boxes) and re-elaborates the next level on demand — use it when a design is too large to elaborate whole. Applies on the next render.
     - Default: `full`
 
 ## Requirements

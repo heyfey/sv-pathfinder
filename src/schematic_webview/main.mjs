@@ -378,26 +378,47 @@ const _openSubKeys = new Set();     // instance keys with an open popup
 const _openSubDialogs = new Map();  // key -> jquery-ui dialog div (to raise on re-click)
 const _subTitles = new Map();       // key -> "full.hier.path  (module)" for the titlebar
 const _subShort = new Map();        // key -> short instance label (for the taskbar tab)
+const _pendingExpand = new Map();   // shallow mode: key -> {model, paper} awaiting an expandResult
+const _expandedTemp = new Map();    // shallow mode: key -> temp Circuit holding the built child graph
 function openSubcircuit(model, paper) {
-    // shallow mode: the child's internals aren't loaded (it was blackboxed at elaboration). There's
-    // nothing to peek at client-side, so re-elaborate on demand by stepping the MAIN page into the
-    // child (selected + 1) — the reliable re-elaborate path (same as "Step into"). A popup peek would
-    // need the loaded internals that shallow mode deliberately skips.
-    if (currentShallow) {
-        post({
-            type: 'contextAction', action: 'stepInto', kind: 'subcircuit',
-            leafName: model.get('label'), celltype: model.get('celltype'),
-            path: graphPath(model), sourcePositions: model.get('source_positions') || [],
-        });
-        return;
-    }
     const key = model.get('celltype') + ' ' + model.get('label');
     if (_openSubKeys.has(key)) { restorePopup(key); return; } // already open → restore + raise
+    // shallow mode: the child's internals weren't loaded (it was blackboxed at elaboration). Re-
+    // elaborate it (selected + 1) on demand, then open the returned circuit in a popup. Once built,
+    // the graph is cached on the box model so re-opening is instant (like full mode).
+    if (currentShallow && !_expandedTemp.has(key)) {
+        if (_pendingExpand.has(key)) { return; } // a request is already in flight
+        _pendingExpand.set(key, { model, paper });
+        post({ type: 'expandRequest', key, celltype: model.get('celltype'), leafName: model.get('label'), path: graphPath(model) });
+        return;
+    }
+    doOpenPopup(model, paper, key);
+}
+// Open the popup for `model` (its graph is already built) — title/taskbar bookkeeping + trigger.
+function doOpenPopup(model, paper, key) {
+    if (_openSubKeys.has(key)) { restorePopup(key); return; }
     const hier = [currentScopePath, ...graphPath(model), model.get('label')].filter(Boolean).join('.');
     _subTitles.set(key, `${hier}  (${cleanModuleName(model.get('celltype'))})`);
     _subShort.set(key, model.get('label'));
     _openSubKeys.add(key);                            // mark before trigger (guards fast double-clicks)
     paper.trigger('open:subcircuit', model);
+}
+// shallow mode: the extension re-elaborated the child → build its graph, attach it to the box model
+// (digitaljs reads model.graph at open time), and open the popup. The temp Circuit is only a graph
+// factory — never displayed, engine never started; kept so it can be shut down on the next load.
+function onExpandResult(msg) {
+    const pending = _pendingExpand.get(msg.key);
+    _pendingExpand.delete(msg.key);
+    if (!pending) { return; }
+    if (msg.error || !msg.circuit) { setStatus(`Expand failed: ${msg.error || 'no circuit'}`); return; }
+    try {
+        const t = new Circuit(msg.circuit, { layoutEngine: 'elkjs', windowCallback: () => {} });
+        pending.model.set('graph', t.getLabelIndex().graph);
+        _expandedTemp.set(msg.key, t);
+        doOpenPopup(pending.model, pending.paper, msg.key);
+    } catch (e) {
+        setStatus('Expand failed: ' + (e && e.message ? e.message : e));
+    }
 }
 // digitaljs opens the popup from the subcircuit's zoom (🔍) icon; route it through our helper.
 cells.SubcircuitView.prototype.zoomInCircuit = function (evt) {
@@ -828,6 +849,9 @@ function loadSchematic(msg) {
     _openSubKeys.clear();      // popups from the previous schematic are gone
     _openSubDialogs.clear();
     _subTitles.clear();
+    _pendingExpand.clear();    // shallow-expand state belongs to the previous render
+    for (const t of _expandedTemp.values()) { try { t.shutdown(); } catch (e) { /* ignore */ } }
+    _expandedTemp.clear();
     clearTaskbar();            // popup tabs from the previous render
     clearSelection();          // highlights belong to the previous render
     currentScopePath = msg.scopePath; // root for popup hierarchical titles
@@ -1845,6 +1869,9 @@ window.addEventListener('message', (event) => {
                 setStatus(`Failed to render schematic${be}: ${detail}${hint}`);
                 console.error('sv-pathfinder schematic render failed; backend:', msg.backend, e);
             }
+            break;
+        case 'expandResult':
+            onExpandResult(msg);
             break;
         case 'setValues': {
             if (!circuit) { break; }

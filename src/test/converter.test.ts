@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import path from 'path';
 
-import { convertToDigitalJs, findDanglingNets, extractSubtree, findSubcircuitKey } from '../schematic/converter';
+import { convertToDigitalJs, findDanglingNets, extractSubtree, findSubcircuitKey, rootRelativeYosysPath, pickCoveringRoot } from '../schematic/converter';
 
 // Fixtures live in src/ (not copied to out/ by tsc), so resolve from the repo root.
 const FIXTURES = path.resolve(__dirname, '../../src/test/fixtures');
@@ -118,5 +118,40 @@ suite('extractSubtree', () => {
     });
     test('a missing scope returns undefined (caller falls back to per-scope elaboration)', () => {
         assert.strictEqual(extractSubtree(fullCircuit(), 'Z', 'top.zzz', 'top'), undefined);
+    });
+});
+
+// Full mode roots the cached elaboration at the scope the user opens (not the design top, which may
+// be a non-synthesizable testbench). A descendant of root R lives at the yosys path
+// `${R.module}${slangPath-below-R}`, since yosys roots uniquified names at the top module name.
+suite('rootRelativeYosysPath', () => {
+    test('the root itself maps to the root module name', () => {
+        // R = the DUT instance `dut.tpu_inst` (module tpu) → its own yosys path is just `tpu`.
+        assert.strictEqual(rootRelativeYosysPath('tpu', 'dut.tpu_inst', 'dut.tpu_inst'), 'tpu');
+    });
+    test('a descendant strips the root instance prefix and prepends the root module', () => {
+        assert.strictEqual(
+            rootRelativeYosysPath('tpu', 'dut.tpu_inst', 'dut.tpu_inst.vpu_inst.bias_parent_inst'),
+            'tpu.vpu_inst.bias_parent_inst');
+    });
+    test('undefined when the scope is not the root or under it', () => {
+        assert.strictEqual(rootRelativeYosysPath('tpu', 'dut.tpu_inst', 'dut.other'), undefined);
+        assert.strictEqual(rootRelativeYosysPath('tpu', 'dut.tpu_inst', 'dut'), undefined); // an ancestor
+        assert.strictEqual(rootRelativeYosysPath('tpu', 'dut.tpu_inst', 'dut.tpu_instX'), undefined); // prefix-but-not-a-child
+    });
+});
+
+suite('pickCoveringRoot', () => {
+    test('picks the deepest covering root (smallest circuit to extract from)', () => {
+        const roots = ['tpu', 'tpu.vpu_inst'];
+        assert.strictEqual(pickCoveringRoot(roots, 'tpu.vpu_inst.bias_parent_inst'), 'tpu.vpu_inst');
+        assert.strictEqual(pickCoveringRoot(roots, 'tpu.systolic_inst'), 'tpu'); // only the shallow root covers it
+    });
+    test('a root covers itself (go-to-parent back to a root is a hit, not a re-elaboration)', () => {
+        assert.strictEqual(pickCoveringRoot(['tpu', 'tpu.vpu_inst'], 'tpu'), 'tpu');
+    });
+    test('undefined when nothing covers the scope (ascended above all roots → elaborate fresh)', () => {
+        assert.strictEqual(pickCoveringRoot(['tpu.vpu_inst'], 'tpu'), undefined);
+        assert.strictEqual(pickCoveringRoot([], 'tpu'), undefined);
     });
 });

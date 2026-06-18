@@ -312,6 +312,32 @@ export function findSubcircuitKey(fullCircuit: any, moduleName: string, instance
     return undefined;
 }
 
+// Map a slang-tree instance path to the yosys path INSIDE a circuit that was elaborated rooted at
+// scope R (module `rootModule` at `rootInstancePath`). yosys roots uniquified names at the top MODULE
+// name, so a descendant Y at slang path `<rootInstancePath>.<sub>` lives at yosys path
+// `<rootModule>.<sub>`. Returns `rootModule` for R itself, and undefined when `instancePath` isn't R
+// or a descendant of R (i.e. R doesn't cover it). Feed the result to extractSubtree as its
+// instancePath, with topInstancePath = rootModule.
+export function rootRelativeYosysPath(rootModule: string, rootInstancePath: string, instancePath: string): string | undefined {
+    if (instancePath === rootInstancePath) { return rootModule; }
+    if (instancePath.startsWith(rootInstancePath + '.')) { return rootModule + instancePath.slice(rootInstancePath.length); }
+    return undefined;
+}
+
+// From the cached elaboration roots, pick the one that covers `instancePath` (R itself or an ancestor)
+// — preferring the DEEPEST (longest root path = smallest circuit to extract from). undefined if none
+// covers it (the caller then elaborates a fresh root). The whole cache is searched, so returning to a
+// prior root (e.g. go-to-parent back to where you started) is a hit, not a re-elaboration.
+export function pickCoveringRoot(rootInstancePaths: string[], instancePath: string): string | undefined {
+    let best: string | undefined;
+    for (const r of rootInstancePaths) {
+        if (instancePath === r || instancePath.startsWith(r + '.')) {
+            if (best === undefined || r.length > best.length) { best = r; }
+        }
+    }
+    return best;
+}
+
 // Repackage the scope at (moduleName, instancePath) as a standalone TopModule pulled from a
 // whole-design circuit. `topInstancePath` is the design top's path (a single segment) — showing the
 // top returns the whole circuit unchanged. Returns undefined if the scope isn't in the circuit (the

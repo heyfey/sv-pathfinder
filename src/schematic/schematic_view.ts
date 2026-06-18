@@ -10,11 +10,11 @@ import * as os from 'os';
 import { DesignItem, NetlistItem, HierarchyTreeProvider, replaceFilePathIfNeeded, showTextDocumentLocation } from '../tree_view';
 import { resolveScope, scopeCacheKey, ScopeContext } from './scope_resolver';
 import { runYosys, SchematicPreset, getResolvedBackendName, isResolvedBackendLimited } from './yosys_runner';
-import { convertToDigitalJs, extractSubtree } from './converter';
+import { convertToDigitalJs, extractSubtree, rootRelativeYosysPath, pickCoveringRoot } from './converter';
 import { findParentModuleScope } from './scope_nav';
 import { cleanCelltype } from './celltype';
 import { isNoYosysBackendError, limitedBackendWarning } from './backend_policy';
-import { FromWebviewMessage, ToWebviewMessage, ElementClickMessage, ContextActionMessage, ExportRequestMessage, ExportContentMessage, SourcePosition } from './messages';
+import { FromWebviewMessage, ToWebviewMessage, ElementClickMessage, ContextActionMessage, ExpandRequestMessage, ExportRequestMessage, ExportContentMessage, SourcePosition } from './messages';
 
 interface ShownSchematic {
     design: DesignItem;
@@ -29,7 +29,9 @@ export class SchematicViewProvider {
     private pendingMessages: ToWebviewMessage[] = [];
     private current: ShownSchematic | undefined;
     private cache = new Map<string, any>(); // scopeCacheKey -> DigitalJS JSON (per-scope: shallow + full-fallback)
-    private fullCircuitCache = new Map<string, any>(); // topInstance|preset(+dangling) -> whole-design DigitalJS (full mode)
+    // full mode: each entry is an elaboration rooted at a scope the user opened/ascended-to; descendants
+    // render by extraction. Keyed `${design}|${preset}(+dangling)|${rootInstancePath}`.
+    private fullCircuitCache = new Map<string, { rootModule: string; rootInstancePath: string; circuit: any }>();
     private timestamp = -1;
     private valueTimer: NodeJS.Timeout | undefined;
     private limitedBackendWarned = false; // one-time-per-session warning for the limited fallback
@@ -78,7 +80,7 @@ export class SchematicViewProvider {
             // Falls back to a per-scope elaboration if the scope isn't found in the whole-design circuit
             // (e.g. a generate-name quirk). shallow mode: elaborate this scope + 1 level on demand.
             let digitalJsJson = !shallow
-                ? await this.renderFromFullCircuit(design, instance, ctx, preset, showDangling, force)
+                ? await this.renderFromFullCircuit(design, ctx, preset, showDangling, force)
                 : undefined;
             if (!digitalJsJson) {
                 digitalJsJson = await this.elaborateScope(ctx, preset, showDangling, shallow, force);
@@ -132,28 +134,34 @@ export class SchematicViewProvider {
         return json;
     }
 
-    // Full mode: elaborate the ENTIRE design once (from its real top), cache it, and return the shown
-    // scope's subtree extracted from it (no re-elaboration). Returns undefined if the scope isn't found
-    // in the whole-design circuit, so the caller falls back to a per-scope elaboration.
-    private async renderFromFullCircuit(design: DesignItem, instance: NetlistItem, ctx: ScopeContext, preset: SchematicPreset, showDangling: boolean, force: boolean): Promise<any> {
-        const topPath = ctx.instancePath.split('.')[0]; // the design top's instance name
-        const fullKey = `${design.resourceUri.fsPath}|${topPath}|${preset}` + (showDangling ? '+dangling' : '');
-        let full = !force ? this.fullCircuitCache.get(fullKey) : undefined;
-        if (!full) {
-            const rootInstance = ctx.instancePath === topPath ? instance : await design.findTreeItem(topPath);
-            if (!rootInstance) { return undefined; } // can't locate the top → per-scope fallback
-            const rootCtx = await resolveScope(design, rootInstance);
-            full = await vscode.window.withProgress({
-                location: vscode.ProgressLocation.Notification,
-                title: `Schematic: elaborating ${rootCtx.moduleName} (full design, ${preset.toUpperCase()})…`,
-                cancellable: false,
-            }, async () => {
-                const result = await runYosys(rootCtx, preset, { showDangling });
-                return convertToDigitalJs(result.yosysJson, { showDangling });
-            });
-            this.fullCircuitCache.set(fullKey, full);
+    // Full mode: render the shown scope by EXTRACTING it from a cached elaboration that covers it
+    // (the scope itself or an ancestor the user opened/ascended-to) — no re-elaboration. Only when no
+    // cached root covers the scope (or on a forced refresh) do we elaborate THIS scope's own subtree
+    // and cache it as a new root. Rooting at the shown scope (not the design's absolute top) avoids
+    // elaborating a non-synthesizable testbench above the DUT. Returns the circuit to post.
+    private async renderFromFullCircuit(design: DesignItem, ctx: ScopeContext, preset: SchematicPreset, showDangling: boolean, force: boolean): Promise<any> {
+        const prefix = `${design.resourceUri.fsPath}|${preset}${showDangling ? '+dangling' : ''}|`;
+        if (!force) {
+            const roots = [...this.fullCircuitCache.entries()].filter(([k]) => k.startsWith(prefix));
+            const cover = pickCoveringRoot(roots.map(([, v]) => v.rootInstancePath), ctx.instancePath);
+            const entry = cover !== undefined ? roots.find(([, v]) => v.rootInstancePath === cover)?.[1] : undefined;
+            if (entry) {
+                const relPath = rootRelativeYosysPath(entry.rootModule, entry.rootInstancePath, ctx.instancePath);
+                const sub = relPath !== undefined ? extractSubtree(entry.circuit, ctx.moduleName, relPath, entry.rootModule) : undefined;
+                if (sub) { return sub; } // covered → extract, no re-elaboration
+            }
         }
-        return extractSubtree(full, ctx.moduleName, ctx.instancePath, topPath);
+        // Not covered (or forced): elaborate this scope's subtree as a new root.
+        const circuit = await vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: `Schematic: elaborating ${ctx.moduleName} (${preset.toUpperCase()})…`,
+            cancellable: false,
+        }, async () => {
+            const result = await runYosys(ctx, preset, { showDangling });
+            return convertToDigitalJs(result.yosysJson, { showDangling });
+        });
+        this.fullCircuitCache.set(prefix + ctx.instancePath, { rootModule: ctx.moduleName, rootInstancePath: ctx.instancePath, circuit });
+        return circuit;
     }
 
     // Enum/struct/array (and other non-scalar) parameters can't be overridden in Yosys (see
@@ -245,6 +253,9 @@ export class SchematicViewProvider {
                     break;
                 case 'contextAction':
                     this.handleContextAction(msg as ContextActionMessage);
+                    break;
+                case 'expandRequest':
+                    this.handleExpandRequest(msg as ExpandRequestMessage);
                     break;
                 case 'export':
                     this.handleExportRequest(msg as ExportRequestMessage);
@@ -476,6 +487,36 @@ export class SchematicViewProvider {
                 if (item) { await vscode.commands.executeCommand('sv-pathfinder.addToWaveform', item); }
                 return;
             }
+        }
+    }
+
+    // Shallow mode: a blackboxed child box has no loaded internals, so "Expand" re-elaborates the
+    // child (selected + 1) on demand; the webview opens the returned circuit in a popup. Resolve the
+    // child like stepInto; if it isn't in the slang tree (off-tree), elaborate its module standalone
+    // by celltype. Replies with expandResult{key, circuit} (or {key, error}; the box stays a box).
+    private async handleExpandRequest(msg: ExpandRequestMessage) {
+        const shown = this.current;
+        if (!shown) { return; }
+        try {
+            const showDangling = vscode.workspace.getConfiguration('sv-pathfinder')
+                .get<boolean>('schematicShowDanglingNets', false);
+            const relPath = [...(msg.path ?? []), msg.leafName].filter(Boolean).join('.');
+            const fullName = [shown.ctx.instancePath, relPath].filter(Boolean).join('.');
+            const child = await shown.instance.findChild(relPath, shown.design)
+                ?? await shown.design.findTreeItem(fullName);
+            let childCtx: ScopeContext;
+            if (child) {
+                childCtx = await resolveScope(shown.design, child);
+            } else {
+                const mod = msg.celltype ? cleanCelltype(msg.celltype) : undefined;
+                if (!mod) { this.postMessage({ type: 'expandResult', key: msg.key, error: `Can't resolve ${msg.leafName}` }); return; }
+                // Off-tree: elaborate the module standalone (its own defaults), reusing this design's files.
+                childCtx = { instancePath: fullName || mod, moduleName: mod, resolvedParams: [], skippedParams: [], childModules: [], dotF: shown.ctx.dotF, fileSet: shown.ctx.fileSet, workDir: shown.ctx.workDir };
+            }
+            const circuit = await this.elaborateScope(childCtx, shown.preset, showDangling, /*shallow*/ true, false);
+            this.postMessage({ type: 'expandResult', key: msg.key, circuit });
+        } catch (e: any) {
+            this.postMessage({ type: 'expandResult', key: msg.key, error: String(e?.message ?? e) });
         }
     }
 
