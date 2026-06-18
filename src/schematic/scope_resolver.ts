@@ -2,6 +2,7 @@
 // values (formatted as Verilog literals) + file set for Yosys.
 import * as path from 'path';
 import { DesignItem, NetlistItem } from '../tree_view';
+import { formatParamValue, isEnumParamType } from './param_util';
 
 export interface ResolvedParam {
     name: string;
@@ -27,21 +28,9 @@ export function scopeCacheKey(ctx: ScopeContext, preset: string): string {
     return `${ctx.moduleName}|${params}|${preset}`;
 }
 
-// Accept plain ints, sized/based literals (8'hFF), and quoted strings; reject anything
-// that doesn't look like a Verilog constant so we never inject garbage into the script.
-const VERILOG_LITERAL_RE = /^(\d+|\d*'[bodhBODH][0-9a-fA-FxzXZ_]+|"[^"\\]*")$/;
-
-function formatParamValue(raw: string): string | undefined {
-    const v = raw.trim();
-    if (VERILOG_LITERAL_RE.test(v)) { return v; }
-    // enum/typedef'd params sometimes print as `name (value)` or similar; try to pull a number
-    const m = v.match(/(-?\d+)/);
-    if (m) { return m[1]; }
-    return undefined;
-}
-
 // Parameters appear as varItem children with type 'parameter'; the resolved value is in
-// the item description ("int = 8" for slang, "= 8" for UHDM).
+// the item description ("Enum rv32zc_e (logic[31:0]) = 3" for slang, "= 8" for UHDM) — i.e. the
+// declared type, then "= <value>".
 function collectParams(children: NetlistItem[]): ResolvedParam[] {
     const params: ResolvedParam[] = [];
     for (const child of children) {
@@ -49,9 +38,16 @@ function collectParams(children: NetlistItem[]): ResolvedParam[] {
         const desc = typeof child.description === 'string' ? child.description : '';
         const eq = desc.lastIndexOf('=');
         if (eq < 0) { continue; }
+        const typePart = desc.slice(0, eq);
         const literal = formatParamValue(desc.slice(eq + 1));
         if (literal === undefined) {
             console.warn(`schematic: skipping parameter ${child.name} (unparseable value '${desc.slice(eq + 1).trim()}')`);
+            continue;
+        }
+        // Enum-typed params: read_slang rejects a bare-int override and we can't build the package-
+        // qualified cast it needs, so skip the override and let the module default apply.
+        if (isEnumParamType(typePart)) {
+            console.warn(`schematic: not overriding enum parameter ${child.name} (=${literal}); using the module default`);
             continue;
         }
         params.push({ name: child.name, verilogLiteral: literal });
