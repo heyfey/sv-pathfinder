@@ -149,6 +149,11 @@ std::mutex designContextMapMutex;
 // InstanceSymbol): the index is keyed by definition name, and a generate block has no definition to
 // key on — it surfaces only as a path segment (e.g. "gen_blk[0]") inside an instance's vpiFullName.
 // So "find instance" matches modules/interfaces/programs, not gen-blocks — consistent with slang.
+//
+// Prefer EnsureDesignIndex() — a loaded design is immutable (a reload makes a fresh DesignContext),
+// so this should run at most once. The clear() up front makes a direct rebuild idempotent: the
+// traversal push_back()s into instContextMap, so re-running on a populated map would double every
+// instance (and the def sizes derived from it).
 void BuildDesignIndex(DesignContext& dc) {
   dc.moduleDefContextMap.clear();
   dc.instContextMap.clear();
@@ -340,7 +345,7 @@ class GetModuleDefsWorker : public Napi::AsyncWorker {
       return;
     }
 
-    BuildDesignIndex(*dc);
+    EnsureDesignIndex(*dc);  // build once; reuse if search (or a prior call) already indexed
   }
 
   void OnOK() override {
