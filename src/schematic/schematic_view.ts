@@ -137,7 +137,7 @@ export class SchematicViewProvider {
     // in the whole-design circuit, so the caller falls back to a per-scope elaboration.
     private async renderFromFullCircuit(design: DesignItem, instance: NetlistItem, ctx: ScopeContext, preset: SchematicPreset, showDangling: boolean, force: boolean): Promise<any> {
         const topPath = ctx.instancePath.split('.')[0]; // the design top's instance name
-        const fullKey = `${topPath}|${preset}` + (showDangling ? '+dangling' : '');
+        const fullKey = `${design.resourceUri.fsPath}|${topPath}|${preset}` + (showDangling ? '+dangling' : '');
         let full = !force ? this.fullCircuitCache.get(fullKey) : undefined;
         if (!full) {
             const rootInstance = ctx.instancePath === topPath ? instance : await design.findTreeItem(topPath);
