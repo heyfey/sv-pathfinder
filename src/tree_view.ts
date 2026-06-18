@@ -519,6 +519,9 @@ export abstract class DesignItem extends vscode.TreeItem {
     }
 
     public async findTreeItem(fullName: string): Promise<NetlistItem | undefined> {
+        // Tree node names have the UHDM "work@" library prefix stripped (see NetlistItem ctor), so
+        // normalize the query the same way — otherwise a raw "work@top.a.b" never matches "top".
+        fullName = fullName.replace("work@", "");
         const element = this.treeData.find((element) => element.name === fullName.split('.')[0]);
         if (!element) { return undefined; }
         return await element.findChild(fullName.split('.').slice(1).join('.'), this);
