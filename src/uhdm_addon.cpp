@@ -5,11 +5,12 @@
 #include <uhdm/vpi_user.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
-#include <random>
+#include <memory>
+#include <mutex>
 #include <string>
 // #include <map>
-#include <mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -130,16 +131,29 @@ typedef std::map<std::string, moduleDefContext> ModuleDefContextMap;
 typedef std::unordered_map<std::string, std::vector<instContext>>
     InstContextMap;
 
-typedef struct {
+struct DesignContext {
   std::string filename;
   std::unique_ptr<UHDM::Serializer> serializer;
-  vpiHandle design;
+  vpiHandle design = nullptr;
   ModuleDefContextMap moduleDefContextMap;
   InstContextMap instContextMap;
   bool indexed = false;  // set once BuildDesignIndex has run (latches the build-once guarantee)
-} DesignContext;
 
-std::unordered_map<int, DesignContext> designContextMap;
+  DesignContext(std::string fn, std::unique_ptr<UHDM::Serializer> ser, vpiHandle d)
+      : filename(std::move(fn)), serializer(std::move(ser)), design(d) {}
+  // Held via shared_ptr in designContextMap. A worker copies the shared_ptr under the lock, so its
+  // context (and VPI handle) survives a concurrent unloadDesign(); the handle is released here when
+  // the last reference drops — never by unloadDesign while a worker might still be using it.
+  ~DesignContext() {
+    if (design) { vpi_release_handle(design); }
+  }
+  DesignContext(const DesignContext&) = delete;
+  DesignContext& operator=(const DesignContext&) = delete;
+};
+
+// shared_ptr so an in-flight worker can keep its DesignContext alive past an unloadDesign() that
+// erases it from the map (closes the use-after-free). The mutex guards the map structure.
+std::unordered_map<int, std::shared_ptr<DesignContext>> designContextMap;
 std::mutex designContextMapMutex;
 
 // Walk the whole elaborated design once, indexing every module/interface/program INSTANCE by its
@@ -279,10 +293,10 @@ class LoadDesignWorker : public Napi::AsyncWorker {
       delete elaboratorContext;
     }
 
-    static std::random_device rd;
-    static std::mt19937 gen(rd());
-    static std::uniform_int_distribution<> dis(1, 1000000);
-    designId = dis(gen);
+    // Unique, collision-free id via an atomic counter (the previous shared mt19937 was both racy
+    // across concurrent loads and collision-prone in a 1..1e6 range).
+    static std::atomic<int> nextDesignId{1};
+    designId = nextDesignId.fetch_add(1, std::memory_order_relaxed);
 
     // Don't build the instance index here: a full-design traversal is only needed for the Modules
     // view (getModuleDefs) and instance search. Hierarchy-view browsing uses getTopModules + lazy
@@ -291,7 +305,7 @@ class LoadDesignWorker : public Napi::AsyncWorker {
     {
       std::lock_guard<std::mutex> lock(designContextMapMutex);
       designContextMap[designId] =
-          DesignContext{filename, std::move(serializer), design};
+          std::make_shared<DesignContext>(filename, std::move(serializer), design);
     }
   }
 
@@ -347,12 +361,12 @@ class GetModuleDefsWorker : public Napi::AsyncWorker {
       SetError("Design ID not found");
       return;
     }
-    dc = &it->second;
+    dc = it->second;  // hold a ref so OnOK can read the (immutable) index even after an unload
     if (!dc->design) {
       SetError("Design not loaded");
       return;
     }
-    EnsureDesignIndex(*dc);  // no-op post-load (already indexed); defensive only
+    EnsureDesignIndex(*dc);  // lazily builds the index here (under the lock) on first need
   }
 
   void OnOK() override {
@@ -377,8 +391,7 @@ class GetModuleDefsWorker : public Napi::AsyncWorker {
  private:
   Napi::Promise::Deferred deferred;
   int designId;
-  DesignContext* dc = nullptr;
-  vpiHandle design = nullptr;
+  std::shared_ptr<DesignContext> dc;
 };
 
 // Wrap getModuleDefs (now async)
@@ -414,7 +427,7 @@ Napi::Value GetTopModules(const Napi::CallbackInfo& info) {
 
   // Get the design ID from the first argument
   int designId = info[0].As<Napi::Number>().Int32Value();
-  vpiHandle design = nullptr;
+  std::shared_ptr<DesignContext> dc;
   {
     std::lock_guard<std::mutex> lock(designContextMapMutex);
     // Check if the design ID exists in the designContextMap
@@ -423,12 +436,13 @@ Napi::Value GetTopModules(const Napi::CallbackInfo& info) {
       Napi::Error::New(env, "Design ID not found").ThrowAsJavaScriptException();
       return env.Null();
     }
-    // Get the design handle from the DesignContext
-    design = it->second.design;
-    if (!design) {
-      Napi::Error::New(env, "Design not loaded").ThrowAsJavaScriptException();
-      return env.Null();
-    }
+    dc = it->second;  // keep the context (and its VPI handle) alive past a concurrent unloadDesign
+  }
+  // Traverse outside the lock; `dc` keeps the handle valid even if the design is unloaded meanwhile.
+  vpiHandle design = dc->design;
+  if (!design) {
+    Napi::Error::New(env, "Design not loaded").ThrowAsJavaScriptException();
+    return env.Null();
   }
 
   vpiHandle iter = vpi_iterate(UHDM::uhdmtopModules, design);
@@ -709,7 +723,7 @@ Napi::Value GetModuleInstances(const Napi::CallbackInfo& info) {
       return Napi::Array::New(env);
     }
 
-    DesignContext& dc = it->second;
+    DesignContext& dc = *it->second;
 
     auto instIt = dc.instContextMap.find(moduleDefName);
     if (instIt == dc.instContextMap.end()) {
@@ -762,7 +776,7 @@ class SearchInstancesWorker : public Napi::AsyncWorker {
       SetError("Design ID not found");
       return;
     }
-    DesignContext& dc = it->second;
+    DesignContext& dc = *it->second;
     EnsureDesignIndex(dc);  // build the instance index once if needed (skips gen scopes)
 
     for (const auto& pair : dc.instContextMap) {
@@ -856,13 +870,9 @@ Napi::Value UnloadDesign(const Napi::CallbackInfo& info) {
     return env.Null();
   }
 
-  // Release the design handle if it exists
-  if (it->second.design) {
-    vpi_release_handle(it->second.design);
-    it->second.design = nullptr;  // Set to null after releasing
-  }
-
-  // Remove the design context from the map
+  // Erase from the map (drops the map's reference). The DesignContext — and its VPI handle, released
+  // in ~DesignContext — stays alive until any in-flight worker still holding a shared_ptr finishes,
+  // so an unload concurrent with getModuleDefs/getTopModules/search can't free it out from under them.
   designContextMap.erase(it);
 
   // Return undefined to indicate successful completion
