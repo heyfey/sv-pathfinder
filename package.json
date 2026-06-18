@@ -172,7 +172,7 @@
         },
         {
           "command": "sv-pathfinder.searchDesign",
-          "when": "view == hierarchyView || view == moduleInstancesView",
+          "when": "view == hierarchyView",
           "group": "navigation@0"
         },
         {
