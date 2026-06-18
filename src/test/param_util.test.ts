@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 
-import { formatParamValue, isEnumParamType } from '../schematic/param_util';
+import { formatParamValue, isEnumParamType, collectParamOverrides } from '../schematic/param_util';
 
 suite('formatParamValue', () => {
     test('accepts plain ints, sized literals, and strings verbatim', () => {
@@ -29,5 +29,37 @@ suite('isEnumParamType', () => {
         assert.strictEqual(isEnumParamType('bit'), false);
         assert.strictEqual(isEnumParamType('logic[31:0]'), false);
         assert.strictEqual(isEnumParamType('integer'), false); // not "enum", despite containing chars
+    });
+});
+
+suite('collectParamOverrides', () => {
+    const p = (name: string, type: string, value: string) =>
+        ({ contextValue: 'varItem', type: 'parameter', name, description: `${type} = ${value}` });
+
+    test('keeps non-enum params as -G overrides; no skipped enums', () => {
+        const r = collectParamOverrides([p('Width', 'int', '8'), p('ResetAll', 'bit', "1'b0")]);
+        assert.deepStrictEqual(r.params, [
+            { name: 'Width', verilogLiteral: '8' },
+            { name: 'ResetAll', verilogLiteral: "1'b0" },
+        ]);
+        assert.deepStrictEqual(r.skippedEnums, []);
+    });
+
+    test('skips enum params and records their names (the ibex RV32ZC case)', () => {
+        const r = collectParamOverrides([
+            p('RV32ZC', 'Enum rv32zc_e (logic[31:0])', '3'),
+            p('Width', 'int', '8'),
+        ]);
+        assert.deepStrictEqual(r.params, [{ name: 'Width', verilogLiteral: '8' }]);
+        assert.deepStrictEqual(r.skippedEnums, ['RV32ZC']);
+    });
+
+    test('ignores non-parameter items and unparseable values', () => {
+        const r = collectParamOverrides([
+            { contextValue: 'varItem', type: 'wire', name: 'clk', description: 'logic = x' }, // not a param
+            { contextValue: 'scopeItem', type: 'module', name: 'sub' },                       // not a var
+            p('Junk', 'string', 'NotANumber'),                                                // unparseable
+        ]);
+        assert.deepStrictEqual(r, { params: [], skippedEnums: [] });
     });
 });

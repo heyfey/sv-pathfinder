@@ -32,6 +32,7 @@ export class SchematicViewProvider {
     private valueTimer: NodeJS.Timeout | undefined;
     private limitedBackendWarned = false; // one-time-per-session warning for the limited fallback
     private static readonly SUPPRESS_LIMITED_KEY = 'sv-pathfinder.suppressLimitedBackendWarning';
+    private static readonly SUPPRESS_ENUM_KEY = 'sv-pathfinder.suppressEnumParamWarning';
 
     constructor(
         private readonly context: vscode.ExtensionContext,
@@ -105,8 +106,29 @@ export class SchematicViewProvider {
             // push current waveform values onto the fresh schematic
             this.debouncePushValues();
             this.maybeWarnLimitedBackend();
+            this.maybeWarnSkippedEnumParams(ctx);
         } catch (e: any) {
             this.showRenderError(e);
+        }
+    }
+
+    // Enum parameters can't be overridden in Yosys (see collectParamOverrides), so the scope is drawn
+    // with the module default — possibly inaccurate if this instance overrides the enum to a non-
+    // default value (and we can't detect that, so the warning is "possibly"). Name the enum(s) so the
+    // user knows exactly what to sanity-check. Suppressible.
+    private async maybeWarnSkippedEnumParams(ctx: ScopeContext) {
+        const enums = ctx.skippedEnumParams;
+        if (!enums || enums.length === 0) { return; }
+        if (this.context.globalState.get<boolean>(SchematicViewProvider.SUPPRESS_ENUM_KEY, false)) { return; }
+        const list = enums.join(', ');
+        const suppress = "Don't show again";
+        const pick = await vscode.window.showWarningMessage(
+            `Schematic for ${ctx.moduleName}: enum parameter${enums.length > 1 ? 's' : ''} ${list} ` +
+            `${enums.length > 1 ? 'are' : 'is'} drawn at the module default — Yosys can't apply the ` +
+            `instance's enum value, so the structure may be inaccurate if it differs from the default.`,
+            suppress);
+        if (pick === suppress) {
+            await this.context.globalState.update(SchematicViewProvider.SUPPRESS_ENUM_KEY, true);
         }
     }
 
