@@ -28,11 +28,23 @@ export interface ParamItem {
     type?: string;
     description?: unknown;
     name: string;
+    sourceFile?: string;
+    lineNumber?: number;   // 1-based
+    columnNumber?: number; // 1-based
+}
+
+// An enum parameter we couldn't override, with its declaration location (so the warning can point the
+// user at it). slang reports the param symbol's location, which is the `parameter … = …;` decl.
+export interface SkippedEnumParam {
+    name: string;
+    file?: string;
+    line?: number;   // 1-based
+    column?: number; // 1-based
 }
 
 export interface CollectedParams {
     params: { name: string; verilogLiteral: string }[]; // -G overrides we can safely apply
-    skippedEnums: string[];                              // enum params we couldn't override (see below)
+    skippedEnums: SkippedEnumParam[];                   // enum params we couldn't override (see below)
 }
 
 // Collect the -G parameter overrides for a scope from its (slang/UHDM) child items. Each parameter
@@ -53,10 +65,15 @@ export interface CollectedParams {
 // PROPER FIX (upstream, not near-term): have slang-server's getScope surface a round-trippable value
 // (the package-qualified enum member) so we can pass it straight to -G — then this skip + the warning
 // both go away, for every parameter type. Until then the caller surfaces a "possibly inaccurate"
-// warning naming the skipped enum params.
+// warning naming the skipped enum params + their declaration location.
+//
+// UHDM caveat: a UHDM design's parameter description is just "= <value>" (the addon reports the
+// resolved value, not the type), so isEnumParamType can't fire for UHDM — an enum param there is NOT
+// detected, gets passed as a bare-int -G, and read_slang hard-fails (no graceful skip+warn). Matching
+// this handling for UHDM would need the addon (GetVars) to also report the parameter's type.
 export function collectParamOverrides(items: ParamItem[]): CollectedParams {
     const params: { name: string; verilogLiteral: string }[] = [];
-    const skippedEnums: string[] = [];
+    const skippedEnums: SkippedEnumParam[] = [];
     for (const child of items) {
         if (child.contextValue !== 'varItem' || child.type !== 'parameter') { continue; }
         const desc = typeof child.description === 'string' ? child.description : '';
@@ -65,7 +82,10 @@ export function collectParamOverrides(items: ParamItem[]): CollectedParams {
         const typePart = desc.slice(0, eq);
         const literal = formatParamValue(desc.slice(eq + 1));
         if (literal === undefined) { continue; } // unparseable value — leave the param at its default
-        if (isEnumParamType(typePart)) { skippedEnums.push(child.name); continue; }
+        if (isEnumParamType(typePart)) {
+            skippedEnums.push({ name: child.name, file: child.sourceFile, line: child.lineNumber, column: child.columnNumber });
+            continue;
+        }
         params.push({ name: child.name, verilogLiteral: literal });
     }
     return { params, skippedEnums };

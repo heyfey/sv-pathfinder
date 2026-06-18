@@ -120,14 +120,20 @@ export class SchematicViewProvider {
         const enums = ctx.skippedEnumParams;
         if (!enums || enums.length === 0) { return; }
         if (this.context.globalState.get<boolean>(SchematicViewProvider.SUPPRESS_ENUM_KEY, false)) { return; }
-        const list = enums.join(', ');
+        // Name each enum with its declaration location ("RV32ZC (ibex_compressed_decoder.sv:17)").
+        const list = enums.map(e => e.file ? `${e.name} (${path.basename(e.file)}:${e.line})` : e.name).join(', ');
+        const goto = enums.find(e => e.file);                 // first one with a known location
+        const gotoBtn = goto ? `Go to ${goto.name}` : undefined;
         const suppress = "Don't show again";
+        const buttons = gotoBtn ? [gotoBtn, suppress] : [suppress];
         const pick = await vscode.window.showWarningMessage(
             `Schematic for ${ctx.moduleName}: enum parameter${enums.length > 1 ? 's' : ''} ${list} ` +
             `${enums.length > 1 ? 'are' : 'is'} drawn at the module default — Yosys can't apply the ` +
             `instance's enum value, so the structure may be inaccurate if it differs from the default.`,
-            suppress);
-        if (pick === suppress) {
+            ...buttons);
+        if (gotoBtn && pick === gotoBtn && goto?.file) {
+            await showTextDocumentLocation(goto.file, goto.line ?? 1, goto.column ?? 1, !!this.current?.design.isExample);
+        } else if (pick === suppress) {
             await this.context.globalState.update(SchematicViewProvider.SUPPRESS_ENUM_KEY, true);
         }
     }

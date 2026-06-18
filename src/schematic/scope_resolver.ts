@@ -2,7 +2,7 @@
 // values (formatted as Verilog literals) + file set for Yosys.
 import * as path from 'path';
 import { DesignItem, NetlistItem } from '../tree_view';
-import { collectParamOverrides } from './param_util';
+import { collectParamOverrides, SkippedEnumParam } from './param_util';
 
 export interface ResolvedParam {
     name: string;
@@ -14,8 +14,8 @@ export interface ScopeContext {
     moduleName: string;            // module to root the Yosys run at
     resolvedParams: ResolvedParam[];
     // Enum params we could NOT override (drawn at the module default — possibly inaccurate). The
-    // schematic view warns, naming these. See collectParamOverrides for why we can't apply them.
-    skippedEnumParams: string[];
+    // schematic view warns, naming these + their declaration location. See collectParamOverrides.
+    skippedEnumParams: SkippedEnumParam[];
     // Either a .f command file (preferred: slang understands -f/-F) or an explicit file list.
     dotF?: string;
     fileSet: string[];

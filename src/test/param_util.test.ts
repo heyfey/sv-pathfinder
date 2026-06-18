@@ -33,8 +33,9 @@ suite('isEnumParamType', () => {
 });
 
 suite('collectParamOverrides', () => {
-    const p = (name: string, type: string, value: string) =>
-        ({ contextValue: 'varItem', type: 'parameter', name, description: `${type} = ${value}` });
+    const p = (name: string, type: string, value: string, loc?: { file: string; line: number; column: number }) =>
+        ({ contextValue: 'varItem', type: 'parameter', name, description: `${type} = ${value}`,
+           sourceFile: loc?.file, lineNumber: loc?.line, columnNumber: loc?.column });
 
     test('keeps non-enum params as -G overrides; no skipped enums', () => {
         const r = collectParamOverrides([p('Width', 'int', '8'), p('ResetAll', 'bit', "1'b0")]);
@@ -45,13 +46,13 @@ suite('collectParamOverrides', () => {
         assert.deepStrictEqual(r.skippedEnums, []);
     });
 
-    test('skips enum params and records their names (the ibex RV32ZC case)', () => {
+    test('skips enum params and records name + declaration location (ibex RV32ZC)', () => {
         const r = collectParamOverrides([
-            p('RV32ZC', 'Enum rv32zc_e (logic[31:0])', '3'),
+            p('RV32ZC', 'Enum rv32zc_e (logic[31:0])', '3', { file: '/x/cd.sv', line: 17, column: 32 }),
             p('Width', 'int', '8'),
         ]);
         assert.deepStrictEqual(r.params, [{ name: 'Width', verilogLiteral: '8' }]);
-        assert.deepStrictEqual(r.skippedEnums, ['RV32ZC']);
+        assert.deepStrictEqual(r.skippedEnums, [{ name: 'RV32ZC', file: '/x/cd.sv', line: 17, column: 32 }]);
     });
 
     test('ignores non-parameter items and unparseable values', () => {
