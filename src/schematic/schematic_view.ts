@@ -430,12 +430,16 @@ export class SchematicViewProvider {
                 // navigates off Yosys source positions (no tree item needed).
                 const mod = msg.celltype ? cleanCelltype(msg.celltype) : undefined;
                 const canSource = (msg.sourcePositions?.length ?? 0) > 0;
+                // In full mode the whole-design elaboration includes this instance even when the slang
+                // tree doesn't, so "Expand" opens it client-side — point the user there.
+                const fullMode = vscode.workspace.getConfiguration('sv-pathfinder')
+                    .get<string>('schematicElaborationMode', 'full') !== 'shallow';
                 const gotoSrc = 'Go to source';
                 const pick = await vscode.window.showWarningMessage(
                     `Can't step into ${msg.leafName}${mod ? ` (module ${mod})` : ''}: it's drawn by the ` +
-                    `schematic engine but isn't in the navigation hierarchy. This usually means the ` +
-                    `design's filelist doesn't include the module's source, so it couldn't be ` +
-                    `elaborated for navigation.`,
+                    `schematic engine but isn't in the navigation hierarchy (the design's filelist ` +
+                    `doesn't include the module's source, so it wasn't elaborated for navigation).` +
+                    (fullMode ? ` Use "Expand" to open it in a popup instead.` : ''),
                     ...(canSource ? [gotoSrc] : []));
                 if (pick === gotoSrc) {
                     await this.handleElementClick({ ...msg, type: 'elementClick', action: 'source' } as ElementClickMessage);
