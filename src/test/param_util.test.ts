@@ -1,21 +1,22 @@
 import * as assert from 'assert';
 
-import { formatParamValue, isEnumParamType, collectParamOverrides } from '../schematic/param_util';
+import { isCleanVerilogLiteral, isEnumParamType, collectParamOverrides } from '../schematic/param_util';
 
-suite('formatParamValue', () => {
-    test('accepts plain ints, sized literals, and strings verbatim', () => {
-        assert.strictEqual(formatParamValue(' 8 '), '8');
-        assert.strictEqual(formatParamValue("32'd32"), "32'd32");
-        assert.strictEqual(formatParamValue("8'hFF"), "8'hFF");
-        assert.strictEqual(formatParamValue('"abc"'), '"abc"');
+suite('isCleanVerilogLiteral', () => {
+    test('accepts plain ints, sized/based literals, and strings', () => {
+        assert.strictEqual(isCleanVerilogLiteral(' 8 '), true);
+        assert.strictEqual(isCleanVerilogLiteral("32'd32"), true);
+        assert.strictEqual(isCleanVerilogLiteral("8'hFF"), true);
+        assert.strictEqual(isCleanVerilogLiteral('-5'), true);
+        assert.strictEqual(isCleanVerilogLiteral('"abc"'), true);
     });
-    test('pulls a number out of a simple decorated value', () => {
-        assert.strictEqual(formatParamValue('signed (5)'), '5');
-        assert.strictEqual(formatParamValue('-5'), '-5');
-    });
-    test('returns undefined for unparseable values', () => {
-        assert.strictEqual(formatParamValue('SomeName'), undefined);
-        assert.strictEqual(formatParamValue(''), undefined);
+    test('rejects aggregates, reals, elided constants, and bare names', () => {
+        assert.strictEqual(isCleanVerilogLiteral("[6'b0,6'b0,6'b0]"), false); // unpacked-array value
+        assert.strictEqual(isCleanVerilogLiteral("'{a:1,b:2}"), false);        // struct value
+        assert.strictEqual(isCleanVerilogLiteral("160'd172472284505947085933645530377016818106...e9"), false); // slang-elided
+        assert.strictEqual(isCleanVerilogLiteral('3.14'), false);             // real
+        assert.strictEqual(isCleanVerilogLiteral('SomeName'), false);
+        assert.strictEqual(isCleanVerilogLiteral(''), false);
     });
 });
 
@@ -37,30 +38,50 @@ suite('collectParamOverrides', () => {
         ({ contextValue: 'varItem', type: 'parameter', name, description: `${type} = ${value}`,
            sourceFile: loc?.file, lineNumber: loc?.line, columnNumber: loc?.column });
 
-    test('keeps non-enum params as -G overrides; no skipped enums', () => {
-        const r = collectParamOverrides([p('Width', 'int', '8'), p('ResetAll', 'bit', "1'b0")]);
-        assert.deepStrictEqual(r.params, [
-            { name: 'Width', verilogLiteral: '8' },
-            { name: 'ResetAll', verilogLiteral: "1'b0" },
+    test('keeps clean-scalar params as -G overrides; nothing skipped', () => {
+        const r = collectParamOverrides([
+            p('Width', 'int unsigned', "32'd8"),
+            p('ResetAll', 'bit', "1'b0"),
+            p('Seed', 'lfsr_seed_t (aka logic[31:0])', "32'd2891135988"),
         ]);
-        assert.deepStrictEqual(r.skippedEnums, []);
+        assert.deepStrictEqual(r.params, [
+            { name: 'Width', verilogLiteral: "32'd8" },
+            { name: 'ResetAll', verilogLiteral: "1'b0" },
+            { name: 'Seed', verilogLiteral: "32'd2891135988" },
+        ]);
+        assert.deepStrictEqual(r.skippedParams, []);
     });
 
-    test('skips enum params and records name + declaration location (ibex RV32ZC)', () => {
+    test('skips enum params (clean int value, but int->enum) + records location (ibex RV32ZC)', () => {
         const r = collectParamOverrides([
             p('RV32ZC', 'Enum rv32zc_e (logic[31:0])', '3', { file: '/x/cd.sv', line: 17, column: 32 }),
             p('Width', 'int', '8'),
         ]);
         assert.deepStrictEqual(r.params, [{ name: 'Width', verilogLiteral: '8' }]);
-        assert.deepStrictEqual(r.skippedEnums, [{ name: 'RV32ZC', file: '/x/cd.sv', line: 17, column: 32 }]);
+        assert.deepStrictEqual(r.skippedParams, [{ name: 'RV32ZC', file: '/x/cd.sv', line: 17, column: 32 }]);
     });
 
-    test('ignores non-parameter items and unparseable values', () => {
+    test('skips aggregate/elided-valued params (the ibex PMP/LFSR cases)', () => {
         const r = collectParamOverrides([
-            { contextValue: 'varItem', type: 'wire', name: 'clk', description: 'logic = x' }, // not a param
-            { contextValue: 'scopeItem', type: 'module', name: 'sub' },                       // not a var
-            p('Junk', 'string', 'NotANumber'),                                                // unparseable
+            p('PMPRstCfg', 'pmp_cfg_t$[0:15]', "[6'b0,6'b0,6'b0]", { file: '/x/core.sv', line: 50, column: 4 }),
+            p('PMPRstAddr', 'logic[33:0]$[0:15]', "[34'h0,34'h0]"),
+            p('RndCnstLfsrPerm', 'lfsr_perm_t (aka logic[31:0][4:0])', "160'd172472...e9"),
+            p('Width', 'int', '8'),
         ]);
-        assert.deepStrictEqual(r, { params: [], skippedEnums: [] });
+        assert.deepStrictEqual(r.params, [{ name: 'Width', verilogLiteral: '8' }]);
+        assert.deepStrictEqual(r.skippedParams, [
+            { name: 'PMPRstCfg', file: '/x/core.sv', line: 50, column: 4 },
+            { name: 'PMPRstAddr', file: undefined, line: undefined, column: undefined },
+            { name: 'RndCnstLfsrPerm', file: undefined, line: undefined, column: undefined },
+        ]);
+    });
+
+    test('ignores non-parameter items and params with no value', () => {
+        const r = collectParamOverrides([
+            { contextValue: 'varItem', type: 'wire', name: 'clk', description: 'logic' }, // not a param
+            { contextValue: 'scopeItem', type: 'module', name: 'sub' },                   // not a var
+            { contextValue: 'varItem', type: 'parameter', name: 'NoVal', description: 'int' }, // no '='
+        ]);
+        assert.deepStrictEqual(r, { params: [], skippedParams: [] });
     });
 });

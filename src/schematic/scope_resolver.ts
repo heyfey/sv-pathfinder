@@ -2,7 +2,7 @@
 // values (formatted as Verilog literals) + file set for Yosys.
 import * as path from 'path';
 import { DesignItem, NetlistItem } from '../tree_view';
-import { collectParamOverrides, SkippedEnumParam } from './param_util';
+import { collectParamOverrides, SkippedParam } from './param_util';
 
 export interface ResolvedParam {
     name: string;
@@ -13,9 +13,10 @@ export interface ScopeContext {
     instancePath: string;          // e.g. top.cpu.alu — active-scope key for C5/C6 fallback
     moduleName: string;            // module to root the Yosys run at
     resolvedParams: ResolvedParam[];
-    // Enum params we could NOT override (drawn at the module default — possibly inaccurate). The
-    // schematic view warns, naming these + their declaration location. See collectParamOverrides.
-    skippedEnumParams: SkippedEnumParam[];
+    // Params we could NOT override (enum/struct/array/elided values — drawn at the module default,
+    // possibly inaccurate). The schematic view warns for non-top scopes, naming these + their
+    // declaration location. See collectParamOverrides.
+    skippedParams: SkippedParam[];
     // Either a .f command file (preferred: slang understands -f/-F) or an explicit file list.
     dotF?: string;
     fileSet: string[];
@@ -36,7 +37,7 @@ export async function resolveScope(design: DesignItem, instance: NetlistItem): P
     const instancePath = instance.getHierarchyName();
 
     const children = await design.getChildrenExternal(instance);
-    const { params: resolvedParams, skippedEnums: skippedEnumParams } = collectParamOverrides(children);
+    const { params: resolvedParams, skippedParams } = collectParamOverrides(children);
 
     const designPath = design.resourceUri.fsPath;
     let dotF: string | undefined;
@@ -58,5 +59,5 @@ export async function resolveScope(design: DesignItem, instance: NetlistItem): P
         workDir = fileSet.length > 0 ? path.dirname(fileSet[0]) : path.dirname(designPath);
     }
 
-    return { instancePath, moduleName, resolvedParams, skippedEnumParams, dotF, fileSet, workDir };
+    return { instancePath, moduleName, resolvedParams, skippedParams, dotF, fileSet, workDir };
 }

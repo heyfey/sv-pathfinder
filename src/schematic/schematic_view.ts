@@ -32,7 +32,7 @@ export class SchematicViewProvider {
     private valueTimer: NodeJS.Timeout | undefined;
     private limitedBackendWarned = false; // one-time-per-session warning for the limited fallback
     private static readonly SUPPRESS_LIMITED_KEY = 'sv-pathfinder.suppressLimitedBackendWarning';
-    private static readonly SUPPRESS_ENUM_KEY = 'sv-pathfinder.suppressEnumParamWarning';
+    private static readonly SUPPRESS_PARAM_KEY = 'sv-pathfinder.suppressParamWarning';
 
     constructor(
         private readonly context: vscode.ExtensionContext,
@@ -106,35 +106,38 @@ export class SchematicViewProvider {
             // push current waveform values onto the fresh schematic
             this.debouncePushValues();
             this.maybeWarnLimitedBackend();
-            this.maybeWarnSkippedEnumParams(ctx);
+            this.maybeWarnSkippedParams(ctx);
         } catch (e: any) {
             this.showRenderError(e);
         }
     }
 
-    // Enum parameters can't be overridden in Yosys (see collectParamOverrides), so the scope is drawn
-    // with the module default — possibly inaccurate if this instance overrides the enum to a non-
-    // default value (and we can't detect that, so the warning is "possibly"). Name the enum(s) so the
-    // user knows exactly what to sanity-check. Suppressible.
-    private async maybeWarnSkippedEnumParams(ctx: ScopeContext) {
-        const enums = ctx.skippedEnumParams;
-        if (!enums || enums.length === 0) { return; }
-        if (this.context.globalState.get<boolean>(SchematicViewProvider.SUPPRESS_ENUM_KEY, false)) { return; }
-        // Name each enum with its declaration location ("RV32ZC (ibex_compressed_decoder.sv:17)").
-        const list = enums.map(e => e.file ? `${e.name} (${path.basename(e.file)}:${e.line})` : e.name).join(', ');
-        const goto = enums.find(e => e.file);                 // first one with a known location
+    // Enum/struct/array (and other non-scalar) parameters can't be overridden in Yosys (see
+    // collectParamOverrides), so the scope is drawn with the module default — possibly inaccurate if
+    // this instance overrides one to a non-default value (we can't detect that, hence "possibly").
+    // Name each param + its declaration location so the user knows what to sanity-check. Suppressible.
+    // Skipped for a TOP-level scope: there a param IS its module default, so the drawing is accurate.
+    private async maybeWarnSkippedParams(ctx: ScopeContext) {
+        const skipped = ctx.skippedParams;
+        if (!skipped || skipped.length === 0) { return; }
+        if (!ctx.instancePath.includes('.')) { return; } // top scope: params == defaults, no inaccuracy
+        if (this.context.globalState.get<boolean>(SchematicViewProvider.SUPPRESS_PARAM_KEY, false)) { return; }
+        // Name each param with its declaration location ("RV32ZC (ibex_compressed_decoder.sv:17)").
+        const list = skipped.map(p => p.file ? `${p.name} (${path.basename(p.file)}:${p.line})` : p.name).join(', ');
+        const goto = skipped.find(p => p.file);               // first one with a known location
         const gotoBtn = goto ? `Go to ${goto.name}` : undefined;
         const suppress = "Don't show again";
         const buttons = gotoBtn ? [gotoBtn, suppress] : [suppress];
         const pick = await vscode.window.showWarningMessage(
-            `Schematic for ${ctx.moduleName}: enum parameter${enums.length > 1 ? 's' : ''} ${list} ` +
-            `${enums.length > 1 ? 'are' : 'is'} drawn at the module default — Yosys can't apply the ` +
-            `instance's enum value, so the structure may be inaccurate if it differs from the default.`,
+            `Schematic for ${ctx.moduleName}: parameter${skipped.length > 1 ? 's' : ''} ${list} ` +
+            `${skipped.length > 1 ? 'are' : 'is'} drawn at the module default — Yosys can't apply the ` +
+            `instance's value (enum/struct/array-typed), so the structure may be inaccurate if it ` +
+            `differs from the default.`,
             ...buttons);
         if (gotoBtn && pick === gotoBtn && goto?.file) {
             await showTextDocumentLocation(goto.file, goto.line ?? 1, goto.column ?? 1, !!this.current?.design.isExample);
         } else if (pick === suppress) {
-            await this.context.globalState.update(SchematicViewProvider.SUPPRESS_ENUM_KEY, true);
+            await this.context.globalState.update(SchematicViewProvider.SUPPRESS_PARAM_KEY, true);
         }
     }
 
