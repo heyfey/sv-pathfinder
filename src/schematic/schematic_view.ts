@@ -242,12 +242,21 @@ export class SchematicViewProvider {
                 return sub;
             }
         }
-        // Nothing above it could be elaborated either — surface the whole chain + the last real error.
-        throw new Error(
-            `Schematic: couldn't render '${ctx.moduleName}'. It has a SystemVerilog interface port (can't ` +
-            `elaborate standalone), and ${tried.length ? `no ancestor could be elaborated either (tried: ` +
-            `${tried.join(' → ')})` : 'it has no parent scope to root at'}.\n\nLast error:\n` +
-            String(lastErr?.message ?? lastErr));
+        // Nothing above it could be elaborated either. Lead with the claim, then show the ACTUAL Yosys
+        // interface-port error that justifies it (so it's verifiable, not asserted), plus what we tried.
+        const lines = [
+            `Schematic: '${ctx.moduleName}' can't be elaborated on its own — Yosys reports a SystemVerilog ` +
+            `interface-port error (the interface port has nothing to connect to at the top). ` +
+            (tried.length ? `Tried rooting at its ancestors (${tried.join(' → ')}) but none elaborated either.`
+                          : `It has no parent scope to root at.`),
+            ``,
+            `Yosys error for '${ctx.moduleName}':`,
+            String(origErr?.message ?? origErr),
+        ];
+        if (tried.length && lastErr !== origErr) {
+            lines.push(``, `Last ancestor ('${tried[tried.length - 1]}') error:`, String(lastErr?.message ?? lastErr));
+        }
+        throw new Error(lines.join('\n'));
     }
 
     // Enum/struct/array (and other non-scalar) parameters can't be overridden in Yosys (see
