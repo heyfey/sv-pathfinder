@@ -23,6 +23,13 @@ interface ShownSchematic {
     preset: SchematicPreset;
 }
 
+// A scope with a SystemVerilog interface port can't be elaborated as a standalone --top (Yosys:
+// "unconnected interface port" / "interface port on blackbox instance unsupported"). The fix is to
+// render it from a top-able ancestor; this recognizes that failure on the Yosys error message.
+function isInterfaceTopError(e: any): boolean {
+    return /unconnected interface port|interface port on blackbox/.test(String(e?.message ?? e));
+}
+
 export class SchematicViewProvider {
     private panel: vscode.WebviewPanel | undefined;
     private webviewReady = false;
@@ -79,11 +86,22 @@ export class SchematicViewProvider {
             // full mode: elaborate the whole design once, render this scope by extracting its subtree.
             // Falls back to a per-scope elaboration if the scope isn't found in the whole-design circuit
             // (e.g. a generate-name quirk). shallow mode: elaborate this scope + 1 level on demand.
-            let digitalJsJson = !shallow
-                ? await this.renderFromFullCircuit(design, ctx, preset, showDangling, force)
-                : undefined;
-            if (!digitalJsJson) {
-                digitalJsJson = await this.elaborateScope(ctx, preset, showDangling, shallow, force);
+            let digitalJsJson;
+            try {
+                digitalJsJson = !shallow
+                    ? await this.renderFromFullCircuit(design, ctx, preset, showDangling, force)
+                    : undefined;
+                if (!digitalJsJson) {
+                    digitalJsJson = await this.elaborateScope(ctx, preset, showDangling, shallow, force);
+                }
+            } catch (e: any) {
+                // A scope with a SystemVerilog interface port can't be elaborated as a standalone top
+                // (its interface has nothing to connect to). Render it from a top-able ANCESTOR instead
+                // — the only way (and exactly why full mode "works": it had a higher root). Applies to
+                // both modes.
+                if (!isInterfaceTopError(e)) { throw e; }
+                digitalJsJson = await this.renderViaTopableAncestor(design, instance, ctx, preset, showDangling);
+                if (!digitalJsJson) { throw e; }
             }
 
             this.createOrRevealPanel();
@@ -173,6 +191,37 @@ export class SchematicViewProvider {
         });
         this.fullCircuitCache.set(prefix + ctx.instancePath, { rootModule: ctx.moduleName, rootInstancePath: ctx.instancePath, circuit });
         return circuit;
+    }
+
+    // The opened scope couldn't be elaborated as a standalone top (an interface port has nothing to
+    // connect to). Walk UP to the nearest ancestor that CAN be elaborated, elaborate it (full subtree,
+    // no blackbox), cache it as a full-mode root (so later navigation reuses it), and extract the
+    // opened scope from it. Returns undefined if no ancestor is elaborable.
+    private async renderViaTopableAncestor(design: DesignItem, instance: NetlistItem, ctx: ScopeContext, preset: SchematicPreset, showDangling: boolean): Promise<any> {
+        const prefix = `${design.resourceUri.fsPath}|${preset}${showDangling ? '+dangling' : ''}|`;
+        for (let anc = findParentModuleScope(instance); anc; anc = findParentModuleScope(anc)) {
+            const ancCtx = await resolveScope(design, anc);
+            let full = this.fullCircuitCache.get(prefix + ancCtx.instancePath)?.circuit;
+            if (!full) {
+                try {
+                    full = await vscode.window.withProgress({
+                        location: vscode.ProgressLocation.Notification,
+                        title: `Schematic: elaborating ${ancCtx.moduleName} (parent of ${ctx.moduleName}, ${preset.toUpperCase()})…`,
+                        cancellable: false,
+                    }, async () => {
+                        const result = await runYosys(ancCtx, preset, { showDangling });
+                        return convertToDigitalJs(result.yosysJson, { showDangling });
+                    });
+                } catch {
+                    continue; // this ancestor also can't be a standalone top — climb higher
+                }
+                this.fullCircuitCache.set(prefix + ancCtx.instancePath, { rootModule: ancCtx.moduleName, rootInstancePath: ancCtx.instancePath, circuit: full });
+            }
+            const relPath = rootRelativeYosysPath(ancCtx.moduleName, ancCtx.instancePath, ctx.instancePath);
+            const sub = relPath !== undefined ? extractSubtree(full, ctx.moduleName, relPath, ancCtx.moduleName) : undefined;
+            if (sub) { return sub; }
+        }
+        return undefined;
     }
 
     // Enum/struct/array (and other non-scalar) parameters can't be overridden in Yosys (see
