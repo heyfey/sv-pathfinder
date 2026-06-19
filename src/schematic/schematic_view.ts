@@ -126,8 +126,19 @@ export class SchematicViewProvider {
                 title: `Schematic: elaborating ${ctx.moduleName}${shallow ? ' (+1 level)' : ''} (${preset.toUpperCase()})…`,
                 cancellable: false,
             }, async () => {
-                const result = await runYosys(ctx, preset, { showDangling, shallow });
-                return convertToDigitalJs(result.yosysJson, { showDangling });
+                try {
+                    const result = await runYosys(ctx, preset, { showDangling, shallow });
+                    return convertToDigitalJs(result.yosysJson, { showDangling });
+                } catch (e) {
+                    // shallow's --blackboxed-module can't blackbox a module that has a SystemVerilog
+                    // interface port ("interface port on blackbox instance unsupported"), and in
+                    // interface-heavy designs (e.g. rggen) that's most modules. Fall back to a full
+                    // elaboration of this scope's subtree (no blackbox), which works whenever the scope
+                    // itself is elaborable as a top.
+                    if (!shallow) { throw e; }
+                    const result = await runYosys(ctx, preset, { showDangling, shallow: false });
+                    return convertToDigitalJs(result.yosysJson, { showDangling });
+                }
             });
             this.cache.set(key, json);
         }

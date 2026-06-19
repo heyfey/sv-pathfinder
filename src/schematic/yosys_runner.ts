@@ -203,10 +203,18 @@ export async function runYosys(ctx: ScopeContext, preset: SchematicPreset, opts?
                 // A missing include or unresolved module usually means the filelist is incomplete —
                 // point at the include-dirs setting (we already add the source dirs as -I/-y).
                 const incomplete = /No such file or directory|unknown module/.test(out);
+                // A module with a SystemVerilog interface PORT can't be elaborated as a standalone top
+                // (its interface has nothing to connect to) — open a parent scope (in full mode) where
+                // the interface is wired up, and navigate down to it.
+                const ifacePort = /unconnected interface port|interface port on blackbox/.test(out);
                 const hint = incomplete
                     ? '\n\nHint: the filelist looks incomplete. If a header (e.g. *.svh) or a module ' +
                       "isn't found, add its directory to \"sv-pathfinder.schematicIncludeDirs\"."
-                    : '';
+                    : ifacePort
+                        ? '\n\nHint: this scope has a SystemVerilog interface port, so it can\'t be ' +
+                          'elaborated on its own. Open a parent scope that connects the interface (full ' +
+                          'mode) and navigate down to this one.'
+                        : '';
                 reject(new Error(`Yosys (${backend.name}) failed with code ${code}:\n` + out.slice(-4000) + hint));
             }
         });
