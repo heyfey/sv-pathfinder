@@ -100,8 +100,7 @@ export class SchematicViewProvider {
                 // — the only way (and exactly why full mode "works": it had a higher root). Applies to
                 // both modes.
                 if (!isInterfaceTopError(e)) { throw e; }
-                digitalJsJson = await this.renderViaTopableAncestor(design, instance, ctx, preset, showDangling);
-                if (!digitalJsJson) { throw e; }
+                digitalJsJson = await this.renderViaTopableAncestor(design, instance, ctx, preset, showDangling, e);
             }
 
             this.createOrRevealPanel();
@@ -139,6 +138,7 @@ export class SchematicViewProvider {
         const key = scopeCacheKey(ctx, preset) + (showDangling ? '+dangling' : '') + (shallow ? '+shallow' : '');
         let json = !force ? this.cache.get(key) : undefined;
         if (!json) {
+            let fellBack = false; // shallow degraded to a full-subtree elaboration (no blackbox)
             json = await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
                 title: `Schematic: elaborating ${ctx.moduleName}${shallow ? ' (+1 level)' : ''} (${preset.toUpperCase()})…`,
@@ -152,12 +152,21 @@ export class SchematicViewProvider {
                     // interface port ("interface port on blackbox instance unsupported"), and in
                     // interface-heavy designs (e.g. rggen) that's most modules. Fall back to a full
                     // elaboration of this scope's subtree (no blackbox), which works whenever the scope
-                    // itself is elaborable as a top.
+                    // itself is elaborable as a top. (If THIS also throws, it propagates — the caller's
+                    // interface-ancestor fallback takes over.)
                     if (!shallow) { throw e; }
                     const result = await runYosys(ctx, preset, { showDangling, shallow: false });
+                    fellBack = true;
                     return convertToDigitalJs(result.yosysJson, { showDangling });
                 }
             });
+            // Tell the user shallow couldn't stay "+1" — it elaborated more than asked (perf-relevant).
+            if (fellBack) {
+                vscode.window.showWarningMessage(
+                    `Schematic: shallow mode couldn't draw '${ctx.moduleName}' + 1 level — its children ` +
+                    `have SystemVerilog interface ports (can't be blackboxed), so its full subtree was ` +
+                    `elaborated instead (slower).`);
+            }
             this.cache.set(key, json);
         }
         return json;
@@ -196,11 +205,16 @@ export class SchematicViewProvider {
     // The opened scope couldn't be elaborated as a standalone top (an interface port has nothing to
     // connect to). Walk UP to the nearest ancestor that CAN be elaborated, elaborate it (full subtree,
     // no blackbox), cache it as a full-mode root (so later navigation reuses it), and extract the
-    // opened scope from it. Returns undefined if no ancestor is elaborable.
-    private async renderViaTopableAncestor(design: DesignItem, instance: NetlistItem, ctx: ScopeContext, preset: SchematicPreset, showDangling: boolean): Promise<any> {
+    // opened scope from it. Warns on success (it elaborates MORE than asked — perf-relevant). Throws an
+    // informative error — naming every ancestor it tried + the last failure — if none is elaborable, so
+    // a total failure shows WHAT failed, not just the original interface error.
+    private async renderViaTopableAncestor(design: DesignItem, instance: NetlistItem, ctx: ScopeContext, preset: SchematicPreset, showDangling: boolean, origErr: any): Promise<any> {
         const prefix = `${design.resourceUri.fsPath}|${preset}${showDangling ? '+dangling' : ''}|`;
+        const tried: string[] = [];
+        let lastErr: any = origErr;
         for (let anc = findParentModuleScope(instance); anc; anc = findParentModuleScope(anc)) {
             const ancCtx = await resolveScope(design, anc);
+            tried.push(ancCtx.moduleName);
             let full = this.fullCircuitCache.get(prefix + ancCtx.instancePath)?.circuit;
             if (!full) {
                 try {
@@ -212,16 +226,28 @@ export class SchematicViewProvider {
                         const result = await runYosys(ancCtx, preset, { showDangling });
                         return convertToDigitalJs(result.yosysJson, { showDangling });
                     });
-                } catch {
-                    continue; // this ancestor also can't be a standalone top — climb higher
+                } catch (e) {
+                    lastErr = e; // this ancestor also can't be a standalone top — climb higher
+                    continue;
                 }
                 this.fullCircuitCache.set(prefix + ancCtx.instancePath, { rootModule: ancCtx.moduleName, rootInstancePath: ancCtx.instancePath, circuit: full });
             }
             const relPath = rootRelativeYosysPath(ancCtx.moduleName, ancCtx.instancePath, ctx.instancePath);
             const sub = relPath !== undefined ? extractSubtree(full, ctx.moduleName, relPath, ancCtx.moduleName) : undefined;
-            if (sub) { return sub; }
+            if (sub) {
+                vscode.window.showWarningMessage(
+                    `Schematic: '${ctx.moduleName}' has a SystemVerilog interface port, so it can't be drawn ` +
+                    `on its own — rendered it from its ancestor '${ancCtx.moduleName}' (which elaborates more ` +
+                    `of the design; slower the first time).`);
+                return sub;
+            }
         }
-        return undefined;
+        // Nothing above it could be elaborated either — surface the whole chain + the last real error.
+        throw new Error(
+            `Schematic: couldn't render '${ctx.moduleName}'. It has a SystemVerilog interface port (can't ` +
+            `elaborate standalone), and ${tried.length ? `no ancestor could be elaborated either (tried: ` +
+            `${tried.join(' → ')})` : 'it has no parent scope to root at'}.\n\nLast error:\n` +
+            String(lastErr?.message ?? lastErr));
     }
 
     // Enum/struct/array (and other non-scalar) parameters can't be overridden in Yosys (see
