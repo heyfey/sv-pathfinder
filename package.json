@@ -316,7 +316,7 @@
           "group": "1_designNavigation@5"
         },
         {
-          "command": "sv-pathfinder.showSchematic",
+          "command": "sv-pathfinder.showSchematicFromEditor",
           "when": "resourceLangId == verilog || resourceLangId == systemverilog",
           "group": "1_designNavigation@6"
         }
@@ -431,6 +431,12 @@
         "command": "sv-pathfinder.showSchematic",
         "title": "Show Schematic",
         "icon": "$(circuit-board)"
+      },
+      {
+        "command": "sv-pathfinder.showSchematicFromEditor",
+        "title": "Show Schematic",
+        "icon": "$(circuit-board)",
+        "enablement": "sv-pathfinder.isCommandEnabled"
       }
     ]
   },

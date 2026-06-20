@@ -220,6 +220,12 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.showSchematic', async (e) => {
 		await schematicProvider.showSchematic(e);
 	}));
+	// Editor context-menu variant: render the active scope (ignores the passed Uri). The menu
+	// item is enabled only when the cursor is in the active instance's module (isCommandEnabled),
+	// so the active instance is guaranteed to be an instance of the module under the cursor.
+	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.showSchematicFromEditor', async () => {
+		await schematicProvider.showSchematic(undefined);
+	}));
 	schematicProvider.listenToMarkerSetEvent().then(disposable => {
 		if (disposable) { context.subscriptions.push(disposable); }
 	});
