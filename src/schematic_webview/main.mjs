@@ -1015,6 +1015,18 @@ function describe(model) {
     return `${type}: ${model.get('label') || ''}`.trim();
 }
 
+// A Constant device's value is intrinsic — the sim engine is off (external values only), so it's
+// never propagated onto wires. digitaljs holds the raw bits in 'constant' and caches a Vector3vl in
+// 'constantCache'. These let hover surface a constant's value (and a net a constant drives).
+function constantSig(model) {
+    return model && model.get('type') === 'Constant' ? model.get('constantCache') : undefined;
+}
+// The Constant device driving a wire (its source endpoint), if any.
+function wireConstantSig(link) {
+    const src = link.graph && link.get('source');
+    return src ? constantSig(link.graph.getCell(src.id)) : undefined;
+}
+
 // ---- rich hover tooltip (theme-aware; replaces digitaljs's bus-only Hex/Dec/Oct/Bin box) ----
 // Rows describing the hovered model: a bold header (the name/identity) + key/value detail lines.
 // Covers every net/bus/port/instance/gate so a user on a zoomed-out schematic can read name + type
@@ -1040,6 +1052,9 @@ function tipRows(model) {
         rows.push({ k: 'type', v: model.get('bidir') ? 'inout' : type.toLowerCase() });
         if (bits > 1) { rows.push({ k: 'width', v: `[${bits - 1}:0]` }); }
         valueRows(model, net, bits).forEach(r => rows.push(r));
+    } else if (type === 'Constant') {                                 // a literal / tie-off constant
+        rows.push({ v: 'constant', header: true });
+        constValueRows(model).forEach(r => rows.push(r));
     } else {                                                          // a gate / primitive
         rows.push({ v: type || 'cell', header: true });
         const label = model.get('label');
@@ -1047,11 +1062,27 @@ function tipRows(model) {
     }
     return rows;
 }
+// Value rows for a Constant device — intrinsic, so no waveform needed. Canonical Vector3vl bits:
+// binary (0b) when narrow, hex (0x) when wide, plus a decimal row; fall back to the raw bits when
+// they include x/z (e.g. a 'z' tie-off), which formatSig would otherwise blank out.
+function constValueRows(model) {
+    const sig = model.get('constantCache');
+    const bin = (sig && typeof sig.toBin === 'function') ? sig.toBin() : String(model.get('constant') || '');
+    if (!bin) { return []; }
+    const defined = /^[01]+$/.test(bin), wide = bin.length > 4;
+    const rows = [{ k: 'value', v: !defined ? bin : (wide ? '0x' + BigInt('0b' + bin).toString(16) : '0b' + bin) }];
+    if (defined && bin.length > 1) { rows.push({ k: 'dec', v: BigInt('0b' + bin).toString() }); }
+    if (defined && wide) { rows.push({ k: 'bin', v: '0b' + bin }); }
+    return rows;
+}
 // Value detail rows: the cursor value (x/z-aware display), plus dec/bin for a fully-defined bus.
 function valueRows(model, name, bits) {
     let sig = model.get('signal');
     if (!sig) { const outs = model.get('outputSignals'); if (outs) { sig = Object.values(outs)[0]; } }
-    const disp = name ? valueText(name, sig) : (currentValue(model) ?? '');
+    let disp = name ? valueText(name, sig) : (currentValue(model) ?? '');
+    // No live value (all-x ⇒ no waveform — clearValues seeds every net to x) but a Constant DRIVES this
+    // wire: show its static value (the sim engine is off, so the constant is never propagated onto it).
+    if (!disp && typeof model.isLink === 'function' && model.isLink()) { disp = formatSig(wireConstantSig(model)); }
     if (!disp) { return [{ k: 'value', v: '— (no waveform)' }]; }
     const rows = [{ k: 'value', v: disp }];
     const m = /^0x([0-9a-f]+)$/i.exec(disp); // a single, fully-defined bus value → add radices
@@ -1191,7 +1222,8 @@ function valueText(netname, sig) {
 function currentValue(model) {
     let sig = model.get('signal');
     if (!sig) { const outs = model.get('outputSignals'); if (outs) { sig = Object.values(outs)[0]; } }
-    const s = formatSig(sig);
+    let s = formatSig(sig);
+    if (!s) { s = formatSig(constantSig(model)); } // Constant device: intrinsic value (engine off → output reads x)
     return s === '' ? undefined : s;
 }
 const CTX_ITEMS = [

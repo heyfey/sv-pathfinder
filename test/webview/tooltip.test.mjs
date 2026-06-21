@@ -29,9 +29,30 @@ const busVal = await tip('bus');                               // din = 0x0f
 const net = await tip('net');
 const io = await tip('io');
 const sub = await tip('sub');
+
+// A Constant device's value is intrinsic (the sim engine is off, so it never reaches a wire). Hover a
+// multi-bit constant and read its value/dec rows; also hover a net a constant DRIVES (no waveform, but
+// statically known) and confirm it isn't blank. `kind`: 'cell' picks a multi-bit Constant device;
+// 'net' picks a wire whose source is a Constant.
+const conTip = (kind) => page.evaluate((k) => {
+    const { paper, labelIndex } = window.__schematic;
+    const g = labelIndex.graph;
+    const model = k === 'cell'
+        ? g.getElements().find(e => e.get('type') === 'Constant' && (e.get('constant') || '').length > 1)
+        : g.getLinks().find(l => { const s = l.get('source'); const c = s && g.getCell(s.id); return c && c.get('type') === 'Constant'; });
+    paper.trigger('cell:mouseenter', paper.findViewByModel(model), { clientX: 90, clientY: 90 });
+    const t = document.getElementById('sv-tooltip');
+    const rows = {};
+    for (const r of t.querySelectorAll('.sv-tip-row')) { rows[r.querySelector('.sv-tip-k').textContent] = r.querySelector('.sv-tip-v').textContent; }
+    return { header: t.querySelector('.sv-tip-header')?.textContent, rows, raw: model.get('constant') };
+}, kind);
+const con = await conTip('cell');
+const conNet = await conTip('net');
+const conDec = /^[01]+$/.test(con.raw || '') ? BigInt('0b' + con.raw).toString() : null;
 console.log('bus(noval):', JSON.stringify(busNoVal));
 console.log('bus(0x0f):', JSON.stringify(busVal));
 console.log('net:', JSON.stringify(net), '| io:', JSON.stringify(io), '| sub:', JSON.stringify(sub));
+console.log('const:', JSON.stringify(con), '| const-driven net:', JSON.stringify(conNet));
 
 const ok = report('tooltip', [
     ['bus: header=din, type "bus [7:0]"', busNoVal.header === 'din' && busNoVal.rows.type === 'bus [7:0]'],
@@ -40,6 +61,9 @@ const ok = report('tooltip', [
     ['1-bit net: type "net (1 bit)"', net.header === 'clk' && net.rows.type === 'net (1 bit)'],
     ['IO port: header + type input/output', !!io.header && (io.rows.type === 'input' || io.rows.type === 'output')],
     ['subcircuit: header + module row', !!sub.header && !!sub.rows.module],
+    ['constant cell: header "constant" + 0b/0x value', con.header === 'constant' && /^0[bx]/.test(con.rows.value || '')],
+    ['constant cell: decimal row matches the raw bits', con.rows.dec === conDec],
+    ['constant-driven net: shows the value, not "no waveform"', !!conNet.rows.value && !/no waveform/.test(conNet.rows.value)],
     ['tooltip is shown', busVal.shown],
     ['no page errors', !logs.some(l => l.startsWith('PAGEERROR'))],
 ], logs);
