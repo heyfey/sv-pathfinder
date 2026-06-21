@@ -38,13 +38,33 @@ const after = await page.evaluate(() => {
     return { display: o ? getComputedStyle(o).display : null, rendered: !!(window.__schematic && window.__schematic.labelIndex) };
 });
 
+// 3) renderStart: the extension arms the overlay BEFORE the heavy loadSchematic (so it covers the
+// extension work + the big message's deserialize, which precede loadSchematic). Shown after the delay,
+// and renderAbort cancels it on a failed render.
+const disp = () => page.evaluate(() => { const o = document.getElementById('sv-render-overlay'); return o ? getComputedStyle(o).display : null; });
+await page.evaluate(() => window.postMessage({ type: 'renderStart' }, '*'));
+await page.waitForTimeout(300);                  // > RENDER_OVERLAY_SHOW_DELAY (120ms)
+const afterStart = await disp();
+await page.evaluate(() => window.postMessage({ type: 'renderAbort' }, '*'));
+await page.waitForTimeout(100);
+const afterAbort = await disp();
+
+// 4) renderStart immediately followed by a SMALL load → the delayed show is cancelled, no flash.
+await page.evaluate(() => window.postMessage({ type: 'renderStart' }, '*'));
+await loadSchematic(page, 'fifo.digitaljs.json', { scopePath: 'tb.u_fifo', moduleName: 'param_fifo' });
+const afterFast = await disp();
+
 console.log('small:', JSON.stringify(small), '| during:', JSON.stringify(during), '| after:', JSON.stringify(after));
+console.log('afterStart:', afterStart, '| afterAbort:', afterAbort, '| afterFast:', afterFast);
 const ok = report('render_overlay', [
     ['small design: no overlay created (fast path)', small.overlayExists === false && small.rendered === true],
     ['heavy design: overlay shown while rendering', during.exists === true && during.display === 'flex'],
     ['heavy overlay reads "Rendering schematic…"', /Rendering schematic/.test(during.text)],
     ['heavy design: overlay hidden after layout settles', after.display === 'none'],
     ['heavy design: schematic rendered', after.rendered === true],
+    ['renderStart shows the overlay after its delay', afterStart === 'flex'],
+    ['renderAbort hides the overlay', afterAbort === 'none'],
+    ['renderStart + a fast small load → no overlay flash', afterFast === 'none'],
     ['no page errors', !logs.some(l => l.startsWith('PAGEERROR'))],
 ], logs);
 await browser.close();

@@ -109,4 +109,15 @@ export interface ExpandResultMessage {
     error?: string;
 }
 
-export type ToWebviewMessage = LoadSchematicMessage | SetValuesMessage | ClearValuesMessage | BuildExportMessage | ExpandResultMessage;
+// extension -> webview: a render is starting; show the "rendering" overlay (after a short delay so a
+// fast render doesn't flash it) BEFORE the heavy loadSchematic — its huge message deserializes and
+// builds synchronously in the webview, which the overlay can't cover if shown only inside loadSchematic
+// (e.g. go-to-parent ascending to the whole design). `renderAbort` cancels it if the render fails.
+export interface RenderStartMessage {
+    type: 'renderStart';
+}
+export interface RenderAbortMessage {
+    type: 'renderAbort';
+}
+
+export type ToWebviewMessage = LoadSchematicMessage | SetValuesMessage | ClearValuesMessage | BuildExportMessage | ExpandResultMessage | RenderStartMessage | RenderAbortMessage;

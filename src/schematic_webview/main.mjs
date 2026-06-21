@@ -867,9 +867,19 @@ function clearSelection() {
 // goes quiet. Gate on the displayed graph's connector count (≈ nets): below it a render is a frame or
 // two, so skip the overlay (and its flash) and build synchronously.
 const RENDER_OVERLAY_MIN_CONNECTORS = 1000;
+const RENDER_OVERLAY_SHOW_DELAY = 120; // wait this long after renderStart before showing — a fast render finishes first, no flash
 let _renderOverlay = null;
 let _overlayTimer = null;
 let _settleTimer = null;
+let _pendingShowTimer = null;
+// extension 'renderStart': a render is starting. Arm the overlay to appear after a short delay — this
+// covers the EXTENSION's elaboration/extraction AND the webview's deserialize of the (possibly huge)
+// loadSchematic, both of which precede loadSchematic's own logic. A render that finishes before the
+// delay (small scope) never shows it. Cancelled by loadSchematic (which takes over) or renderAbort.
+function scheduleRenderOverlay() {
+    clearTimeout(_pendingShowTimer);
+    _pendingShowTimer = setTimeout(showRenderOverlay, RENDER_OVERLAY_SHOW_DELAY);
+}
 function showRenderOverlay() {
     if (!_renderOverlay) {
         _renderOverlay = document.createElement('div');
@@ -885,6 +895,7 @@ function showRenderOverlay() {
 function hideRenderOverlay() {
     clearTimeout(_overlayTimer);
     clearTimeout(_settleTimer);
+    clearTimeout(_pendingShowTimer);
     if (_renderOverlay) { _renderOverlay.style.display = 'none'; }
 }
 // Hide once the schematic has been QUIET (no render pass, no layout move) for a beat — robust whether
@@ -898,10 +909,13 @@ function scheduleOverlayHide() {
 
 // ---- schematic load ----
 function loadSchematic(msg) {
-    // Heavy render → show the overlay and yield a frame so it paints BEFORE the blocking build; light
-    // render → build synchronously (no overlay flash). The overlay hides when rendering goes quiet.
+    clearTimeout(_pendingShowTimer); // the render arrived; renderStart's delayed-show decision is made here
+    // Heavy → keep the overlay up (already showing from renderStart, or this scope is big) and yield a
+    // frame so it paints BEFORE the blocking build; light → build synchronously (no overlay flash). The
+    // overlay then hides when rendering goes quiet.
     const conns = (msg.circuit && msg.circuit.connectors && msg.circuit.connectors.length) || 0;
-    if (conns > RENDER_OVERLAY_MIN_CONNECTORS) {
+    const overlayUp = !!_renderOverlay && _renderOverlay.style.display !== 'none';
+    if (overlayUp || conns > RENDER_OVERLAY_MIN_CONNECTORS) {
         showRenderOverlay();
         // Yield ~2 frames so the overlay paints BEFORE the blocking build. A timer (not rAF, which can
         // stall on an idle page) reliably runs the build even when no paint is scheduled.
@@ -1992,7 +2006,14 @@ window.addEventListener('message', (event) => {
                     : '';
                 setStatus(`Failed to render schematic${be}: ${detail}${hint}`);
                 console.error('sv-pathfinder schematic render failed; backend:', msg.backend, e);
+                hideRenderOverlay(); // a failed load won't reach scheduleOverlayHide
             }
+            break;
+        case 'renderStart':
+            scheduleRenderOverlay(); // overlay BEFORE the heavy loadSchematic (covers its deserialize/build)
+            break;
+        case 'renderAbort':
+            hideRenderOverlay();     // the render failed; no loadSchematic is coming
             break;
         case 'expandResult':
             onExpandResult(msg);

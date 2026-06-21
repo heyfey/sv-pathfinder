@@ -73,6 +73,10 @@ export class SchematicViewProvider {
         try {
             const ctx = await resolveScope(design, instance);
             this.current = { design, instance, ctx, preset };
+            // Tell an already-open webview a render is starting, so it can put up the "rendering" overlay
+            // BEFORE the heavy elaboration/extraction + the big loadSchematic that follows (which freezes
+            // the webview while it deserializes + builds — e.g. go-to-parent up to the whole design).
+            this.postMessage({ type: 'renderStart' });
             const cfg = vscode.workspace.getConfiguration('sv-pathfinder');
             // Optional: surface declared-but-unconnected nets. In the cache key so toggling the
             // setting + reloading re-elaborates (it changes the Yosys keeps + converter output).
@@ -127,6 +131,7 @@ export class SchematicViewProvider {
             // elaborates from the real top so every scope's params are in-context accurate.
             if (shallow) { this.maybeWarnSkippedParams(ctx); }
         } catch (e: any) {
+            this.postMessage({ type: 'renderAbort' }); // no loadSchematic is coming → drop the overlay
             this.showRenderError(e);
         }
     }
