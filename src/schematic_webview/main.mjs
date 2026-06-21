@@ -962,7 +962,16 @@ function loadSchematic(msg) {
         }, 300);
     });
 
-    setStatus(`${Object.keys(labelIndex.wires).length} named nets, ` +
+    // Total nets = distinct DRIVEN signals (named + unnamed internal nets). digitaljs links are
+    // point-to-point segments — a fan-out net is several links — so dedupe by driver endpoint (a net
+    // has exactly one driver) rather than counting links, keeping it comparable to the named-net count
+    // (a subset). One pass over the already-built top graph; negligible (we iterate links elsewhere too).
+    const drivenNets = new Set();
+    for (const link of labelIndex.graph.getLinks()) {
+        const src = link.get('source');
+        if (src && src.id != null) { drivenNets.add(src.id + ' ' + (src.port ?? '')); }
+    }
+    setStatus(`${drivenNets.size} nets (${Object.keys(labelIndex.wires).length} named), ` +
               `${Object.keys(labelIndex.devices).length} devices`);
 
     // debug/test handle (also used by the headless webview test)

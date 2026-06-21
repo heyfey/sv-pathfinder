@@ -4,12 +4,17 @@ await loadSchematic(page, 'fifo.digitaljs.json', { scopePath: 'tb.u_fifo', modul
 const r = await page.evaluate(() => ({
   status: document.getElementById('status-text').textContent,
   rendered: !!(window.__schematic && window.__schematic.labelIndex),
-  nets: window.__schematic ? Object.keys(window.__schematic.labelIndex.wires).length : 0,
+  named: window.__schematic ? Object.keys(window.__schematic.labelIndex.wires).length : 0,
 }));
 console.log(JSON.stringify(r));
+// Status: "<total> nets (<named> named), <devices> devices". total = distinct nets incl. unnamed,
+// named = the wire-label index. fifo has unnamed internal nets, so total must exceed named.
+const m = r.status.match(/(\d+) nets \((\d+) named\), \d+ devices/);
 const ok = report('smoke', [
   ['renders', r.rendered === true],
-  ['status shows nets', /named nets/.test(r.status)],
+  ['status shows "<total> nets (<named> named), <devices> devices"', !!m],
+  ['named count matches the wire-label index', !!m && Number(m[2]) === r.named],
+  ['total nets exceed named (unnamed internal nets counted too)', !!m && Number(m[1]) > Number(m[2])],
   ['no page errors', !logs.some(l => l.startsWith('PAGEERROR'))],
 ], logs);
 await browser.close();
