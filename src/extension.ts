@@ -65,7 +65,7 @@ export function activate(context: vscode.ExtensionContext) {
 	);
 
 	const parser = new Parser();
-	const editorMenuProvider = new EditorMenuProvider(designProvider, hierarchyView, hierarchyProvider, moduleInstancesView, moduleInstancesProvider, parser);
+	const editorMenuProvider = new EditorMenuProvider(designProvider, hierarchyView, hierarchyProvider, moduleInstancesView, parser);
 
 	// #region External Commands
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.openDesign', async () => {
@@ -187,44 +187,16 @@ export function activate(context: vscode.ExtensionContext) {
 		editorMenuProvider.copyHierarchyName();
 	}));
 
-	// #region Editor Menu Commands
-	// Only enable tracing commands in the active module.
-	// Update context key when the cursor moves. TODO: also need to update context when the active module changes
-	// let timeout: NodeJS.Timeout;
-	vscode.window.onDidChangeTextEditorSelection(async () => {
-		// Delay the check until the user pauses (e.g., 100ms). This reduces calls during rapid movements.
-		// clearTimeout(timeout);
-		// timeout = setTimeout(() => {
-		// Run module check here
-		const editor = vscode.window.activeTextEditor;
-		const activeDesign = hierarchyProvider.getActiveDesign();
-		const activeModule = activeDesign ? activeDesign.getActiveModule() : null;
-		if (editor && activeModule &&
-			(editor.document.languageId === 'verilog' || editor.document.languageId === 'systemverilog')) {
-			// const position = editor.selection.active;
-			// const wordRange = editor.document.getWordRangeAtPosition(position);
-			// const isWord = !!wordRange; // True if cursor is on a word
-			const isEnabled = /*isWord &&*/ await parser.isCursorInModule(activeModule);
-			vscode.commands.executeCommand('setContext', 'sv-pathfinder.isCommandEnabled', isEnabled);
-		} else {
-			vscode.commands.executeCommand('setContext', 'sv-pathfinder.isCommandEnabled', false);
-		}
-		// }, 100);
-	});
-	// Set initial state
-	vscode.commands.executeCommand('setContext', 'sv-pathfinder.isCommandEnabled', true);
-
-
 	// #region Schematic
 	const schematicProvider = new SchematicViewProvider(context, hierarchyProvider);
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.showSchematic', async (e) => {
 		await schematicProvider.showSchematic(e);
 	}));
-	// Editor context-menu variant: render the active scope (ignores the passed Uri). The menu
-	// item is enabled only when the cursor is in the active instance's module (isCommandEnabled),
-	// so the active instance is guaranteed to be an instance of the module under the cursor.
+	// Editor context-menu variant: resolve the scope for the module under the cursor (the active
+	// instance if it matches, else that module's single instance) without changing the active scope.
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.showSchematicFromEditor', async () => {
-		await schematicProvider.showSchematic(undefined);
+		const scope = await editorMenuProvider.resolveScopeForCursorModule();
+		if (scope) { await schematicProvider.showSchematic(scope); }
 	}));
 	schematicProvider.listenToMarkerSetEvent().then(disposable => {
 		if (disposable) { context.subscriptions.push(disposable); }

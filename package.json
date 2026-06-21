@@ -392,29 +392,19 @@
       },
       {
         "command": "sv-pathfinder.traceDriver",
-        "title": "Trace Driver",
-        "enablement": "sv-pathfinder.isCommandEnabled"
-      },
+        "title": "Trace Driver"      },
       {
         "command": "sv-pathfinder.traceLoad",
-        "title": "Trace Load",
-        "enablement": "sv-pathfinder.isCommandEnabled"
-      },
+        "title": "Trace Load"      },
       {
         "command": "sv-pathfinder.showInHierarchyView",
-        "title": "Show in Hierarchy View",
-        "enablement": "sv-pathfinder.isCommandEnabled"
-      },
+        "title": "Show in Hierarchy View"      },
       {
         "command": "sv-pathfinder.addToWaveformViewer",
-        "title": "Show in Waveform Viewer",
-        "enablement": "sv-pathfinder.isCommandEnabled"
-      },
+        "title": "Show in Waveform Viewer"      },
       {
         "command": "sv-pathfinder.copyHierarchyName",
-        "title": "Copy Hierarchy Name",
-        "enablement": "sv-pathfinder.isCommandEnabled"
-      },
+        "title": "Copy Hierarchy Name"      },
       {
         "command": "sv-pathfinder.goBack",
         "title": "Go Back",
@@ -435,9 +425,7 @@
       {
         "command": "sv-pathfinder.showSchematicFromEditor",
         "title": "Show Schematic",
-        "icon": "$(circuit-board)",
-        "enablement": "sv-pathfinder.isCommandEnabled"
-      }
+        "icon": "$(circuit-board)"      }
     ]
   },
   "scripts": {

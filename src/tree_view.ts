@@ -468,21 +468,24 @@ export abstract class DesignItem extends vscode.TreeItem {
         return this.activeInstance;
     }
 
-    public getActiveScope(): string {
-        const activeInstance = this.activeInstance ? this.activeInstance : undefined;
-        if (activeInstance === undefined) {
-            return '';
-        }
-        let activeScope = activeInstance.modulePath;
-        if (activeInstance.contextValue === 'scopeItem') {
-            const label = typeof activeInstance.label === 'string' ? activeInstance.label : '';
-            activeScope = activeScope === '' ? label : activeScope + '.' + label;
-        } else if (activeInstance.contextValue === 'instanceItem') {
+    // The hierarchy-path string for an instance/scope (e.g. "top.cpu.alu0"), the same form
+    // getActiveScope() returns. Used to build instance paths for a resolved scope that isn't
+    // necessarily the active one (editor commands acting on the cursor module's instance).
+    public scopePathOf(instance: NetlistItem): string {
+        let scope = instance.modulePath;
+        if (instance.contextValue === 'scopeItem') {
+            const label = typeof instance.label === 'string' ? instance.label : '';
+            scope = scope === '' ? label : scope + '.' + label;
+        } else if (instance.contextValue === 'instanceItem') {
             // Happen when we could not find scopeItem for instanceItem when setActiveInstance, thus fall back
             // to use instanceItem
-            activeScope = activeInstance.fullName;
+            scope = instance.fullName;
         }
-        return activeScope;
+        return scope;
+    }
+
+    public getActiveScope(): string {
+        return this.activeInstance ? this.scopePathOf(this.activeInstance) : '';
     }
 
     public getActiveModule(): string | undefined {
@@ -1661,6 +1664,19 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         const changed = await this.setActiveInstance(element);
         if (changed) { await this.setContextForGoBackOrForward(element, 'gotoDefinition', false); }
         this.revealIfVisible(element);
+    }
+
+    // "Go to this instance" navigation: resolve a Modules-view instanceItem to its hierarchy node,
+    // set it active, record history, and select it in the Hierarchy view — but only if that view is
+    // already open. Never force the sidebar open or steal focus (uses revealIfVisible, not reveal).
+    public async revealScopeInHierarchy(element: NetlistItem) {
+        let scope = element;
+        if (scope.contextValue === 'instanceItem' && this.activeDesign) {
+            scope = await this.activeDesign.findTreeItem(scope.fullName) ?? scope;
+        }
+        const changed = await this.setActiveInstance(scope);
+        if (changed) { await this.setContextForGoBackOrForward(scope, 'gotoInstantiation', false); }
+        if (scope.contextValue === 'scopeItem') { this.revealIfVisible(scope); }
     }
 
     // Global "find instance in design": a QuickPick that queries the active design's backend per
