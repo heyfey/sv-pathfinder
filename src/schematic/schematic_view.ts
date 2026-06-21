@@ -11,7 +11,7 @@ import { DesignItem, NetlistItem, HierarchyTreeProvider, replaceFilePathIfNeeded
 import { resolveScope, scopeCacheKey, ScopeContext } from './scope_resolver';
 import { runYosys, SchematicPreset, getResolvedBackendName, isResolvedBackendLimited } from './yosys_runner';
 import { convertToDigitalJs, extractSubtree, rootRelativeYosysPath, pickCoveringRoot } from './converter';
-import { findParentModuleScope } from './scope_nav';
+import { findParentModuleScope, ancestorFallbackReason } from './scope_nav';
 import { cleanCelltype } from './celltype';
 import { isNoYosysBackendError, limitedBackendWarning } from './backend_policy';
 import { FromWebviewMessage, ToWebviewMessage, ElementClickMessage, ContextActionMessage, ExpandRequestMessage, ExportRequestMessage, ExportContentMessage, SourcePosition } from './messages';
@@ -26,10 +26,6 @@ interface ShownSchematic {
 // A scope with a SystemVerilog interface port can't be elaborated as a standalone --top (Yosys:
 // "unconnected interface port" / "interface port on blackbox instance unsupported"). The fix is to
 // render it from a top-able ancestor; this recognizes that failure on the Yosys error message.
-function isInterfaceTopError(e: any): boolean {
-    return /unconnected interface port|interface port on blackbox/.test(String(e?.message ?? e));
-}
-
 export class SchematicViewProvider {
     private panel: vscode.WebviewPanel | undefined;
     private webviewReady = false;
@@ -95,12 +91,15 @@ export class SchematicViewProvider {
                     digitalJsJson = await this.elaborateScope(ctx, preset, showDangling, shallow, force);
                 }
             } catch (e: any) {
-                // A scope with a SystemVerilog interface port can't be elaborated as a standalone top
-                // (its interface has nothing to connect to). Render it from a top-able ANCESTOR instead
-                // — the only way (and exactly why full mode "works": it had a higher root). Applies to
-                // both modes.
-                if (!isInterfaceTopError(e)) { throw e; }
-                digitalJsJson = await this.renderViaTopableAncestor(design, instance, ctx, preset, showDangling, e);
+                // Some scopes can't be elaborated as a standalone top: one with a SystemVerilog
+                // interface port (nothing to connect it to), or one whose config comes from a param we
+                // can't reconstruct via Yosys -G (a struct/enum/array like CVA6's CVA6Cfg — in isolation
+                // it falls back to a bogus default → negative widths, collapsed struct types). Both are
+                // fixed by rooting at a top-able ANCESTOR that binds them and extracting this scope —
+                // exactly why full mode "works": it had a higher root. Applies to both modes.
+                const reason = ancestorFallbackReason(e, ctx.skippedParams?.length ?? 0, !!findParentModuleScope(instance));
+                if (!reason) { throw e; }
+                digitalJsJson = await this.renderViaTopableAncestor(design, instance, ctx, preset, showDangling, e, reason);
             }
 
             this.createOrRevealPanel();
@@ -203,12 +202,17 @@ export class SchematicViewProvider {
     }
 
     // The opened scope couldn't be elaborated as a standalone top (an interface port has nothing to
-    // connect to). Walk UP to the nearest ancestor that CAN be elaborated, elaborate it (full subtree,
-    // no blackbox), cache it as a full-mode root (so later navigation reuses it), and extract the
-    // opened scope from it. Warns on success (it elaborates MORE than asked — perf-relevant). Throws an
-    // informative error — naming every ancestor it tried + the last failure — if none is elaborable, so
-    // a total failure shows WHAT failed, not just the original interface error.
-    private async renderViaTopableAncestor(design: DesignItem, instance: NetlistItem, ctx: ScopeContext, preset: SchematicPreset, showDangling: boolean, origErr: any): Promise<any> {
+    // connect to), or its config comes from a param we can't reconstruct via -G (reason 'params').
+    // Walk UP to the nearest ancestor that CAN be elaborated, elaborate it (full subtree, no blackbox),
+    // cache it as a full-mode root (so later navigation reuses it), and extract the opened scope from
+    // it. Warns on success (it elaborates MORE than asked — perf-relevant). Throws an informative error
+    // — naming every ancestor it tried + the last failure — if none is elaborable, so a total failure
+    // shows WHAT failed, not just the original error.
+    private async renderViaTopableAncestor(design: DesignItem, instance: NetlistItem, ctx: ScopeContext, preset: SchematicPreset, showDangling: boolean, origErr: any, reason: 'interface' | 'params'): Promise<any> {
+        // Phrase the "can't stand alone" reason for the user-facing messages below.
+        const cause = reason === 'interface'
+            ? `has a SystemVerilog interface port`
+            : `takes a parameter Yosys can't reconstruct standalone (e.g. a config struct)`;
         const prefix = `${design.resourceUri.fsPath}|${preset}${showDangling ? '+dangling' : ''}|`;
         const tried: string[] = [];
         let lastErr: any = origErr;
@@ -236,17 +240,17 @@ export class SchematicViewProvider {
             const sub = relPath !== undefined ? extractSubtree(full, ctx.moduleName, relPath, ancCtx.moduleName) : undefined;
             if (sub) {
                 vscode.window.showWarningMessage(
-                    `Schematic: '${ctx.moduleName}' has a SystemVerilog interface port, so it can't be drawn ` +
-                    `on its own — rendered it from its ancestor '${ancCtx.moduleName}' (which elaborates more ` +
-                    `of the design; slower the first time).`);
+                    `Schematic: '${ctx.moduleName}' ${cause}, so it can't be drawn on its own — rendered it ` +
+                    `from its ancestor '${ancCtx.moduleName}' (which elaborates more of the design; slower ` +
+                    `the first time).`);
                 return sub;
             }
         }
         // Nothing above it could be elaborated either. Lead with the claim, then show the ACTUAL Yosys
-        // interface-port error that justifies it (so it's verifiable, not asserted), plus what we tried.
+        // error that justifies it (so it's verifiable, not asserted), plus what we tried.
         const lines = [
-            `Schematic: '${ctx.moduleName}' can't be elaborated on its own — Yosys reports a SystemVerilog ` +
-            `interface-port error (the interface port has nothing to connect to at the top). ` +
+            `Schematic: '${ctx.moduleName}' can't be elaborated on its own — it ${cause} ` +
+            `(Yosys error below). ` +
             (tried.length ? `Tried rooting at its ancestors (${tried.join(' → ')}) but none elaborated either.`
                           : `It has no parent scope to root at.`),
             ``,

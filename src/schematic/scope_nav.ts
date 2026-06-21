@@ -21,3 +21,33 @@ export function findParentModuleScope<T extends ScopeNode>(instance: T): T | und
     }
     return undefined;
 }
+
+// A SystemVerilog interface PORT can't be elaborated as a standalone Yosys top — the interface has
+// nothing to connect to (read_slang: "unconnected interface port" / "interface port on blackbox").
+export function isInterfaceTopError(e: any): boolean {
+    return /unconnected interface port|interface port on blackbox/.test(String(e?.message ?? e));
+}
+
+// read_slang errors that typically mean a scope was elaborated in ISOLATION with a parameter missing:
+// a struct/enum/array config that -G can't carry (e.g. CVA6's CVA6Cfg) falls back to a bogus default,
+// so width counts go non-positive / out of range and config-typed structs collapse to 1-bit logic.
+export function isParamResolutionError(e: any): boolean {
+    return /value must be positive|invalid member access for type|cannot select range of|range-oob|endianness of selection must match/
+        .test(String(e?.message ?? e));
+}
+
+// Why (if at all) a FAILED standalone elaboration should be retried from a top-able ancestor that
+// supplies the missing context (then extract this scope's subtree). Two scopes can't stand alone:
+//  - 'interface' — an interface port (see above); fires regardless of parent (the ancestor walk
+//    reports cleanly when there is none).
+//  - 'params' — the scope's config comes from a parameter we couldn't reconstruct via Yosys -G (a
+//    struct/enum/array, e.g. CVA6's `CVA6Cfg`, skipped by collectParamOverrides). Detected two ways,
+//    either of which is sufficient: we recorded a skipped param for this scope, OR Yosys emitted a
+//    width/type error that is the hallmark of a missing config param (isParamResolutionError). Only
+//    meaningful with a parent to root at; otherwise the failure is genuine, not an isolation artifact.
+export function ancestorFallbackReason(
+    err: any, skippedParamCount: number, hasParent: boolean): 'interface' | 'params' | undefined {
+    if (isInterfaceTopError(err)) { return 'interface'; }
+    if (hasParent && (skippedParamCount > 0 || isParamResolutionError(err))) { return 'params'; }
+    return undefined;
+}
