@@ -123,6 +123,10 @@ export class SchematicViewProvider {
                 backend: getResolvedBackendName(),
                 limited: isResolvedBackendLimited(),
                 shallow, // webview: in shallow mode a child box has no loaded internals → expand re-elaborates
+                // Stable identity of this scope's content so the webview can cache + reuse its ELK layout
+                // across back-and-forth navigation. `force` (Refresh) re-elaborates → don't reuse a stale layout.
+                layoutKey: `${design.resourceUri.fsPath}|${ctx.instancePath}|${preset}|${showDangling ? 'd' : ''}|${shallow ? 's' : ''}`,
+                freshLayout: force,
             });
             // push current waveform values onto the fresh schematic
             this.debouncePushValues();

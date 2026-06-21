@@ -907,6 +907,54 @@ function scheduleOverlayHide() {
     _settleTimer = setTimeout(hideRenderOverlay, 350);
 }
 
+// ---- finished-layout cache ----
+// ELK layout is the slow part of a render and the extension already caches the elaboration, so the only
+// thing recomputed on back-and-forth navigation is the layout. Cache the finished positions per scope
+// (keyed by the extension's layoutKey + spacing) and reapply them on revisit: digitaljs skips ELK
+// entirely when devices carry a `position` (it sets graph 'laid_out'), so a revisit just re-renders.
+const LAYOUT_CACHE_MAX = 6;            // LRU bound — a laid-out scope is positions only, but cap memory
+const _layoutCache = new Map();        // layoutKey -> { positions: {id:{x,y}}, vertices: {connKey:[...] } }
+let _currentLayoutKey = null;          // key of the scope currently shown (capture target)
+let _captureTimer = null;
+const _connKey = (e) => `${e.id} ${e.port ?? ''}`;
+
+// Inject a cached layout onto the (sanitized) circuit so the build skips ELK. Only when EVERY current
+// device has a cached position — a partial match (content changed) would set 'laid_out' with some cells
+// stuck at the origin, so fall back to a fresh layout instead.
+function applyCachedLayout(circuit, cached) {
+    const devs = (circuit && circuit.devices) || {};
+    const ids = Object.keys(devs);
+    if (!ids.length || !ids.every(id => cached.positions[id])) { return false; }
+    for (const id of ids) { devs[id].position = { ...cached.positions[id] }; }
+    for (const conn of circuit.connectors || []) {
+        if (!conn.from || !conn.to) { continue; }
+        const v = cached.vertices[`${_connKey(conn.from)} ${_connKey(conn.to)}`];
+        if (v) { conn.vertices = v; }
+    }
+    return true;
+}
+// Snapshot the current (settled) top-graph layout under `key`. Positions + ELK-routed wire vertices.
+function captureLayout(key) {
+    if (!key || !labelIndex || !labelIndex.graph) { return; }
+    const positions = {};
+    for (const el of labelIndex.graph.getElements()) { const p = el.position(); positions[el.id] = { x: p.x, y: p.y }; }
+    const vertices = {};
+    for (const l of labelIndex.graph.getLinks()) {
+        const s = l.get('source'), t = l.get('target'), v = l.get('vertices');
+        if (s && t && v && v.length) { vertices[`${_connKey(s)} ${_connKey(t)}`] = v; }
+    }
+    _layoutCache.delete(key);                            // re-insert at the end (LRU touch)
+    _layoutCache.set(key, { positions, vertices });
+    while (_layoutCache.size > LAYOUT_CACHE_MAX) { _layoutCache.delete(_layoutCache.keys().next().value); }
+}
+// Capture once the layout has been quiet for a beat. Armed at build end and pushed back by ELK's
+// change:position, so it snapshots the FINAL positions. Skips if we've since navigated away.
+function scheduleLayoutCapture(key) {
+    if (!key) { return; }
+    clearTimeout(_captureTimer);
+    _captureTimer = setTimeout(() => { if (_currentLayoutKey === key) { captureLayout(key); } }, 450);
+}
+
 // ---- schematic load ----
 function loadSchematic(msg) {
     clearTimeout(_pendingShowTimer); // the render arrived; renderStart's delayed-show decision is made here
@@ -964,6 +1012,19 @@ function buildSchematic(msg) {
     // bad wire can't abort the whole render; warn — with the backend — when any are dropped, since
     // it usually means the wrong yosys produced the JSON.
     const droppedConns = sanitizeCircuit(msg.circuit);
+
+    // Reuse a cached finished layout for this scope (skips ELK). `freshLayout` (Refresh) re-elaborated,
+    // so its content may differ → don't reuse a stale layout; let it re-lay-out and re-capture below.
+    _currentLayoutKey = msg.layoutKey ? `${msg.layoutKey}|${msg.spacing || ''}` : null;
+    let usedCachedLayout = false;
+    if (_currentLayoutKey && !msg.freshLayout && _layoutCache.has(_currentLayoutKey)) {
+        const cached = _layoutCache.get(_currentLayoutKey);
+        if (applyCachedLayout(msg.circuit, cached)) {
+            _layoutCache.delete(_currentLayoutKey); _layoutCache.set(_currentLayoutKey, cached); // LRU touch
+            usedCachedLayout = true;
+        }
+    }
+    window.__layoutCacheHit = usedCachedLayout; // test/debug hook
     if (droppedConns > 0) {
         const be = currentBackend ? ` — backend: ${currentBackend}` : '';
         console.warn(`sv-pathfinder schematic: dropped ${droppedConns} malformed connector(s)${be}`);
@@ -1042,6 +1103,7 @@ function buildSchematic(msg) {
     paper.on('render:done', scheduleOverlayHide);   // overlay only: hide once render passes go quiet
     labelIndex.graph.on('change:position change:vertices', () => {
         scheduleOverlayHide();                      // layout still moving (ELK) → keep the overlay up
+        scheduleLayoutCapture(_currentLayoutKey);   // snapshot the FINAL positions once ELK settles
         if (!autoFit) { return; }
         clearTimeout(fitTimer);
         fitTimer = setTimeout(() => {
@@ -1071,6 +1133,9 @@ function buildSchematic(msg) {
     // fires after a quiet beat, and any async ELK reflow (render:done / change:position above) pushes it
     // back until the layout settles. No-op when no overlay is up (light renders).
     scheduleOverlayHide();
+    // Arm a layout capture (a guaranteed trigger even when ELK never fires change:position); the
+    // change:position hook pushes it back until ELK settles. Skip it when we reused a cached layout.
+    if (!usedCachedLayout) { scheduleLayoutCapture(_currentLayoutKey); }
 }
 
 let baseStatus = ''; // persistent status (load / value count); hover overlays it transiently

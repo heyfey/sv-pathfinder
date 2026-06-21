@@ -78,6 +78,11 @@ export interface LoadSchematicMessage {
     backend?: string;        // resolved yosys backend name (for diagnostics on a render failure)
     limited?: boolean;       // backend lacks the slang frontend (yowasp) → show a "limited engine" badge
     shallow?: boolean;       // shallow mode: child boxes have no loaded internals → expand re-elaborates
+    // identity of THIS scope's content (design+scope+preset+dangling+mode). The webview caches the
+    // finished ELK layout under it, so navigating back to a covered scope reuses positions and skips
+    // the (slow) layout pass. `freshLayout` (a force re-elaborate) bypasses the cache and re-captures.
+    layoutKey?: string;
+    freshLayout?: boolean;
 }
 
 export interface SetValuesMessage {
