@@ -730,7 +730,7 @@ function clearValues() {
 
 // Net names that currently show on-wire value text (≈ last batch's _valueText keys) — the working set
 // for refreshValueText below.
-let _annotatedNets = new Set();
+const _annotatedNets = new Set(); // reused (cleared+refilled) each refresh — no per-batch allocation
 // Re-apply value text from _valueText. The reactive _updateSignal path only runs when a signal
 // actually CHANGES, so a net whose annotated value equals its current signal (e.g. an x value while
 // the load default is also x) would keep stale/blank text. Called once per setValues/clearValues
@@ -745,21 +745,26 @@ let _annotatedNets = new Set();
 // sweep — far fewer than links, and most are skipped by the method checks.
 function refreshValueText() {
     if (!paper || !labelIndex) { return; }
-    const refresh = new Set(_valueText.keys());      // nets annotated now
-    for (const n of _annotatedNets) { refresh.add(n); } // ∪ nets annotated last batch (now stale/blanked)
-    _annotatedNets = new Set(_valueText.keys());
     for (const el of labelIndex.graph.getElements()) {
         const v = paper.findViewByModel(el);
         if (!v) { continue; }
         if (typeof v._updateIoValue === 'function') { v._updateIoValue(); }
         else if (el.get('type') === 'Subcircuit' && typeof v._updatePortSignals === 'function') { v._updatePortSignals(); }
     }
-    if (refresh.size === 0) { return; }
-    for (const l of labelIndex.graph.getLinks()) {
-        if (!refresh.has(l.get('netname'))) { continue; } // unchanged since last batch → view already correct
-        const v = paper.findViewByModel(l);
-        if (v && typeof v._updateSignal === 'function') { v._updateSignal(); }
+    // A link needs the forced refresh only if its net has value text now (_valueText) or had it last
+    // batch (_annotatedNets, now stale -> blanked). Test the two existing collections directly — no
+    // per-batch Set is built. Skip the whole sweep when neither holds anything.
+    if (_valueText.size || _annotatedNets.size) {
+        for (const l of labelIndex.graph.getLinks()) {
+            const n = l.get('netname');
+            if (!n || (!_valueText.has(n) && !_annotatedNets.has(n))) { continue; } // unchanged -> already correct
+            const v = paper.findViewByModel(l);
+            if (v && typeof v._updateSignal === 'function') { v._updateSignal(); }
+        }
     }
+    // Snapshot this batch's annotated nets for next batch's blank-pass — reuse the Set (no allocation).
+    _annotatedNets.clear();
+    for (const n of _valueText.keys()) { _annotatedNets.add(n); }
 }
 
 // Transient flash: briefly pulse the wires of nets that transition AT the current marker (value
