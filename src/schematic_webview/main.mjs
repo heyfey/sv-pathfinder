@@ -969,7 +969,7 @@ function loadSchematic(msg) {
     const drivenNets = new Set();
     for (const link of labelIndex.graph.getLinks()) {
         const src = link.get('source');
-        if (src && src.id != null) { drivenNets.add(src.id + ' ' + (src.port ?? '')); }
+        if (src && src.id) { drivenNets.add(src.id + ' ' + (src.port ?? '')); }
     }
     setStatus(`${drivenNets.size} nets (${Object.keys(labelIndex.wires).length} named), ` +
               `${Object.keys(labelIndex.devices).length} devices`);
