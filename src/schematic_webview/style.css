@@ -128,6 +128,38 @@ html, body {
     position: relative;
 }
 
+/* "Rendering…" overlay: a large netlist blocks the UI thread while digitaljs builds the Circuit and
+   renders the initial paper, then ELK lays it out asynchronously — seconds with no feedback. Cover the
+   canvas until the layout settles (mirrors the elaboration progress notification). The spinner animates
+   `transform` (compositor-driven), so it keeps spinning even while the main thread is blocked. */
+#sv-render-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 50;
+    display: none;            /* shown (flex) by showRenderOverlay() for heavy renders only */
+    align-items: center;
+    justify-content: center;
+    background: var(--vscode-editor-background);
+    pointer-events: none;     /* transient; never trap input */
+}
+#sv-render-overlay .sv-ro-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    color: var(--vscode-descriptionForeground, var(--vscode-foreground));
+    font-size: 12px;
+}
+#sv-render-overlay .sv-ro-spinner {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 2.5px solid var(--vscode-editorWidget-border, #88888844);
+    border-top-color: var(--sv-accent, var(--vscode-progressBar-background, #4a9cff));
+    animation: sv-ro-spin 0.8s linear infinite;
+}
+@keyframes sv-ro-spin { to { transform: rotate(360deg); } }
+
 #paper {
     width: 100%;
     height: 100%;

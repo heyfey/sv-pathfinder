@@ -860,8 +860,57 @@ function clearSelection() {
     _selected.clear();
 }
 
+// ---- "rendering…" overlay (heavy schematics) ----
+// Building the Circuit + rendering the initial paper is SYNCHRONOUS and blocks the UI thread, then the
+// layout is applied asynchronously. On a large netlist that's seconds of a frozen/half-laid-out canvas
+// with no feedback (elaboration already has its progress notification). Show an overlay until rendering
+// goes quiet. Gate on the displayed graph's connector count (≈ nets): below it a render is a frame or
+// two, so skip the overlay (and its flash) and build synchronously.
+const RENDER_OVERLAY_MIN_CONNECTORS = 1000;
+let _renderOverlay = null;
+let _overlayTimer = null;
+let _settleTimer = null;
+function showRenderOverlay() {
+    if (!_renderOverlay) {
+        _renderOverlay = document.createElement('div');
+        _renderOverlay.id = 'sv-render-overlay';
+        _renderOverlay.innerHTML = '<div class="sv-ro-box"><div class="sv-ro-spinner"></div>'
+            + '<div class="sv-ro-text">Rendering schematic…</div></div>';
+    }
+    if (!_renderOverlay.isConnected) { (document.getElementById('paper-container') || document.body).appendChild(_renderOverlay); }
+    _renderOverlay.style.display = 'flex';
+    clearTimeout(_overlayTimer);
+    _overlayTimer = setTimeout(hideRenderOverlay, 30000); // safety: never leave it stuck
+}
+function hideRenderOverlay() {
+    clearTimeout(_overlayTimer);
+    clearTimeout(_settleTimer);
+    if (_renderOverlay) { _renderOverlay.style.display = 'none'; }
+}
+// Hide once the schematic has been QUIET (no render pass, no layout move) for a beat — robust whether
+// or not ELK runs and however many render passes the layout takes. No-op when no overlay is showing,
+// so it's free to call from the render/position hooks on every (incl. light) render.
+function scheduleOverlayHide() {
+    if (!_renderOverlay || _renderOverlay.style.display === 'none') { return; }
+    clearTimeout(_settleTimer);
+    _settleTimer = setTimeout(hideRenderOverlay, 350);
+}
+
 // ---- schematic load ----
 function loadSchematic(msg) {
+    // Heavy render → show the overlay and yield a frame so it paints BEFORE the blocking build; light
+    // render → build synchronously (no overlay flash). The overlay hides when rendering goes quiet.
+    const conns = (msg.circuit && msg.circuit.connectors && msg.circuit.connectors.length) || 0;
+    if (conns > RENDER_OVERLAY_MIN_CONNECTORS) {
+        showRenderOverlay();
+        // Yield ~2 frames so the overlay paints BEFORE the blocking build. A timer (not rAF, which can
+        // stall on an idle page) reliably runs the build even when no paint is scheduled.
+        setTimeout(() => buildSchematic(msg), 30);
+    } else {
+        buildSchematic(msg);
+    }
+}
+function buildSchematic(msg) {
     if (circuit) {
         try { circuit.shutdown(); } catch (e) { /* ignore */ } // closes any open popups
         circuit = null;
@@ -890,7 +939,12 @@ function loadSchematic(msg) {
     applyWireValuePalette(); // theme-aware value colors (re-read each load to track theme)
     setStatus('laying out schematic…');
     const container = document.getElementById('paper-container');
-    container.innerHTML = '<div id="paper"></div>';
+    // Reset the paper (and any stale minimap/scrollbars) but KEEP a render overlay showRenderOverlay
+    // appended here — innerHTML='' would wipe it mid-render, leaving the heavy build with no feedback.
+    for (const c of [...container.children]) { if (c.id !== 'sv-render-overlay') { c.remove(); } }
+    const freshPaper = document.createElement('div');
+    freshPaper.id = 'paper';
+    container.prepend(freshPaper);
 
     // Guard digitaljs against a malformed netlist (drop connectors with a missing endpoint) so one
     // bad wire can't abort the whole render; warn — with the backend — when any are dropped, since
@@ -971,7 +1025,9 @@ function loadSchematic(msg) {
     // render passes, and the fit itself triggers another render: feedback loop).
     autoFit = true;
     paper.once('render:done', () => { if (autoFit) { fitToView(); } });
+    paper.on('render:done', scheduleOverlayHide);   // overlay only: hide once render passes go quiet
     labelIndex.graph.on('change:position change:vertices', () => {
+        scheduleOverlayHide();                      // layout still moving (ELK) → keep the overlay up
         if (!autoFit) { return; }
         clearTimeout(fitTimer);
         fitTimer = setTimeout(() => {
@@ -996,6 +1052,11 @@ function loadSchematic(msg) {
 
     // debug/test handle (also used by the headless webview test)
     window.__schematic = { circuit, paper, labelIndex, fit: fitToView };
+
+    // The synchronous build + initial render is done here (the overlay covered it). Arm the hide; it
+    // fires after a quiet beat, and any async ELK reflow (render:done / change:position above) pushes it
+    // back until the layout settles. No-op when no overlay is up (light renders).
+    scheduleOverlayHide();
 }
 
 let baseStatus = ''; // persistent status (load / value count); hover overlays it transiently
