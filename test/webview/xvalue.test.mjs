@@ -34,9 +34,19 @@ for (const n of ['full', 'empty', 'clk', 'rst_n', 'din', 'dout', 'wptr', 'pop'])
 console.log('before(no wave) din:', JSON.stringify(beforeDin));
 console.log(JSON.stringify(r, null, 1));
 
+// clearValues must blank even x/z values. Their signal was ALREADY x, so clearing fires no reactive
+// change event — the forced refreshValueText pass must catch them. Guards the refreshValueText
+// optimization that restricts the link sweep to nets annotated now-or-last-batch (an x/z net is in
+// "last batch", so it must still be refreshed and blanked).
+await page.evaluate(() => window.postMessage({ type: 'clearValues' }, '*'));
+await page.waitForTimeout(400);
+const afterClear = await page.evaluate(() => [...window.__schematic.paper.el.querySelectorAll('.wirevalue')].map(n => n.textContent));
+console.log('after clearValues, still-shown:', JSON.stringify(afterClear.filter(t => t !== '')));
+
 const green = 'rgb(47, 179, 68)', grey0 = 'rgb(187, 187, 187)', red = 'rgb(241, 76, 76)', amber = 'rgb(229, 160, 0)', nodata = 'rgb(136, 136, 136)';
 const ok = report('xvalue', [
     ['no-waveform din = no-data grey + blank', beforeDin.stroke === nodata && beforeDin.text === ''],
+    ['clearValues blanks even x/z values (no reactive change → forced refresh)', afterClear.every(t => t === '')],
     ['1 -> green "1"', r.full.stroke === green && r.full.text === '1'],
     ['0 -> calm grey (NOT red) "0"', r.empty.stroke === grey0 && r.empty.text === '0'],
     ['x -> red "x"', r.clk.stroke === red && r.clk.text === 'x'],

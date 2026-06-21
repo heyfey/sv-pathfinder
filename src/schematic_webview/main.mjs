@@ -728,20 +728,35 @@ function clearValues() {
     }
 }
 
-// Re-apply every cell/link's value text from _valueText. The reactive _updateSignal path only runs
-// when a signal actually CHANGES, so a net whose annotated value equals its current signal (e.g. an
-// x value while the load default is also x) would keep stale/blank text. Called once per
-// setValues/clearValues batch so every annotation reflects the current cursor. No-op before the
-// paper has rendered (load-time clear): findViewByModel returns nothing and the first render fills in.
+// Net names that currently show on-wire value text (≈ last batch's _valueText keys) — the working set
+// for refreshValueText below.
+let _annotatedNets = new Set();
+// Re-apply value text from _valueText. The reactive _updateSignal path only runs when a signal
+// actually CHANGES, so a net whose annotated value equals its current signal (e.g. an x value while
+// the load default is also x) would keep stale/blank text. Called once per setValues/clearValues
+// batch so every annotation reflects the current cursor. No-op before the paper has rendered
+// (load-time clear): findViewByModel returns nothing and the first render fills in.
+//
+// A net's on-wire text only depends on _valueText (the rest is the signal, which the reactive path
+// already tracks), so a LINK needs a forced refresh only when its _valueText membership changed this
+// batch — i.e. its net has text now OR had it last batch (the latter must be blanked). Everything else
+// is already correct, so restrict the link sweep (the dominant per-marker cost) to that set instead of
+// every link. Elements (IO / child-instance ports) aren't indexed by net here, so they keep the full
+// sweep — far fewer than links, and most are skipped by the method checks.
 function refreshValueText() {
     if (!paper || !labelIndex) { return; }
+    const refresh = new Set(_valueText.keys());      // nets annotated now
+    for (const n of _annotatedNets) { refresh.add(n); } // ∪ nets annotated last batch (now stale/blanked)
+    _annotatedNets = new Set(_valueText.keys());
     for (const el of labelIndex.graph.getElements()) {
         const v = paper.findViewByModel(el);
         if (!v) { continue; }
         if (typeof v._updateIoValue === 'function') { v._updateIoValue(); }
         else if (el.get('type') === 'Subcircuit' && typeof v._updatePortSignals === 'function') { v._updatePortSignals(); }
     }
+    if (refresh.size === 0) { return; }
     for (const l of labelIndex.graph.getLinks()) {
+        if (!refresh.has(l.get('netname'))) { continue; } // unchanged since last batch → view already correct
         const v = paper.findViewByModel(l);
         if (v && typeof v._updateSignal === 'function') { v._updateSignal(); }
     }
