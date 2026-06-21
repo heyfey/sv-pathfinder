@@ -23,6 +23,15 @@ const { yosys2digitaljs } = require('yosys2digitaljs/core');
 // so the schematic shows every source converging on the contended net instead of
 // silently dropping one. Only exact same-width overlaps are handled (the common
 // whole-reg case); partial-bit overlaps are left for the converter to report.
+// Encode a non-negative integer as LSB-first Yosys constant bits ('0'/'1'), e.g. 6 -> ['0','1','1'].
+// Used to feed a constant operand into a synthesized cell (the WIDTH multiplier in the $bmux lowering).
+function numToBits(n: number): string[] {
+    const bits: string[] = [];
+    let v = Math.max(0, Math.floor(n));
+    do { bits.push((v & 1) ? '1' : '0'); v = Math.floor(v / 2); } while (v > 0);
+    return bits;
+}
+
 function resolveMultiDrivers(mod: any, allocBits: (n: number) => number[]): void {
     const byBits = new Map<string, { cell: any; port: string }[]>();
     for (const cell of Object.values<any>(mod.cells ?? {})) {
@@ -86,6 +95,30 @@ function normalizeForDigitaljs(yosysJson: any): Map<string, Set<string>> {
         }
         const allocBits = (n: number) => Array.from({ length: n }, () => nextBit++);
 
+        // S*WIDTH as Yosys bits, shared by the $bmux/$demux lowerings (both index a packed array by
+        // word: offset = S*WIDTH). Power-of-2 WIDTH makes that a pure bit-concat (S left-shifted by
+        // log2(WIDTH)); otherwise synthesize the product with a $mul by the constant WIDTH — O(1) cells
+        // regardless of select width (a mux/demux tree would be 2^S_WIDTH-1 cells), and consistent with
+        // the power-of-2 case rendering as a single shift.
+        const selTimesWidth = (sBits: any[], width: number, mulName: string, srcAttrs: any): any[] => {
+            const log2w = Math.log2(width);
+            if (Number.isInteger(log2w)) { return [...Array(log2w).fill('0'), ...sBits]; }
+            const wBits = numToBits(width);
+            const prod = allocBits(sBits.length + wBits.length); // product of m- and n-bit values fits in m+n
+            mod.cells[mulName] = {
+                type: '$mul',
+                connections: { A: sBits, B: wBits, Y: prod },
+                port_directions: { A: 'input', B: 'input', Y: 'output' },
+                parameters: {
+                    A_SIGNED: 0, B_SIGNED: 0,
+                    A_WIDTH: sBits.length, B_WIDTH: wBits.length, Y_WIDTH: prod.length,
+                },
+                attributes: { ...srcAttrs },
+                hide_name: 1,
+            };
+            return prod;
+        };
+
         // Module inout ports -> output (a sink Output box inside the module). Record them so the
         // resulting Input/Output devices can be marked bidirectional.
         const inoutPorts = new Set<string>();
@@ -125,44 +158,38 @@ function normalizeForDigitaljs(yosysJson: any): Map<string, Set<string>> {
         }
 
         for (const [cellName, cell] of Object.entries<any>(mod.cells ?? {})) {
-            // $bmux (Y = word S of the packed array A; emitted for indexed reads like
-            // `rom[addr]` that don't infer a memory) has no converter mapping. For
-            // power-of-2 word widths it is exactly $shiftx by S*WIDTH, where the
-            // multiply is a zero-pad of the select — a single supported cell.
+            // $bmux (Y = word S of the packed array A; emitted for indexed reads like `rom[addr]` that
+            // don't infer a memory) has no converter mapping, but it's exactly $shiftx by S*WIDTH:
+            // Y = (A >> S*WIDTH)[WIDTH-1:0]. (Non-power-of-2 WIDTH is handled inside selTimesWidth.)
             if (cell.type === '$bmux') {
                 const width = decodeInt(cell.parameters?.WIDTH, cell.connections.Y.length);
-                const log2w = Math.log2(width);
-                if (Number.isInteger(log2w)) {
-                    const shiftBits = [...Array(log2w).fill('0'), ...cell.connections.S];
-                    cell.type = '$shiftx';
-                    cell.connections = { A: cell.connections.A, B: shiftBits, Y: cell.connections.Y };
-                    cell.port_directions = { A: 'input', B: 'input', Y: 'output' };
-                    cell.parameters = {
-                        A_SIGNED: 0, B_SIGNED: 0,
-                        A_WIDTH: cell.connections.A.length,
-                        B_WIDTH: shiftBits.length,
-                        Y_WIDTH: width,
-                    };
-                }
-                // non-power-of-2 word width: leave as-is (clear converter error names it)
+                const aBits = cell.connections.A;
+                const shiftBits = selTimesWidth(cell.connections.S, width, `${cellName}$bmux_mul`, cell.attributes);
+                cell.type = '$shiftx';
+                cell.connections = { A: aBits, B: shiftBits, Y: cell.connections.Y };
+                cell.port_directions = { A: 'input', B: 'input', Y: 'output' };
+                cell.parameters = {
+                    A_SIGNED: 0, B_SIGNED: 0,
+                    A_WIDTH: aBits.length,
+                    B_WIDTH: shiftBits.length,
+                    Y_WIDTH: width,
+                };
             }
-            // $demux (word S of Y = A, zeros elsewhere; the write-side dual of $bmux)
-            // is exactly $shl: Y = zero_extend(A) << S*WIDTH.
+            // $demux (word S of Y = A, zeros elsewhere; the write-side dual of $bmux) is exactly
+            // $shl: Y = zero_extend(A) << S*WIDTH. (Non-power-of-2 WIDTH is handled inside selTimesWidth.)
             if (cell.type === '$demux') {
                 const width = decodeInt(cell.parameters?.WIDTH, cell.connections.A.length);
-                const log2w = Math.log2(width);
-                if (Number.isInteger(log2w)) {
-                    const shiftBits = [...Array(log2w).fill('0'), ...cell.connections.S];
-                    cell.type = '$shl';
-                    cell.connections = { A: cell.connections.A, B: shiftBits, Y: cell.connections.Y };
-                    cell.port_directions = { A: 'input', B: 'input', Y: 'output' };
-                    cell.parameters = {
-                        A_SIGNED: 0, B_SIGNED: 0,
-                        A_WIDTH: cell.connections.A.length,
-                        B_WIDTH: shiftBits.length,
-                        Y_WIDTH: cell.connections.Y.length,
-                    };
-                }
+                const aBits = cell.connections.A;
+                const shiftBits = selTimesWidth(cell.connections.S, width, `${cellName}$demux_mul`, cell.attributes);
+                cell.type = '$shl';
+                cell.connections = { A: aBits, B: shiftBits, Y: cell.connections.Y };
+                cell.port_directions = { A: 'input', B: 'input', Y: 'output' };
+                cell.parameters = {
+                    A_SIGNED: 0, B_SIGNED: 0,
+                    A_WIDTH: aBits.length,
+                    B_WIDTH: shiftBits.length,
+                    Y_WIDTH: cell.connections.Y.length,
+                };
             }
             // $tribuf (Y = EN ? A : z) has no converter mapping; rewrite as a $mux
             // selecting between the high-Z constant ("bus released") and the driven

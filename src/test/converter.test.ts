@@ -70,6 +70,117 @@ suite('findDanglingNets / showDangling', () => {
     });
 });
 
+// $bmux (Y = word S of a packed array A, from indexed reads like `arr[i]`) has no yosys2digitaljs
+// mapping, so the converter lowers it to a $shiftx by S*WIDTH. A power-of-2 WIDTH makes S*WIDTH a pure
+// bit-concat (single shift); a non-power-of-2 WIDTH (common in CVA6: 34/39-bit words) needs the product
+// synthesized with a $mul. A `top` module: input `a` (WIDTH*2^S_WIDTH bits) + select `s` -> output `y`.
+function bmuxNetlist(width: number, sWidth: number): any {
+    let bit = 2;
+    const take = (n: number) => Array.from({ length: n }, () => bit++);
+    const aBits = take(width * (1 << sWidth));
+    const sBits = take(sWidth);
+    const yBits = take(width);
+    return {
+        creator: 'test', modules: {
+            top: {
+                attributes: { top: 1 },
+                ports: {
+                    a: { direction: 'input', bits: aBits },
+                    s: { direction: 'input', bits: sBits },
+                    y: { direction: 'output', bits: yBits },
+                },
+                cells: {
+                    the_bmux: {
+                        hide_name: 0, type: '$bmux',
+                        parameters: { WIDTH: width, S_WIDTH: sWidth },
+                        attributes: { src: 'bmux.sv:1' },
+                        port_directions: { A: 'input', S: 'input', Y: 'output' },
+                        connections: { A: aBits, S: sBits, Y: yBits },
+                    },
+                },
+                netnames: {
+                    a: { hide_name: 0, bits: aBits, attributes: {} },
+                    s: { hide_name: 0, bits: sBits, attributes: {} },
+                    y: { hide_name: 0, bits: yBits, attributes: {} },
+                },
+            },
+        },
+    };
+}
+
+suite('convertToDigitalJs — $bmux lowering', () => {
+    const devTypes = (djs: any) => Object.values(djs.devices).map((d: any) => d.type);
+
+    test('non-power-of-2 word width lowers to $mul + $shiftx (no coverage-gap throw)', () => {
+        const djs = convertToDigitalJs(bmuxNetlist(3, 2)); // 4 words × 3 bits — 3 is not a power of 2
+        const types = devTypes(djs);
+        assert.ok(types.includes('Multiplication'), 'S*WIDTH is synthesized with a multiplier');
+        assert.ok(types.includes('ShiftRight'), 'word select is a $shiftx (ShiftRight)');
+    });
+
+    test('power-of-2 word width stays a single $shiftx (no multiplier)', () => {
+        const djs = convertToDigitalJs(bmuxNetlist(4, 2)); // 4 words × 4 bits — 4 is a power of 2
+        const types = devTypes(djs);
+        assert.ok(types.includes('ShiftRight'), 'word select is a $shiftx (ShiftRight)');
+        assert.ok(!types.includes('Multiplication'), 'power-of-2 needs no multiplier (shift = bit concat)');
+    });
+});
+
+// $demux (the write-side dual of $bmux: word S of the wide output Y = A, zeros elsewhere; from indexed
+// writes like `arr[i] = x`) lowers to a $shl by S*WIDTH — same power-of-2-vs-$mul split as $bmux. A
+// `top` module: word `a` (WIDTH bits) + select `s` -> wide output `y` (WIDTH*2^S_WIDTH bits).
+function demuxNetlist(width: number, sWidth: number): any {
+    let bit = 2;
+    const take = (n: number) => Array.from({ length: n }, () => bit++);
+    const aBits = take(width);
+    const sBits = take(sWidth);
+    const yBits = take(width * (1 << sWidth));
+    return {
+        creator: 'test', modules: {
+            top: {
+                attributes: { top: 1 },
+                ports: {
+                    a: { direction: 'input', bits: aBits },
+                    s: { direction: 'input', bits: sBits },
+                    y: { direction: 'output', bits: yBits },
+                },
+                cells: {
+                    the_demux: {
+                        hide_name: 0, type: '$demux',
+                        parameters: { WIDTH: width, S_WIDTH: sWidth },
+                        attributes: { src: 'demux.sv:1' },
+                        port_directions: { A: 'input', S: 'input', Y: 'output' },
+                        connections: { A: aBits, S: sBits, Y: yBits },
+                    },
+                },
+                netnames: {
+                    a: { hide_name: 0, bits: aBits, attributes: {} },
+                    s: { hide_name: 0, bits: sBits, attributes: {} },
+                    y: { hide_name: 0, bits: yBits, attributes: {} },
+                },
+            },
+        },
+    };
+}
+
+suite('convertToDigitalJs — $demux lowering', () => {
+    const devTypes = (djs: any) => Object.values(djs.devices).map((d: any) => d.type);
+
+    test('non-power-of-2 word width lowers to $mul + $shl (no coverage-gap throw)', () => {
+        const djs = convertToDigitalJs(demuxNetlist(3, 2)); // 4 words × 3 bits — 3 is not a power of 2
+        const types = devTypes(djs);
+        assert.ok(types.includes('Multiplication'), 'S*WIDTH is synthesized with a multiplier');
+        assert.ok(types.includes('ShiftLeft'), 'word placement is a $shl (ShiftLeft)');
+    });
+
+    test('power-of-2 word width stays a single $shl (no multiplier)', () => {
+        const djs = convertToDigitalJs(demuxNetlist(4, 2)); // 4 words × 4 bits — 4 is a power of 2
+        const types = devTypes(djs);
+        assert.ok(types.includes('ShiftLeft'), 'word placement is a $shl (ShiftLeft)');
+        assert.ok(!types.includes('Multiplication'), 'power-of-2 needs no multiplier (shift = bit concat)');
+    });
+});
+
 // Full-mode subtree extraction: pull a scope's standalone TopModule out of a whole-design circuit.
 // A whole-design circuit: top spread at the root + a FLAT `subcircuits` map keyed `module$inst.path`;
 // a Subcircuit device's `celltype` is that key. Here: top → b → d, top → c, and an unrelated x → e.
