@@ -389,10 +389,21 @@ function openSubcircuit(model, paper) {
     if (currentShallow && !_expandedTemp.has(key)) {
         if (_pendingExpand.has(key)) { return; } // a request is already in flight
         _pendingExpand.set(key, { model, paper });
+        // Re-elaboration (extension) + the popup build that follows can be slow → arm the overlay
+        // (delayed, so a fast expand doesn't flash it). It hides when the popup's layout settles.
+        scheduleRenderOverlay();
         post({ type: 'expandRequest', key, celltype: model.get('celltype'), leafName: model.get('label'), path: graphPath(model) });
         return;
     }
-    doOpenPopup(model, paper, key);
+    // The child graph is in hand (full mode, or an already-expanded child). Opening it renders + lays
+    // out the popup SYNCHRONOUSLY; for a big child, show the overlay and defer so it paints first.
+    const g = model.get('graph');
+    if (g && typeof g.getCells === 'function' && g.getCells().length > RENDER_OVERLAY_MIN_CONNECTORS) {
+        showRenderOverlay();
+        setTimeout(() => doOpenPopup(model, paper, key), 30);
+    } else {
+        doOpenPopup(model, paper, key);
+    }
 }
 // Open the popup for `model` (its graph is already built) — title/taskbar bookkeeping + trigger.
 function doOpenPopup(model, paper, key) {
@@ -409,17 +420,18 @@ function doOpenPopup(model, paper, key) {
 function onExpandResult(msg) {
     const pending = _pendingExpand.get(msg.key);
     _pendingExpand.delete(msg.key);
-    if (!pending) { return; }
-    if (msg.error || !msg.circuit) { setStatus(`Expand failed: ${msg.error || 'no circuit'}`); return; }
+    if (!pending) { hideRenderOverlay(); return; }
+    if (msg.error || !msg.circuit) { setStatus(`Expand failed: ${msg.error || 'no circuit'}`); hideRenderOverlay(); return; }
     try {
         sanitizeCircuit(msg.circuit); // same guard loadSchematic uses: drop connectors with a missing
                                       // endpoint so digitaljs doesn't throw on `conn.from.id`
         const t = new Circuit(msg.circuit, { layoutEngine: 'elkjs', windowCallback: () => {} });
         pending.model.set('graph', t.getLabelIndex().graph);
         _expandedTemp.set(msg.key, t);
-        doOpenPopup(pending.model, pending.paper, msg.key);
+        doOpenPopup(pending.model, pending.paper, msg.key); // popup render:done (new:paper) hides the overlay
     } catch (e) {
         setStatus('Expand failed: ' + (e && e.message ? e.message : e));
+        hideRenderOverlay();
     }
 }
 // digitaljs opens the popup from the subcircuit's zoom (🔍) icon; route it through our helper.
@@ -1084,6 +1096,9 @@ function buildSchematic(msg) {
             setupMainPaper(p);          // main: minimap or scrollbars per setting
         } else {
             setupPopupPaper(p);         // subcircuit popup: fixed window + scrollbars
+            // Expand puts up the "rendering" overlay; drop it once the popup's own layout settles.
+            p.on('render:done', scheduleOverlayHide);
+            p.model.on('change:position change:vertices', scheduleOverlayHide);
         }
     });
     paper = circuit.displayOn(paperDiv());

@@ -22,6 +22,14 @@ const req = await page.evaluate(() => {
 });
 console.log('expandRequest:', JSON.stringify(req));
 
+// The overlay should appear while the expand is in flight (re-elaboration + popup build), not freeze.
+const ovlDuring = req && await page.evaluate(async () => {
+    await new Promise(r => setTimeout(r, 250));   // > RENDER_OVERLAY_SHOW_DELAY (120ms)
+    const o = document.getElementById('sv-render-overlay');
+    return o ? getComputedStyle(o).display : null;
+});
+console.log('overlay during expand:', ovlDuring);
+
 // 2. Reply with a re-elaborated child circuit → a popup should open with cells. A real shallow
 //    re-elaboration carries malformed connectors (blackboxed grandchildren / undriven ports), so
 //    inject one (a missing `from`, the exact "reading 'id'" trigger) to ensure the same sanitize
@@ -36,15 +44,22 @@ const popup = req && await page.evaluate(async ({ childCircuit, key }) => {
     window.postMessage({ type: 'expandResult', key, circuit: childCircuit }, '*');
     await new Promise(r => setTimeout(r, 3500)); // popup build + async ELK layout
     const dlg = document.querySelector('.ui-dialog');
-    return { dialogs: document.querySelectorAll('.ui-dialog').length, cells: dlg ? dlg.querySelectorAll('[model-id]').length : 0 };
+    const o = document.getElementById('sv-render-overlay');
+    return {
+        dialogs: document.querySelectorAll('.ui-dialog').length,
+        cells: dlg ? dlg.querySelectorAll('[model-id]').length : 0,
+        overlay: o ? getComputedStyle(o).display : null,
+    };
 }, { childCircuit, key: req.key });
 console.log('popup:', JSON.stringify(popup));
 
 const ok = report('shallow-expand', [
     ['shallow Expand posts an expandRequest (not stepInto)', !!req && typeof req.key === 'string'],
     ['no popup opens before the reply', !!req && req.dialogsNow === 0],
+    ['Expand shows the "rendering" overlay while in flight', ovlDuring === 'flex'],
     ['expandResult opens exactly one popup', !!popup && popup.dialogs === 1],
     ['the popup renders the child circuit (has cells)', !!popup && popup.cells > 0],
+    ['the overlay hides once the popup is rendered', !!popup && popup.overlay === 'none'],
     ['no page errors', !logs.some(l => l.startsWith('PAGEERROR'))],
 ], logs);
 await browser.close();
