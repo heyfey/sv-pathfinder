@@ -330,7 +330,7 @@
     "commands": [
       {
         "command": "sv-pathfinder.searchDesign",
-        "title": "Find Instance in Design",
+        "title": "Find Instance",
         "category": "sv-pathfinder",
         "icon": "$(search)"
       },
@@ -389,11 +389,11 @@
       },
       {
         "command": "sv-pathfinder.addToWaveform",
-        "title": "Show in Waveform Viewer"
+        "title": "Show in Waveform"
       },
       {
         "command": "sv-pathfinder.addAllInScopeToWaveform",
-        "title": "Add All Variables in Scope to Waveform Viewer"
+        "title": "Add All Variables in Scope to Waveform"
       },
       {
         "command": "sv-pathfinder.selectInstance",
@@ -410,7 +410,7 @@
         "title": "Show in Hierarchy View"      },
       {
         "command": "sv-pathfinder.addToWaveformViewer",
-        "title": "Show in Waveform Viewer"      },
+        "title": "Show in Waveform"      },
       {
         "command": "sv-pathfinder.copyHierarchyName",
         "title": "Copy Hierarchy Name"      },

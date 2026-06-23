@@ -434,7 +434,7 @@ export class SchematicViewProvider {
   <span id="breadcrumb"></span>
   <span id="toolbar-right">
     <button id="go-parent" class="codicon codicon-debug-step-out" title="Go to parent scope" disabled></button>
-    <button id="sv-find-btn" class="codicon codicon-search" title="Find signal / instance (Ctrl+F)"></button>
+    <button id="sv-find-btn" class="codicon codicon-search" title="Find (Ctrl+F)"></button>
     <button id="zoom-out" class="codicon codicon-zoom-out" title="Zoom out"></button>
     <button id="zoom-in" class="codicon codicon-zoom-in" title="Zoom in"></button>
     <button id="zoom-fit" class="codicon codicon-screen-full" title="Fit"></button>
@@ -443,8 +443,8 @@ export class SchematicViewProvider {
       <label class="sv-switch"><input type="checkbox" id="preset-switch"><span class="sv-slider"></span></label>
       <span class="sv-seg-label" data-side="gls">Gate-Level</span>
     </span>
-    <button id="refresh" class="codicon codicon-refresh" title="Re-run Yosys"></button>
-    <button id="export" class="codicon codicon-export" title="Export (SVG / PNG / JSON)"></button>
+    <button id="refresh" class="codicon codicon-refresh" title="Reload"></button>
+    <button id="export" class="codicon codicon-export" title="Export"></button>
   </span>
 </div>
 <div id="paper-container"><div id="paper"></div></div>
