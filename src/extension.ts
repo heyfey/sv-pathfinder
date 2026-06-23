@@ -95,6 +95,10 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	}));
 
+	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.copyDesignPath', async (e) => {
+		if (e?.resourceUri) { await vscode.env.clipboard.writeText(e.resourceUri.fsPath); }
+	}));
+
 	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.revealWaveform', (e) => {
 		designProvider.revealWaveform(e);
 	}));

@@ -234,6 +234,11 @@
           "group": "0_default@0"
         },
         {
+          "command": "sv-pathfinder.copyDesignPath",
+          "when": "view == 'openedDesignsView' && viewItem == 'designItem'",
+          "group": "0_default@1"
+        },
+        {
           "command": "sv-pathfinder.reloadDesign",
           "when": "view == 'openedDesignsView' && viewItem == 'designItem'",
           "group": "1_default@0"
@@ -352,6 +357,10 @@
         "command": "sv-pathfinder.openWaveform",
         "title": "Open Waveform",
         "icon": "$(add)"
+      },
+      {
+        "command": "sv-pathfinder.copyDesignPath",
+        "title": "Copy Path"
       },
       {
         "command": "sv-pathfinder.closeWaveform",
