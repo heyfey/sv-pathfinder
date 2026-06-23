@@ -1642,6 +1642,19 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
         public readonly loadsTreeProvider: DriversLoadsTreeProvider,
     ) {
         this.activeScopeStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 97);
+        // Name shows in the status-bar "manage items" menu and to screen readers, so the item is
+        // identifiable even when its text is crowded out on the right.
+        this.activeScopeStatusBarItem.name = 'sv-pathfinder: Active Scope';
+        // Click to find an instance. The item is only shown while a design is active, so there's no
+        // no-design case to handle here (and searchDesign guards defensively regardless).
+        this.activeScopeStatusBarItem.command = 'sv-pathfinder.searchDesign';
+    }
+
+    // Render the active scope in the status bar with a distinctive module icon (so it's easy to spot
+    // among other right-side items) and a tooltip carrying the full path (which the bar may truncate).
+    private updateActiveScopeStatus(scope: string) {
+        this.activeScopeStatusBarItem.text = `$(chip) Active scope: ${scope}`;
+        this.activeScopeStatusBarItem.tooltip = `sv-pathfinder active scope: ${scope}\nClick to find an instance`;
     }
 
     public setHierarchyTreeView(view: vscode.TreeView<NetlistItem>) {
@@ -1781,7 +1794,7 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
 
         if (design) {
             this.treeData = design.getTreeData();
-            this.activeScopeStatusBarItem.text = 'Active scope: ' + design.getActiveScope();
+            this.updateActiveScopeStatus(design.getActiveScope());
             this.activeScopeStatusBarItem.show();
         } else {
             this.treeData = [];
@@ -1897,7 +1910,7 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
 
         const hasChange = await this.activeDesign.setActiveInstance(element);
         if (!hasChange) { return false; }
-        this.activeScopeStatusBarItem.text = 'Active scope: ' + this.activeDesign.getActiveScope();
+        this.updateActiveScopeStatus(this.activeDesign.getActiveScope());
         this._onDidChangeActiveInstance.fire(this.activeDesign.getActiveInstance());
         return true;
     }
