@@ -1355,7 +1355,7 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
             canSelectFolders: true,
             canSelectMany: false,
             filters: {
-                'Designs': ['uhdm', 'f', 'simv.daidir'],
+                'Designs': ['uhdm', 'f', 'daidir'],
             }
         };
 
@@ -1382,8 +1382,16 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
                 design = new UhdmDesignItem(designPath, isExample);
             } else if (fileType === 'f') {
                 design = new FDesignItem(designPath, false/*isExample*/);
-            } else {
+            } else if (fileType === 'kz') {
+                // Deprecated kuzu (.elab.kz) backend — routed so KuzuDesignItem.load() surfaces the
+                // "deprecated and no longer bundled" notice.
                 design = new KuzuDesignItem(designPath, false/*isExample*/);
+            } else if (fileType === 'daidir') {
+                vscode.window.showWarningMessage('Opening `.daidir` designs is not yet supported.');
+                return;
+            } else {
+                vscode.window.showWarningMessage(`Unsupported design type: .${fileType}`);
+                return;
             }
             const success = await design.load();
             if (success) {
