@@ -445,6 +445,7 @@
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
     "package": "npm run compile-addon && npm run check-types && npm run lint && node esbuild.js --production",
+    "gen-licenses": "npx --yes generate-license-file --input package.json --output THIRD_PARTY_LICENSES.txt --overwrite --no-spinner",
     "vendor-slang-server": "node scripts/vendor-slang-server.mjs",
     "compile-tests": "tsc -p . --outDir out",
     "watch-tests": "tsc -p . -w --outDir out",
