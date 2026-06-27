@@ -157,6 +157,18 @@ function buildScript(backend: Backend, ctx: ScopeContext, preset: SchematicPrese
     return common + `proc; memory_collect; setattr -mod -set keep 1; setattr -set keep 1 t:$mem*; ${keepDangling}opt_clean; write_json -compat-int ${quote(outJson)}`;
 }
 
+// macOS Gatekeeper quarantines OSS CAD Suite's unsigned binaries — yosys shells out to a bundled
+// `realpath` while loading the slang plugin, so the schematic dies with an "Apple could not verify
+// … is free of malware" dialog. Surface the one-shot fix (with the actual folder) when on macOS.
+function macQuarantineHint(yosysCmd: string): string {
+    if (process.platform !== 'darwin') { return ''; }
+    // <ossPath>/bin/yosys -> <ossPath>; fall back to a placeholder for a bare `yosys` on PATH.
+    const dir = yosysCmd.includes('/bin/') ? path.dirname(path.dirname(yosysCmd)) : '<oss-cad-suite dir>';
+    return '\n\nOn macOS, OSS CAD Suite binaries may be blocked by Gatekeeper ("Apple could not verify '
+        + '… is free of malware"). Clear the quarantine flag on the OSS CAD Suite folder, then reload:\n'
+        + `  xattr -dr com.apple.quarantine "${dir}"`;
+}
+
 export async function runYosys(ctx: ScopeContext, preset: SchematicPreset, opts?: { showDangling?: boolean; shallow?: boolean }): Promise<YosysResult> {
     const backend = await findBackend();
     if (!backend) {
@@ -196,9 +208,9 @@ export async function runYosys(ctx: ScopeContext, preset: SchematicPreset, opts?
         proc.stderr.on('data', d => out += d.toString());
         const timer = setTimeout(() => {
             proc.kill();
-            reject(new Error('Yosys timed out after 120s.\n' + out.slice(-4000)));
+            reject(new Error('Yosys timed out after 120s.' + macQuarantineHint(backend.command) + '\n' + out.slice(-4000)));
         }, 120000);
-        proc.on('error', err => { clearTimeout(timer); reject(err); });
+        proc.on('error', err => { clearTimeout(timer); reject(new Error(`Failed to run Yosys (${backend.command}): ${err.message}` + macQuarantineHint(backend.command))); });
         proc.on('close', code => {
             clearTimeout(timer);
             if (code === 0) { resolve(out); }
@@ -217,7 +229,7 @@ export async function runYosys(ctx: ScopeContext, preset: SchematicPreset, opts?
                         ? '\n\nHint: this scope has a SystemVerilog interface port, so it can\'t be ' +
                           'elaborated on its own. Open a parent scope that connects the interface (full ' +
                           'mode) and navigate down to this one.'
-                        : '';
+                        : macQuarantineHint(backend.command);
                 reject(new Error(`Yosys (${backend.name}) failed with code ${code}:\n` + out.slice(-4000) + hint));
             }
         });
