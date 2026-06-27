@@ -2,7 +2,11 @@ import * as treeSitter from "web-tree-sitter";
 import * as vscode from 'vscode';
 
 import * as path from "path";
-const VerilogWasmPath = path.join(__dirname, '../parsers/tree-sitter-verilog.wasm');
+// Grammar: gmlarumbe/tree-sitter-systemverilog (v0.3.1) — parses full SystemVerilog (interfaces,
+// classes, assertions, covergroups). The queries and parent-type exclusions below use this
+// grammar's node types (module_ansi_header / module_nonansi_header for the module name,
+// name_of_instance for the instance name).
+const VerilogWasmPath = path.join(__dirname, '../parsers/tree-sitter-systemverilog.wasm');
 // const VhdlWasmPath = path.join(__dirname, '../parsers/tree-sitter-vhdl.wasm');
 
 // #region Parser
@@ -94,12 +98,11 @@ export class Parser {
 
     private findModuleNode(tree: treeSitter.Tree, moduleName: string): treeSitter.Node | undefined {
         const query = new treeSitter.Query(this.verilogLanguage, `
-            (module_declaration
-                (module_header
-                    (simple_identifier) @name
-                    (#eq? @name "${moduleName}")
-                )
+            ((module_declaration
+                [(module_ansi_header (simple_identifier) @name)
+                 (module_nonansi_header (simple_identifier) @name)]
             ) @module
+            (#eq? @name "${moduleName}"))
         `);
         const matches = query.matches(tree.rootNode);
         if (matches.length === 0) { return undefined; }
@@ -110,8 +113,10 @@ export class Parser {
     private collectIdentifiers(moduleNode: treeSitter.Node | undefined): treeSitter.Node[] {
         if (!moduleNode) { return []; }
         // Exclude certain parent types to collect only identifiers for variables and ports.
-        // Note: The parent types are based on the tree-sitter-verilog grammar.
-        const excludedParentTypes = ['module_header', 'module_instantiation', 'instance_identifier'];
+        // Note: The parent types are based on the tree-sitter-systemverilog (gmlarumbe) grammar:
+        // the module name sits under module_ansi_header/module_nonansi_header, the instantiated
+        // module name under module_instantiation, and the instance name under name_of_instance.
+        const excludedParentTypes = ['module_ansi_header', 'module_nonansi_header', 'module_instantiation', 'name_of_instance'];
         return this.collectFilteredIdentifiers(moduleNode, excludedParentTypes);
     }
 
@@ -131,18 +136,11 @@ export class Parser {
             const node = match.captures[0].node;
             const parent = node.parent;
             return parent && !excludedParentTypes.includes(parent.type) &&
-                // Exclude port identifiers that are part of named port connections.
-                //     mid m1 ( .portA(portB), ...
-                // Want to exclude portA and include portB.
-                // Tree sitter will parse this like:
-                // ...
-                //   Node type: named_port_connection, text: .portA(portB), start: 83:1, end: 83:14
-                //     Node type: port_identifier, text: portA, start: 83:2, end: 83:7
-                //       Node type: simple_identifier, text: portA, start: 83:2, end: 83:7
-                //     Node type: expression, text: portB, start: 83:8, end: 83:13
-                //       Node type: primary, text: portB, start: 83:8, end: 83:13
-                //         Node type: simple_identifier, text: portB, start: 83:8, end: 83:13
-                !(parent.type === 'port_identifier' && parent.parent && parent.parent.type === 'named_port_connection');
+                // Exclude the port *name* in a named connection — `.portA(portB)` — but keep the
+                // connected signal (portB). In tree-sitter-systemverilog the port name is a direct
+                // simple_identifier child of named_port_connection, while portB sits under
+                // expression > primary > hierarchical_identifier.
+                parent.type !== 'named_port_connection';
         });
         return filteredIds.map(match => match.captures[0].node);
     }
@@ -159,7 +157,7 @@ export class Parser {
             if (current.type === 'simple_identifier' &&
                 current.parent &&
                 !excludedParentTypes.includes(current.parent.type) &&
-                !(current.parent.type === 'port_identifier' && current.parent.parent && current.parent.parent.type === 'named_port_connection')) {
+                current.parent.type !== 'named_port_connection') {
                 identifiers.push(current);
             }
             if (cursor.gotoFirstChild()) { continue; }
@@ -188,9 +186,8 @@ export class Parser {
         // Find all module declarations and check if the cursor is within any of them
         const query = new treeSitter.Query(this.verilogLanguage, `
             (module_declaration
-                (module_header
-                    (simple_identifier) @name
-                )
+                [(module_ansi_header (simple_identifier) @name)
+                 (module_nonansi_header (simple_identifier) @name)]
             ) @module
         `);
         const matches = query.matches(tree.rootNode);

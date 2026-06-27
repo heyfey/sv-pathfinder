@@ -95,7 +95,7 @@ export function resetBackendCache(): void {
 
 // The yosys backend that was actually resolved (name includes the binary path and slang/native).
 // Surfaced to the webview so a render failure can name the toolchain that produced the netlist —
-// e.g. when another extension (TerosHDL) puts a different `yosys` on PATH and it gets picked up.
+// e.g. when another extension puts a different `yosys` on PATH and it gets picked up.
 export function getResolvedBackendName(): string | undefined {
     return cachedBackend ? cachedBackend.name : undefined;
 }
