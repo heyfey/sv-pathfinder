@@ -81,7 +81,7 @@ export class SchematicViewProvider {
             // Optional: surface declared-but-unconnected nets. In the cache key so toggling the
             // setting + reloading re-elaborates (it changes the Yosys keeps + converter output).
             const showDangling = cfg.get<boolean>('schematicShowDanglingNets', false);
-            const shallow = cfg.get<string>('schematicElaborationMode', 'full') === 'shallow';
+            const shallow = cfg.get<string>('schematicElaborationMode', 'shallow') === 'shallow';
 
             // full mode: elaborate the whole design once, render this scope by extracting its subtree.
             // Falls back to a per-scope elaboration if the scope isn't found in the whole-design circuit
@@ -108,9 +108,9 @@ export class SchematicViewProvider {
 
             this.createOrRevealPanel();
             this.panel!.title = `Schematic: ${ctx.instancePath}`;
-            const overview = cfg.get<string>('schematicOverview', 'scrollbars') === 'minimap' ? 'minimap' : 'scrollbars';
-            const rawSpacing = cfg.get<string>('schematicSpacing', 'compact');
-            const spacing = (['compact', 'comfortable', 'spacious'].includes(rawSpacing) ? rawSpacing : 'compact') as
+            const overview = 'scrollbars'; // minimap option removed — the main schematic always uses scrollbars
+            const rawSpacing = cfg.get<string>('schematicSpacing', 'comfortable');
+            const spacing = (['compact', 'comfortable', 'spacious'].includes(rawSpacing) ? rawSpacing : 'comfortable') as
                 'compact' | 'comfortable' | 'spacious';
             this.postMessage({
                 type: 'loadSchematic',
@@ -552,7 +552,7 @@ export class SchematicViewProvider {
                 // In full mode the whole-design elaboration includes this instance even when the slang
                 // tree doesn't, so "Expand" opens it client-side — point the user there.
                 const fullMode = vscode.workspace.getConfiguration('sv-pathfinder')
-                    .get<string>('schematicElaborationMode', 'full') !== 'shallow';
+                    .get<string>('schematicElaborationMode', 'shallow') !== 'shallow';
                 const gotoSrc = 'Go to source';
                 const pick = await vscode.window.showWarningMessage(
                     `Can't step into ${msg.leafName}${mod ? ` (module ${mod})` : ''}: it's drawn by the ` +

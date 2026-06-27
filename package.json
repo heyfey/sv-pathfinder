@@ -31,15 +31,15 @@
     "configuration": {
       "title": "sv-pathfinder",
       "properties": {
-        "sv-pathfinder.remotePathPrefix": {
+        "sv-pathfinder.sourcePathFrom": {
           "type": "string",
           "scope": "window",
-          "markdownDescription": "Replace the remote path prefix with the local path prefix when navigating to source files. This is useful when the debug database is generated on the different machine, and file paths need remapping to match your local environment. Only take effect when `#sv-pathfinder.localPathPrefix#` is also set."
+          "markdownDescription": "Source-path prefix to rewrite when jumping to source. Useful when the design database was generated on another machine, so the paths it records don't exist locally: paths starting with this prefix have it swapped for `#sv-pathfinder.sourcePathTo#`. Takes effect only when `#sv-pathfinder.sourcePathTo#` is also set."
         },
-        "sv-pathfinder.localPathPrefix": {
+        "sv-pathfinder.sourcePathTo": {
           "type": "string",
           "scope": "window",
-          "markdownDescription": "Replace the remote path prefix with the local path prefix when navigating to source files. This is useful when the debug database is generated on the different machine, and file paths need remapping to match your local environment. Only take effect when `#sv-pathfinder.remotePathPrefix#` is also set."
+          "markdownDescription": "Local replacement for `#sv-pathfinder.sourcePathFrom#` — the prefix that makes the remapped path resolve on your machine. Takes effect only when `#sv-pathfinder.sourcePathFrom#` is also set."
         },
         "sv-pathfinder.compiler": {
           "type": "string",
@@ -62,7 +62,7 @@
         "sv-pathfinder.showModulesView": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Show the Modules view (modules in the design; expand one to see its instances). Need to reload window to take effect."
+          "markdownDescription": "Show the Modules view (every module in the design; expand one to see its instances). Reload the window to apply."
         },
         "sv-pathfinder.ossCadSuitePath": {
           "type": "string",
@@ -73,15 +73,6 @@
           "type": "string",
           "default": "",
           "markdownDescription": "Accent color for the schematic viewer (child-instance fills and hover highlights). Any CSS color (e.g. `#4cc2ff`, `dodgerblue`). If empty, a theme-aware color is used (`--vscode-charts-blue`)."
-        },
-        "sv-pathfinder.schematicOverview": {
-          "type": "string",
-          "enum": [
-            "scrollbars",
-            "minimap"
-          ],
-          "default": "scrollbars",
-          "markdownDescription": "Overview affordance for the main schematic: `scrollbars` or a `minimap` (corner overview with a draggable viewport). Subcircuit popup windows always use scrollbars."
         },
         "sv-pathfinder.schematicSpacing": {
           "type": "string",
@@ -95,8 +86,8 @@
             "More room between blocks and around signal names.",
             "Most generous spacing — easiest to read, largest canvas."
           ],
-          "default": "compact",
-          "markdownDescription": "Layout density for the schematic: controls block spacing, the clearance reserved around wire net-name labels, and box padding so signal names fit. Applies on the next render (reopen or refresh the schematic)."
+          "default": "comfortable",
+          "markdownDescription": "Layout density for the schematic: block spacing, the clearance around wire net-name labels, and box padding. Applies on the next render (reopen or refresh the schematic)."
         },
         "sv-pathfinder.schematicIncludeDirs": {
           "type": "array",
@@ -104,7 +95,7 @@
             "type": "string"
           },
           "default": [],
-          "markdownDescription": "Extra include directories for the schematic's Yosys elaboration (passed as `-I`/`-y`). Use this when a curated filelist doesn't list the directories of `\\`include` headers or sibling modules — e.g. ibex, whose assertion/coverage headers (`prim_assert.sv`, `dv_fcov_macros.svh`) live under `vendor/`. The filelist's own directory and each source file's directory are already searched automatically."
+          "markdownDescription": "Extra include directories for the schematic's Yosys elaboration (passed as `-I`/`-y`). Usually unnecessary — the filelist's own directory, each source file's directory, and any `+incdir+` in the `.f` are searched automatically. Add a directory here only when an `\\`include` header or sibling module lives outside those (e.g. vendored headers a curated filelist references but doesn't include). The schematic error points here when an include/module can't be found."
         },
         "sv-pathfinder.schematicShowDanglingNets": {
           "type": "boolean",
@@ -121,8 +112,8 @@
             "Elaborate the scope you open once, then render it and everything under it (step-into/expand, and stepping back up) from that single elaboration without re-elaborating. Only going ABOVE what you've opened re-elaborates. Best for small/medium designs.",
             "Elaborate only the selected scope plus one level (direct children as boxes); stepping in or expanding re-elaborates the next level on demand. Cheaper to start on very large designs."
           ],
-          "default": "full",
-          "markdownDescription": "How much of the design the schematic elaborates.\n\n- **full** (default): elaborate the scope you open once, then render it and any descendant — via step-into / expand, and stepping back up — from that single elaboration (no re-elaboration). Only navigating *above* what you've opened triggers a new elaboration. Rooting at the opened scope (rather than the design's absolute top) avoids elaborating a non-synthesizable testbench above the DUT.\n- **shallow**: elaborate only the selected scope + its direct children (as boxes); stepping in or expanding re-elaborates the next level on demand. Use this when a design is too large to elaborate whole.\n\nApplies on the next render (reopen or refresh the schematic)."
+          "default": "shallow",
+          "markdownDescription": "How much of the design the schematic elaborates at once (see the options below). Defaults to **shallow** — cheapest to start on large designs; switch to **full** on small/medium designs to step in and out without re-elaborating. Applies on the next render (reopen or refresh the schematic)."
         },
         "sv-pathfinder.valueAnnotationFormat": {
           "type": "string",

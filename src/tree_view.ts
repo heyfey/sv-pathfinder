@@ -6,7 +6,7 @@ import * as cp from 'child_process';
 import * as slang from './slang_server/SlangInterface'
 import { absolutizeFlist } from './flist';
 import { isNoOpNavigation, findColumnForPath } from './nav_history';
-import { resolveRenamedBool } from './settings_util';
+import { resolveRenamedBool, resolveRenamedString } from './settings_util';
 import { InstanceSearchResult, InstanceSearchHits, InstanceQuickPickItem, toInstanceQuickPickItems, filterAndCapInstances } from './design_search';
 
 // Whether the "Modules" view is enabled. The setting was renamed showInstancesView → showModulesView;
@@ -1596,9 +1596,15 @@ export function replaceFilePathIfNeeded(filePath: string, isExample: boolean = f
         return filePath.replace(from, to);
     }
 
-    // get from and to from configuration
-    const from = vscode.workspace.getConfiguration('sv-pathfinder').get('remotePathPrefix', '');
-    const to = vscode.workspace.getConfiguration('sv-pathfinder').get('localPathPrefix', '');
+    // get from and to from configuration. The settings were renamed remotePathPrefix → sourcePathFrom
+    // and localPathPrefix → sourcePathTo; honor the old keys for users who set them before the rename.
+    const cfg = vscode.workspace.getConfiguration('sv-pathfinder');
+    const userSet = (key: string) => {
+        const i = cfg.inspect<string>(key);
+        return i?.workspaceFolderValue ?? i?.workspaceValue ?? i?.globalValue;
+    };
+    const from = resolveRenamedString(userSet('sourcePathFrom'), userSet('remotePathPrefix'), '');
+    const to = resolveRenamedString(userSet('sourcePathTo'), userSet('localPathPrefix'), '');
     if (!from || !to || from === to) {
         return filePath; // No replacement needed
     }
