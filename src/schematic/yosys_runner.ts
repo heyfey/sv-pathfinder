@@ -120,8 +120,11 @@ function buildScript(backend: Backend, ctx: ScopeContext, preset: SchematicPrese
     if (backend.slang) {
         // -G applies resolved instance params at elaboration; --keep-hierarchy keeps
         // children as boxes (without it yosys-slang inlines everything).
-        // --ignore-timing: delays (`a = #1 b;`) are sim-only and otherwise hard errors
-        // in slang's synthesis path — common in legacy RTL; irrelevant to structure.
+        // --ignore-timing / --ignore-initial / --ignore-assertions: delays (`a = #1 b;`), initial
+        // blocks (testbench `$dumpfile`/`$dumpvars`/`$finish` and `forever` clock generators), and
+        // SVA/formal statements are sim/verification-only and otherwise hard errors in slang's
+        // synthesis path — drop them so a testbench top or assertion-laden RTL still yields a
+        // structural view (the cells/wires are unaffected; only sim init values would be).
         // -D SYNTHESIS: let designs guard sim-only code (e.g. $dumpvars with indexed
         // selects, which slang rejects) behind `ifndef SYNTHESIS`, matching the
         // native read_verilog path below.
@@ -129,7 +132,7 @@ function buildScript(backend: Backend, ctx: ScopeContext, preset: SchematicPrese
         const search = searchDirFlags(searchDirs, true); // -I + -y (libdir) so missing modules resolve
         // shallow ("selected + 1"): blackbox the direct children so only this scope's body elaborates.
         const bb = shallow ? blackboxFlags(ctx.childModules) : '';
-        read = `read_slang --keep-hierarchy --ignore-timing -D SYNTHESIS ${search} ${bb} ${gFlags} --top ${ctx.moduleName} ${files}`;
+        read = `read_slang --keep-hierarchy --ignore-timing --ignore-initial --ignore-assertions -D SYNTHESIS ${search} ${bb} ${gFlags} --top ${ctx.moduleName} ${files}`;
     } else {
         const search = searchDirFlags(searchDirs, false); // read_verilog: include dirs only
         read = `read_verilog -sv -DSYNTHESIS ${search} ${files}`;
