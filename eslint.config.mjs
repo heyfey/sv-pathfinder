@@ -4,6 +4,9 @@ import tsParser from "@typescript-eslint/parser";
 export default [{
     files: ["**/*.ts"],
 }, {
+    // Vendored verbatim from hudson-trading/slang-server (see file headers); not ours to lint.
+    ignores: ["src/slang_server/**"],
+}, {
     plugins: {
         "@typescript-eslint": typescriptEslint,
     },

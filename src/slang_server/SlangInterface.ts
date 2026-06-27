@@ -1,17 +1,18 @@
 // Checked in from https://github.com/hudson-trading/slang-server/blob/main/clients/vscode/src/SlangInterface.ts
-
+// Copyright (c) 2024-2025 Hudson River Trading LLC. Licensed under the MIT License.
+// SPDX-License-Identifier: MIT
+// Vendored from hudson-trading/slang-server@f7465a8 — re-sync with: npm run vendor-slang-server
 import * as vscode from 'vscode'
 
-import { ConfigSchema } from './config.gen'
-// enum class SlangKind {
-//   InstanceKind,
-//   ScopeKind,
-//   ParamKind,
-//   LogicKind,
-//   WireKind,
-// };
+import { Config } from './config.gen'
 
-export { ConfigSchema as Config }
+export type { Config }
+
+export type ExperimentalCapabilities = {
+  inactiveRegions?: {
+    inactiveRegions: boolean
+  }
+}
 
 export enum SlangKind {
   Instance = 'Instance',
@@ -113,7 +114,7 @@ export async function getUnit(): Promise<Instance[]> {
   return children
 }
 
-/// Module -> scopes for Modules view
+/// Module -> scopes for instances view
 export async function getScopesByModule(): Promise<Module[]> {
   const children: Module[] = await vscode.commands.executeCommand('slang.getScopesByModule')
   if (children === undefined) {
@@ -138,6 +139,14 @@ export async function getFilesContainingModule(moduleName: string): Promise<stri
 
 export async function getModulesInFile(fsPath: string): Promise<string[]> {
   return await vscode.commands.executeCommand('slang.getModulesInFile', fsPath)
+}
+
+interface ExpandMacroArgs {
+  dst: string
+  src: string
+}
+export async function expandMacros(args: ExpandMacroArgs): Promise<boolean> {
+  return await vscode.commands.executeCommand('slang.expandMacros', args)
 }
 ////////////////////////////////////////////////////////////
 /// server -> client is in commands in the project component
