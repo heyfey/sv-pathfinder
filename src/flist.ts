@@ -7,6 +7,11 @@ import { randomUUID } from 'crypto';
 const PATH_FLAGS = new Set(['-y', '-v', '--libdir', '-l']);
 // Flags whose following token is itself a nested command file (.f) to recurse into.
 const NESTED_FLAGS = new Set(['-f', '-F', '-C']);
+// Flags whose following token is a NON-path argument (a macro, param, module, or value) that must NOT
+// be absolutized — otherwise e.g. `-D MACRO` would become `-D /abs/dir/MACRO`, which slang reads from
+// the original .f but read_slang reads from our rewritten copy. The attached forms (`-DMACRO`,
+// `+define+MACRO`) already pass through untouched as single tokens.
+const NONPATH_ARG_FLAGS = new Set(['-D', '--define-macro', '-G', '--param-override', '--top', '-top', '--std', '--timescale']);
 
 // Resolve relative paths inside a .f command file against the file's own
 // directory, writing an absolutized copy to a temp file. Returns the temp path.
@@ -78,6 +83,8 @@ async function rewrite(flistPath: string, cache: Map<string, string>, inProgress
                 res.push(t, await rewrite(abs(toks[++i]), cache, inProgress));  // nested .f
             } else if (PATH_FLAGS.has(t) && i + 1 < toks.length) {
                 res.push(t, abs(toks[++i]));                    // flag + its path arg
+            } else if (NONPATH_ARG_FLAGS.has(t) && i + 1 < toks.length) {
+                res.push(t, toks[++i]);                         // flag + its non-path arg, kept verbatim
             } else if (t.startsWith('+') || t.startsWith('-')) {
                 res.push(t);                                    // other option, leave as-is
             } else {

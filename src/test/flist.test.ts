@@ -125,6 +125,23 @@ suite('absolutizeFlist', () => {
         assert.deepStrictEqual(incdirs, [path.join(work, 'inc')]);
     });
 
+    test('does not absolutize non-path flag arguments (-D / -G / --top / --std)', async () => {
+        // `-D MACRO` etc. must survive verbatim — a bare token after these flags is a macro/param/
+        // module/value, not a file. Without the guard the arg becomes `/work/MACRO` and read_slang
+        // sees a corrupted filelist while slang (reading the original .f) does not.
+        await fsp.writeFile(path.join(work, 'top.sv'), '');
+        const flist = path.join(work, 'files.f');
+        await fsp.writeFile(flist, '-D MACRO\n-D WIDTH=8\n-G P=1\n--top dut\n--std 1800-2017\ntop.sv\n');
+
+        const content = await fsp.readFile(await absolutizeFlist(flist), 'utf8');
+        for (const verbatim of ['-D MACRO', '-D WIDTH=8', '-G P=1', '--top dut', '--std 1800-2017']) {
+            assert.ok(content.includes(verbatim), `expected "${verbatim}" kept verbatim, got:\n${content}`);
+        }
+        // The only absolutized entry is the real source file.
+        assert.ok(content.includes(path.join(work, 'top.sv')));
+        assert.ok(!content.includes(path.join(work, 'MACRO')), 'macro name must not be turned into a path');
+    });
+
     test('recurses into nested -f command files (paths relative to the nested file)', async () => {
         // Layout:
         //   top.f         -> "-f sub/inner.f" + "rtl/top.sv"
