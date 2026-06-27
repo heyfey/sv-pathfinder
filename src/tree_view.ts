@@ -21,7 +21,10 @@ export function showModulesViewEnabled(): boolean {
 }
 
 // Must use require instead of import somehow
-let kuzu: any | undefined; // require("kuzu");
+// DEPRECATED: the kuzu graph-DB backend (.elab.kz designs) is being phased out. kuzu is no
+// longer a bundled dependency or shipped in the .vsix; the lazy require("kuzu") in KuzuDesignItem.load
+// resolves it only if present and otherwise fails gracefully. Related code is kept for now.
+let kuzu: any | undefined;
 
 // Scopes — icon set aligned with VaporView (one scope color for all scope kinds).
 const scopeColor = new vscode.ThemeColor('charts.purple');
@@ -540,7 +543,7 @@ class KuzuDesignItem extends DesignItem {
             try {
                 kuzu = require("kuzu");
             } catch (error) {
-                vscode.window.showErrorMessage('Failed to load Kuzu database addon: ' + error);
+                vscode.window.showErrorMessage('The Kuzu (.elab.kz) backend is deprecated and no longer bundled. ' + error);
                 return false;
             }
         }
@@ -1352,7 +1355,7 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
             canSelectFolders: true,
             canSelectMany: false,
             filters: {
-                'Designs': ['uhdm', 'f', 'elab.kz', 'simv.daidir'],
+                'Designs': ['uhdm', 'f', 'simv.daidir'],
             }
         };
 

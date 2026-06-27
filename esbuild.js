@@ -30,12 +30,15 @@ async function main() {
 		],
 		bundle: true,
 		format: 'cjs',
-		// minify: production, // have issue with kuzu
+		minify: production,
 		sourcemap: !production,
 		sourcesContent: false,
 		platform: 'node',
 		outfile: 'dist/extension.js',
-		external: ['vscode', '../build/Release/uhdm_addon.node', 'web-tree-sitter'], // add 'kuzu'?
+		// kuzu is DEPRECATED (the .elab.kz backend is being phased out). Keep it external
+		// rather than bundled: it's loaded lazily via require("kuzu") and is no longer shipped, so
+		// the require fails gracefully (handled in KuzuDesignItem.load). Bundling it also broke minify.
+		external: ['vscode', '../build/Release/uhdm_addon.node', 'web-tree-sitter', 'kuzu'],
 		logLevel: 'silent',
 		plugins: [
 			/* add to the end of plugins array */
