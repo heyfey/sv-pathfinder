@@ -69,7 +69,11 @@ async function rewrite(flistPath: string, cache: Map<string, string>, inProgress
     const raw = await fs.readFile(flistPath, 'utf8');
     const out: string[] = [];
     for (const rawLine of raw.split(/\r?\n/)) {
-        const noComment = rawLine.replace(/\/\/.*$/, '');      // strip // comments
+        // Strip // and #-style line comments (tool-generated filelists often use #). slang treats
+        // both as comments, so without this their words get absolutized into bogus source paths —
+        // and a `.py` generator path mentioned in such a comment becomes a real file slang then parses.
+        // Only strip # at a token boundary (start/after space) so a literal `foo#bar.sv` survives.
+        const noComment = rawLine.replace(/\/\/.*$/, '').replace(/(^|\s)#.*$/, '$1');
         const toks = noComment.trim().split(/\s+/).filter(Boolean);
         if (toks.length === 0) { out.push(rawLine); continue; }
 
