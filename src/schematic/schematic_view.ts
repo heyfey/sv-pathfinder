@@ -11,6 +11,7 @@ import { DesignItem, NetlistItem, HierarchyTreeProvider, replaceFilePathIfNeeded
 import { resolveScope, scopeCacheKey, ScopeContext } from './scope_resolver';
 import { runYosys, SchematicPreset, getResolvedBackendName, isResolvedBackendLimited } from './yosys_runner';
 import { convertToDigitalJs, extractSubtree, rootRelativeYosysPath, pickCoveringRoot } from './converter';
+import { svLog } from '../output';
 import { findParentModuleScope, ancestorFallbackReason } from './scope_nav';
 import { cleanCelltype } from './celltype';
 import { isNoYosysBackendError, limitedBackendWarning } from './backend_policy';
@@ -392,6 +393,9 @@ export class SchematicViewProvider {
                             this.render(this.current.design, parent, this.current.preset);
                         }
                     }
+                    break;
+                case 'schematicLog':
+                    svLog('schematic', (msg as { text?: string }).text || '');
                     break;
             }
         });

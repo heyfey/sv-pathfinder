@@ -318,10 +318,12 @@ cells.WireView.prototype._updateSignal = function () {
     node.style.display = t ? 'inline' : 'none';
     node.style.fill = _valuePalette[cat]; // value text matches the line colour
 };
+let _phase = null; // per-render timing + input sizes (see buildSchematic / finalizeTiming)
 const _origElkLayout = ELK.prototype.layout;
 ELK.prototype.layout = function (graph, opts) {
+    const isRoot = graph && graph.id === 'root' && graph.properties && Array.isArray(graph.edges);
     // only touch digitaljs's schematic graphs (the 'root' graph with the props it sets)
-    if (graph && graph.id === 'root' && graph.properties && Array.isArray(graph.edges)) {
+    if (isRoot) {
         Object.assign(graph.properties, {
             'elk.spacing.nodeNode': spacing.nodeNode,                       // siblings within a column (ELK default 20)
             'elk.layered.spacing.nodeNodeBetweenLayers': spacing.betweenLayers, // column gap (digitaljs default 40)
@@ -338,7 +340,19 @@ ELK.prototype.layout = function (graph, opts) {
             if (d) { e.labels = [{ id: e.id + ':netlabel', text: d.text, width: d.width, height: d.height }]; }
         }
     }
-    return _origElkLayout.call(this, graph, opts);
+    // Time the FIRST root layout of the current render (the ELK phase). Popups' later root layouts
+    // (elkStart already set) are ignored so they don't overwrite the main render's timing.
+    const mine = isRoot && _phase && _phase.elkStart === null;
+    if (mine) {
+        _phase.elkStart = performance.now();
+        _phase.elkNodes = (graph.children || []).length;
+        _phase.elkEdges = graph.edges.length;
+    }
+    const ret = _origElkLayout.call(this, graph, opts);
+    if (mine && ret && typeof ret.then === 'function') {
+        ret.then(() => { _phase.elk = performance.now() - _phase.elkStart; _phase.elkDoneAt = performance.now(); }, () => { });
+    }
+    return ret;
 };
 
 // Per-character advance used to size boxes/labels BEFORE layout. Boxes must be sized while
@@ -900,6 +914,10 @@ function showRenderOverlay() {
             + '<div class="sv-ro-text">Rendering schematic…</div>'
             + '<div class="sv-ro-sub"></div></div>';
     }
+    // Clear any size left from the PREVIOUS render — renderStart shows the overlay before this render's
+    // circuit (and its size) is known, so a stale number would otherwise flash until loadSchematic.
+    const sub = _renderOverlay.querySelector('.sv-ro-sub');
+    if (sub) { sub.textContent = ''; }
     if (!_renderOverlay.isConnected) { (document.getElementById('paper-container') || document.body).appendChild(_renderOverlay); }
     _renderOverlay.style.display = 'flex';
     clearTimeout(_overlayTimer);
@@ -915,6 +933,43 @@ function rawSize(circuit) {
     return { boxes, wires };
 }
 function rawText(s) { return `${s.wires} wires · ${s.boxes} boxes`; }
+// Whole-hierarchy size: `new Circuit` eagerly builds the top graph AND every subcircuit graph, so the
+// build's real input is this, not the top-only rawSize (the displayed top can be tiny while the
+// hierarchy underneath is huge — that's why a 77-device top can take minutes to build).
+function totalSize(circuit) {
+    let boxes = 0, wires = 0, subs = 0;
+    const add = (g) => { if (!g) { return; } boxes += g.devices ? Object.keys(g.devices).length : 0; wires += g.connectors ? g.connectors.length : 0; };
+    add(circuit);
+    const sc = circuit && circuit.subcircuits;
+    if (sc) { for (const k in sc) { subs++; add(sc[k]); } }
+    return { boxes, wires, subs };
+}
+// Per-render timing: log build / render(displayOn) / ELK layout / reposition + total, with each
+// stage's input size, to the extension's "sv-pathfinder" output channel. Fired once the layout has
+// settled (debounced off render:done + position changes), so it captures the async ELK + reposition.
+function scheduleTimingFinalize() {
+    if (!_phase || _phase.logged) { return; }
+    clearTimeout(_phase.finalizeTimer);
+    _phase.finalizeTimer = setTimeout(finalizeTiming, 450);
+}
+function finalizeTiming() {
+    const p = _phase;
+    if (!p || p.logged) { return; }
+    p.logged = true;
+    const r = Math.round;
+    const now = performance.now();
+    const elkDone = p.elkDoneAt !== null ? p.elkDoneAt : p.afterDisplayOn;
+    const reposition = Math.max(0, now - (elkDone !== null ? elkDone : p.t0));
+    const total = now - p.t0;
+    const elkPart = p.cached ? 'ELK skipped (cached layout)'
+        : p.elk !== null ? `ELK layout ${r(p.elk)}ms (${p.elkNodes} nodes/${p.elkEdges} edges)`
+            : 'ELK layout 0ms';
+    const line = `${p.scope} [${p.shallow ? 'shallow' : 'full'}]: `
+        + `build ${r(p.build)}ms (${p.total.boxes} dev/${p.total.wires} conn across ${p.total.subs} subcircuits) · `
+        + `render ${r(p.render)}ms (${p.raw.boxes} boxes/${p.raw.wires} wires) · ${elkPart} · `
+        + `reposition ${r(reposition)}ms (${p.raw.boxes} boxes) · total ${r(total)}ms`;
+    post({ type: 'schematicLog', text: line });
+}
 function setRenderOverlaySize(size) {
     const sub = _renderOverlay && _renderOverlay.querySelector('.sv-ro-sub');
     if (sub) { sub.textContent = rawText(size); }
@@ -1003,6 +1058,8 @@ function loadSchematic(msg) {
     }
 }
 function buildSchematic(msg) {
+    if (_phase) { clearTimeout(_phase.finalizeTimer); } // drop a previous render's pending timing log
+    _phase = { t0: performance.now(), raw: rawSize(msg.circuit), total: totalSize(msg.circuit), shallow: !!msg.shallow, scope: `${msg.scopePath} (${msg.moduleName})`, logged: false, elkStart: null, elk: null, elkDoneAt: null, afterDisplayOn: null };
     if (circuit) {
         try { circuit.shutdown(); } catch (e) { /* ignore */ } // closes any open popups
         circuit = null;
@@ -1057,6 +1114,7 @@ function buildSchematic(msg) {
         }
     }
     window.__layoutCacheHit = usedCachedLayout; // test/debug hook
+    _phase.cached = usedCachedLayout; // cached layout → ELK is skipped (reflected in the timing log)
     if (droppedConns > 0) {
         const be = currentBackend ? ` — backend: ${currentBackend}` : '';
         console.warn(`sv-pathfinder schematic: dropped ${droppedConns} malformed connector(s)${be}`);
@@ -1065,6 +1123,7 @@ function buildSchematic(msg) {
     // default windowCallback uses jquery-ui dialogs (fine inside the webview); wrap it to give
     // the popup a breadcrumb-style title (full hier path + module, set in openSubcircuit) and
     // to blur the auto-focused zoom button so it doesn't open with a focus ring.
+    const _tBuild = performance.now();
     circuit = new Circuit(msg.circuit, {
         layoutEngine: 'elkjs',
         windowCallback: function (type, div, closingCallback) {
@@ -1121,7 +1180,11 @@ function buildSchematic(msg) {
             p.model.on('change:position change:vertices', scheduleOverlayHide);
         }
     });
+    _phase.build = performance.now() - _tBuild;
+    const _tRender = performance.now();
     paper = circuit.displayOn(paperDiv());
+    _phase.render = performance.now() - _tRender;
+    _phase.afterDisplayOn = performance.now(); // reposition (render B) is timed from here / ELK-done
     labelIndex = circuit.getLabelIndex();
     cleanSubcircuitCaptions(labelIndex);
     // Reset every net to x up front. digitaljs seeds single-bit nets to 0 (defined low), so
@@ -1135,9 +1198,10 @@ function buildSchematic(msg) {
     // render passes, and the fit itself triggers another render: feedback loop).
     autoFit = true;
     paper.once('render:done', () => { if (autoFit) { fitToView(); } });
-    paper.on('render:done', scheduleOverlayHide);   // overlay only: hide once render passes go quiet
+    paper.on('render:done', () => { scheduleOverlayHide(); scheduleTimingFinalize(); }); // hide overlay + log timing once render passes go quiet
     labelIndex.graph.on('change:position change:vertices', () => {
         scheduleOverlayHide();                      // layout still moving (ELK) → keep the overlay up
+        scheduleTimingFinalize();                   // log per-phase timing once it settles
         scheduleLayoutCapture(_currentLayoutKey);   // snapshot the FINAL positions once ELK settles
         if (!autoFit) { return; }
         clearTimeout(fitTimer);
