@@ -4,7 +4,7 @@ import * as fsp from 'fs/promises';
 import * as os from 'os';
 import path from 'path';
 
-import { absolutizeFlist, searchDirFlags, blackboxFlags } from '../flist';
+import { absolutizeFlist, searchDirFlags, blackboxFlags, flistWithoutUvm, isUvmSource } from '../flist';
 
 suite('searchDirFlags', () => {
     test('read_slang form: each dir → -I and -y, plus .sv/.v libext', () => {
@@ -178,5 +178,61 @@ suite('absolutizeFlist', () => {
         // absolute and exist — otherwise slang-server resolves them against its
         // own CWD and the build fails.
         assertAllAbsoluteAndExist(out);
+    });
+});
+
+suite('flistWithoutUvm (UVM workaround)', () => {
+    let work: string;
+    setup(async () => { work = await fsp.mkdtemp(path.join(os.tmpdir(), 'flist-uvm-')); });
+    teardown(async () => { await fsp.rm(work, { recursive: true, force: true }); });
+
+    test('comments out UVM-importing source files and keeps the rest active', async () => {
+        const rtl = path.join(work, 'rtl.sv');
+        const vrf = path.join(work, 'env.sv');
+        await fsp.writeFile(rtl, 'module rtl; endmodule\n');
+        await fsp.writeFile(vrf, 'import uvm_pkg::*;\n`include "uvm_macros.svh"\nmodule env; endmodule\n');
+        const flist = path.join(work, 'files.f');
+        await fsp.writeFile(flist, `${rtl}\n${vrf}\n`);
+
+        const res = await flistWithoutUvm(flist, work);
+        assert.ok(res, 'a UVM file should be detected');
+        assert.deepStrictEqual(res.dropped, [vrf]);
+        assert.strictEqual(res.topDropped, false, 'no top module was asked for');
+        const lines = (await fsp.readFile(res.path, 'utf8')).split('\n');
+        assert.ok(lines.some(l => l.trim() === rtl), 'the RTL file stays an active entry');
+        // the UVM file is kept (not deleted) but every line mentioning it is commented out
+        assert.ok(lines.some(l => l.includes(vrf)), 'the dropped file is kept (commented)');
+        assert.ok(lines.filter(l => l.includes(vrf)).every(l => l.trim().startsWith('#')), 'the UVM file is commented out');
+    });
+
+    test('topDropped is true when the requested scope\'s own def is in a dropped UVM file', async () => {
+        const rtl = path.join(work, 'rtl.sv');
+        const env = path.join(work, 'env.sv');
+        await fsp.writeFile(rtl, 'module rtl; endmodule\n');
+        await fsp.writeFile(env, 'import uvm_pkg::*;\nmodule env; endmodule\n');
+        const flist = path.join(work, 'files.f');
+        await fsp.writeFile(flist, `${rtl}\n${env}\n`);
+
+        // asking to render `env` (which lives in the dropped UVM file) → topDropped
+        const dropEnv = await flistWithoutUvm(flist, work, 'env');
+        assert.ok(dropEnv && dropEnv.topDropped, 'env is itself UVM → topDropped');
+        // asking to render `rtl` (a clean module) → not topDropped, even though env is dropped
+        const dropRtl = await flistWithoutUvm(flist, work, 'rtl');
+        assert.ok(dropRtl && !dropRtl.topDropped, 'rtl is clean → not topDropped');
+    });
+
+    test('returns null when no listed file imports UVM (nothing to work around)', async () => {
+        const a = path.join(work, 'a.sv');
+        await fsp.writeFile(a, 'module a; endmodule\n');
+        const flist = path.join(work, 'f.f');
+        await fsp.writeFile(flist, `${a}\n`);
+        assert.strictEqual(await flistWithoutUvm(flist, work), null);
+    });
+
+    test('isUvmSource: detects uvm/ovm pkg import or macros include; ignores plain RTL', () => {
+        assert.ok(isUvmSource('import uvm_pkg::*;'));
+        assert.ok(isUvmSource('`include "uvm_macros.svh"'));
+        assert.ok(isUvmSource('  import ovm_pkg::*;'));
+        assert.ok(!isUvmSource('module foo; logic uvm_clk; endmodule')); // a signal named uvm_* is not UVM
     });
 });

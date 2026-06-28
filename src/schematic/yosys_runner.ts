@@ -9,9 +9,14 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { ScopeContext } from './scope_resolver';
-import { absolutizeFlist, searchDirFlags, blackboxFlags } from '../flist';
+import { absolutizeFlist, searchDirFlags, blackboxFlags, flistWithoutUvm } from '../flist';
 import { NoYosysBackendError, noBackendMessage } from './backend_policy';
 import { isUvmError } from './scope_nav';
+import { svLog } from '../output';
+
+// Schematic diagnostics (the actual Yosys command we run, and any workarounds applied) go to the
+// shared "sv-pathfinder" output channel, tagged [schematic].
+function logSchematic(line: string) { svLog('schematic', line); }
 
 export type SchematicPreset = 'rtl' | 'gls';
 
@@ -108,7 +113,7 @@ export function isResolvedBackendLimited(): boolean {
 }
 
 // Build the read + elaborate + lowering script (Spike 1 presets).
-function buildScript(backend: Backend, ctx: ScopeContext, preset: SchematicPreset, outJson: string, showDangling = false, extraIncludeDirs: string[] = [], shallow = false): string {
+function buildScript(backend: Backend, ctx: ScopeContext, preset: SchematicPreset, outJson: string, showDangling = false, extraIncludeDirs: string[] = [], shallow = false, ignoreUnknownModules = false): string {
     const files = ctx.dotF
         ? (backend.slang ? `-F ${quote(ctx.dotF)}` : ctx.fileSet.map(quote).join(' '))
         : ctx.fileSet.map(quote).join(' ');
@@ -133,7 +138,10 @@ function buildScript(backend: Backend, ctx: ScopeContext, preset: SchematicPrese
         const search = searchDirFlags(searchDirs, true); // -I + -y (libdir) so missing modules resolve
         // shallow ("selected + 1"): blackbox the direct children so only this scope's body elaborates.
         const bb = shallow ? blackboxFlags(ctx.childModules) : '';
-        read = `read_slang --keep-hierarchy --ignore-timing --ignore-initial --ignore-assertions -D SYNTHESIS ${search} ${bb} ${gFlags} --top ${ctx.moduleName} ${files}`;
+        // --ignore-unknown-modules: used by the UVM workaround retry so instantiations of the dropped
+        // (verification) modules import as blackboxes instead of erroring as unknown modules.
+        const iu = ignoreUnknownModules ? '--ignore-unknown-modules ' : '';
+        read = `read_slang --keep-hierarchy --ignore-timing --ignore-initial --ignore-assertions ${iu}-D SYNTHESIS ${search} ${bb} ${gFlags} --top ${ctx.moduleName} ${files}`;
     } else {
         const search = searchDirFlags(searchDirs, false); // read_verilog: include dirs only
         read = `read_verilog -sv -DSYNTHESIS ${search} ${files}`;
@@ -170,6 +178,52 @@ function macQuarantineHint(yosysCmd: string): string {
         + `  xattr -dr com.apple.quarantine "${dir}"`;
 }
 
+// A non-zero Yosys exit, carrying the raw output so callers can classify it (UVM / incomplete / …).
+class YosysRunError extends Error {
+    constructor(public readonly out: string, public readonly code: number, backendName: string) {
+        super(`Yosys (${backendName}) failed with code ${code}:\n` + out.slice(-4000));
+        this.name = 'YosysRunError';
+    }
+}
+
+// Spawn `yosys -p <script>`; resolve its combined output, or reject (YosysRunError on non-zero exit,
+// plain hinted Error on spawn failure / timeout). Logs the exact command for transparency.
+function spawnYosys(backend: Backend, script: string, workDir: string): Promise<string> {
+    logSchematic(`$ ${backend.command} -p '${script}'`);
+    return new Promise<string>((resolve, reject) => {
+        const proc = cp.spawn(backend.command, ['-p', script], { cwd: workDir });
+        let out = '';
+        proc.stdout.on('data', d => out += d.toString());
+        proc.stderr.on('data', d => out += d.toString());
+        const timer = setTimeout(() => {
+            proc.kill();
+            reject(new Error('Yosys timed out after 120s.' + macQuarantineHint(backend.command) + '\n' + out.slice(-4000)));
+        }, 120000);
+        proc.on('error', err => { clearTimeout(timer); reject(new Error(`Failed to run Yosys (${backend.command}): ${err.message}` + macQuarantineHint(backend.command))); });
+        proc.on('close', code => { clearTimeout(timer); if (code === 0) { resolve(out); } else { reject(new YosysRunError(out, code ?? -1, backend.name)); } });
+    });
+}
+
+// Actionable hint appended to a failure message, by error class.
+function hintFor(out: string, backend: Backend): string {
+    if (isUvmError(out)) {
+        // We retry with UVM files dropped (see runYosys); reaching here means that didn't resolve it.
+        return '\n\nHint: this scope reaches UVM (uvm_pkg / uvm_macros.svh), which is testbench-only and ' +
+            'not synthesizable. sv-pathfinder already retried with UVM-importing files dropped (their ' +
+            'modules blackboxed); if it still fails, the UVM reference is in code that can\'t be dropped ' +
+            'automatically (e.g. an RTL file that itself imports UVM). See the "sv-pathfinder" output.';
+    }
+    if (/No such file or directory|unknown module/.test(out)) {
+        return '\n\nHint: the filelist looks incomplete. If a header (e.g. *.svh) or a module ' +
+            "isn't found, add its directory to \"sv-pathfinder.schematicIncludeDirs\".";
+    }
+    if (/unconnected interface port|interface port on blackbox/.test(out)) {
+        return '\n\nHint: this scope has a SystemVerilog interface port, so it can\'t be elaborated on its ' +
+            'own. Open a parent scope that connects the interface (full mode) and navigate down to this one.';
+    }
+    return macQuarantineHint(backend.command);
+}
+
 export async function runYosys(ctx: ScopeContext, preset: SchematicPreset, opts?: { showDangling?: boolean; shallow?: boolean }): Promise<YosysResult> {
     const backend = await findBackend();
     if (!backend) {
@@ -200,48 +254,45 @@ export async function runYosys(ctx: ScopeContext, preset: SchematicPreset, opts?
 
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sv-pathfinder-schematic-'));
     const outJson = path.join(tmpDir, 'schematic.json');
-    const script = buildScript(backend, effectiveCtx, preset, outJson, opts?.showDangling, extraIncludeDirs, opts?.shallow);
 
-    const log = await new Promise<string>((resolve, reject) => {
-        const proc = cp.spawn(backend.command, ['-p', script], { cwd: ctx.workDir });
-        let out = '';
-        proc.stdout.on('data', d => out += d.toString());
-        proc.stderr.on('data', d => out += d.toString());
-        const timer = setTimeout(() => {
-            proc.kill();
-            reject(new Error('Yosys timed out after 120s.' + macQuarantineHint(backend.command) + '\n' + out.slice(-4000)));
-        }, 120000);
-        proc.on('error', err => { clearTimeout(timer); reject(new Error(`Failed to run Yosys (${backend.command}): ${err.message}` + macQuarantineHint(backend.command))); });
-        proc.on('close', code => {
-            clearTimeout(timer);
-            if (code === 0) { resolve(out); }
-            else {
-                // A missing include or unresolved module usually means the filelist is incomplete —
-                // point at the include-dirs setting (we already add the source dirs as -I/-y).
-                const incomplete = /No such file or directory|unknown module/.test(out);
-                // A module with a SystemVerilog interface PORT can't be elaborated as a standalone top
-                // (its interface has nothing to connect to) — open a parent scope (in full mode) where
-                // the interface is wired up, and navigate down to it.
-                const ifacePort = /unconnected interface port|interface port on blackbox/.test(out);
-                // UVM is testbench-only and non-synthesizable — checked first so a missing
-                // uvm_macros.svh doesn't fall into the "incomplete filelist" branch (wrong advice).
-                const hint = isUvmError(out)
-                    ? '\n\nHint: this scope pulls in UVM (uvm_pkg / uvm_macros.svh) — a testbench-only ' +
-                      'verification library with no synthesizable RTL. Open the DUT scope instead of the ' +
-                      'testbench top; the schematic roots elaboration at the scope you open, so UVM is ' +
-                      'never referenced.'
-                    : incomplete
-                    ? '\n\nHint: the filelist looks incomplete. If a header (e.g. *.svh) or a module ' +
-                      "isn't found, add its directory to \"sv-pathfinder.schematicIncludeDirs\"."
-                    : ifacePort
-                        ? '\n\nHint: this scope has a SystemVerilog interface port, so it can\'t be ' +
-                          'elaborated on its own. Open a parent scope that connects the interface (full ' +
-                          'mode) and navigate down to this one.'
-                        : macQuarantineHint(backend.command);
-                reject(new Error(`Yosys (${backend.name}) failed with code ${code}:\n` + out.slice(-4000) + hint));
+    const runOnce = (c: ScopeContext, ignoreUnknown: boolean) =>
+        spawnYosys(backend, buildScript(backend, c, preset, outJson, opts?.showDangling, extraIncludeDirs, opts?.shallow, ignoreUnknown), ctx.workDir);
+
+    let log: string;
+    try {
+        log = await runOnce(effectiveCtx, false);
+    } catch (e) {
+        // UVM WORKAROUND: UVM is testbench-only and breaks read_slang (it compiles every file in the
+        // filelist). If the failure is a UVM error and we can identify the offending files, retry with
+        // them commented out + --ignore-unknown-modules so their modules render as blackboxes. This is a
+        // workaround, not a real elaboration — log it and tell the user what we dropped.
+        const out = e instanceof YosysRunError ? e.out : '';
+        let recovered: string | undefined;
+        if (backend.slang && effectiveCtx.dotF && out && isUvmError(out)) {
+            const filtered = await flistWithoutUvm(effectiveCtx.dotF, tmpDir, ctx.moduleName).catch(() => null);
+            if (filtered) {
+                logSchematic(`UVM workaround — read_slang failed on UVM; retrying with ${filtered.dropped.length} verification file(s) dropped (blackboxed). Filtered filelist: ${filtered.path}`);
+                for (const f of filtered.dropped) { logSchematic(`  dropped: ${f}`); }
+                // Popup ONLY when the OPENED scope's own definition was dropped — then the schematic
+                // comes back empty/blackboxed and the user needs to know why. Dropping a DEEPER
+                // verification module renders fine, so a popup every time would just be noise (logged).
+                if (filtered.topDropped) {
+                    vscode.window.showWarningMessage(
+                        `Schematic: "${ctx.moduleName}" can't be rendered — its source imports UVM (testbench-only, ` +
+                        'not synthesizable), so it appears as an empty blackbox. See the "sv-pathfinder" output for details.');
+                }
+                try {
+                    recovered = await runOnce({ ...effectiveCtx, dotF: filtered.path }, true);
+                } catch (e2) {
+                    throw e2 instanceof YosysRunError ? new Error(e2.message + hintFor(e2.out, backend)) : e2;
+                }
             }
-        });
-    });
+        }
+        if (recovered === undefined) {
+            throw e instanceof YosysRunError ? new Error(e.message + hintFor(out, backend)) : e;
+        }
+        log = recovered;
+    }
 
     try {
         const yosysJson = JSON.parse(await fs.readFile(outJson, 'utf8'));

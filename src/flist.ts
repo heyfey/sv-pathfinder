@@ -53,6 +53,74 @@ export function blackboxFlags(childModules: string[]): string {
     return uniq.map((m) => `--blackboxed-module ${quoteArg(m)}`).join(' ');
 }
 
+// A source file is verification-only (non-synthesizable) if it imports the UVM/OVM package or includes
+// the UVM/OVM macros. read_slang compiles every file in the filelist, so even one such file (anywhere,
+// instantiated or not) fails the whole elaboration — which is why a generated .f that bundles
+// verification sources can't be rendered as-is.
+const UVM_SOURCE = /^[ \t]*(import[ \t]+(uvm|ovm)_pkg\b|`include[ \t]+"(uvm|ovm)_macros\.svh")/m;
+export function isUvmSource(content: string): boolean {
+    return UVM_SOURCE.test(content);
+}
+
+// The single source-file path on a .f line, if any: a bare path, or the arg of -v/-l/--libfile. Returns
+// null for option / +incdir+ / +define+ / nested -f lines (no single source to test) and comments.
+function sourceFileInLine(line: string): string | null {
+    const toks = line.replace(/\/\/.*$/, '').replace(/(^|\s)#.*$/, '$1').trim().split(/\s+/).filter(Boolean);
+    if (toks.length === 0) { return null; }
+    if ((toks[0] === '-v' || toks[0] === '-l' || toks[0] === '--libfile') && toks[1]) { return toks[1]; }
+    if (toks[0].startsWith('+') || toks[0].startsWith('-')) { return null; }
+    return toks[0];
+}
+
+// A file defines `module/interface/program <name>` (used to tell whether a dropped file is the very
+// scope we were asked to render).
+function definesModule(content: string, name: string): boolean {
+    return new RegExp(`\\b(module|interface|program)\\s+${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(content);
+}
+
+// WORKAROUND for verification-laden filelists: write a copy of an (absolutized) .f with every
+// UVM/OVM-importing SOURCE file COMMENTED OUT (slang treats '#' as a comment) under an explanatory
+// header — the dropped lines are kept (commented), not deleted, and the original .f is untouched.
+// Returns the new path, the dropped files, and `topDropped` (true if `topModule`'s own definition was
+// in a dropped file — i.e. the scope we're rendering is itself UVM, so it'll come back empty), or null
+// if nothing was found. Callers must pass --ignore-unknown-modules so the dropped modules' instances
+// render as blackboxes, not errors.
+export async function flistWithoutUvm(flistPath: string, outDir: string, topModule?: string): Promise<{ path: string; dropped: string[]; topDropped: boolean } | null> {
+    const raw = await fs.readFile(flistPath, 'utf8');
+    const contents = new Map<string, string | null>(); // file -> content (null if unreadable), read once
+    const dropped: string[] = [];
+    let topDropped = false;
+    const lines: string[] = [];
+    for (const line of raw.split(/\r?\n/)) {
+        const file = sourceFileInLine(line);
+        if (file) {
+            if (!contents.has(file)) {
+                try { contents.set(file, await fs.readFile(file, 'utf8')); }
+                catch { contents.set(file, null); } // unreadable → leave it for read_slang to report
+            }
+            const content = contents.get(file);
+            if (content && isUvmSource(content)) {
+                dropped.push(file);
+                if (topModule && definesModule(content, topModule)) { topDropped = true; }
+                lines.push(`# [sv-pathfinder] dropped — imports UVM/OVM, not synthesizable; rendered as a blackbox:`);
+                lines.push(`# ${line.trim()}`);
+                continue;
+            }
+        }
+        lines.push(line);
+    }
+    if (dropped.length === 0) { return null; }
+    const header =
+        '# [sv-pathfinder] SCHEMATIC WORKAROUND — your original filelist is NOT modified.\n' +
+        '# The lines marked "dropped" below import UVM/OVM, which is testbench-only and not\n' +
+        '# synthesizable, so the schematic backend (read_slang) cannot compile them. They are\n' +
+        '# commented out for the schematic only; their modules are imported as blackboxes via\n' +
+        '# --ignore-unknown-modules.\n#\n';
+    const outPath = path.join(outDir, `sv-pathfinder-nouvm-${randomUUID()}.f`);
+    await fs.writeFile(outPath, header + lines.join('\n'));
+    return { path: outPath, dropped, topDropped };
+}
+
 // `cache` maps an original (resolved) .f path to its rewritten temp copy so a
 // file included from multiple parents is only rewritten once. `inProgress`
 // breaks include cycles: a file that includes itself (transitively) falls back

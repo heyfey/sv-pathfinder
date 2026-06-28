@@ -7,6 +7,7 @@ import * as slang from './slang_server/SlangInterface'
 import { absolutizeFlist } from './flist';
 import { isNoOpNavigation, findColumnForPath } from './nav_history';
 import { resolveRenamedBool, resolveRenamedString } from './settings_util';
+import { svOutputChannel, svLog } from './output';
 import { InstanceSearchResult, InstanceSearchHits, InstanceQuickPickItem, toInstanceQuickPickItems, filterAndCapInstances } from './design_search';
 
 // Whether the "Modules" view is enabled. The setting was renamed showInstancesView → showModulesView;
@@ -1168,8 +1169,6 @@ class FDesignItem extends DesignItem {
     private delegateDesign!: DesignItem;
     private generatedUhdmUri?: vscode.Uri; // For generated UHDM file from Surelog
 
-    private static surelogOutputChannel: vscode.OutputChannel | undefined;
-
     public async load(): Promise<boolean> {
         const config = vscode.workspace.getConfiguration('sv-pathfinder');
         const compiler = config.get<string>('compiler');
@@ -1210,10 +1209,9 @@ class FDesignItem extends DesignItem {
         const uuid = crypto.randomUUID();
         const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), `sv-pathfinder-${uuid}-`));
 
-        // Create an output channel for Surelog logs
-        if (!FDesignItem.surelogOutputChannel) {
-            FDesignItem.surelogOutputChannel = vscode.window.createOutputChannel('Surelog Output');
-        }
+        // Surelog logs go to the shared "sv-pathfinder" output channel, tagged [surelog].
+        const surelogOut = svOutputChannel();
+        svLog('surelog', `running: ${surelogPath} -f ${this.resourceUri.fsPath} -odir ${tempDir} -parse -sverilog -d uhdm -elabuhdm`);
 
         // Prepare Surelog arguments
         const args = [
@@ -1234,13 +1232,13 @@ class FDesignItem extends DesignItem {
                     shell: true // For PATH resolution if needed
                 });
 
-                proc.stdout.on('data', (data) => FDesignItem.surelogOutputChannel!.append(data.toString()));
-                proc.stderr.on('data', (data) => FDesignItem.surelogOutputChannel!.append(data.toString()));
+                proc.stdout.on('data', (data) => surelogOut.append(data.toString()));
+                proc.stderr.on('data', (data) => surelogOut.append(data.toString()));
 
                 proc.on('error', reject);
                 proc.on('close', (code) => {
                     if (code === 0) { resolve(); }
-                    else { reject(new Error(`Surelog exited with code ${code}. Check "Surelog Output" channel for details.`)); }
+                    else { reject(new Error(`Surelog exited with code ${code}. Check the "sv-pathfinder" output channel for details.`)); }
                 });
             });
 
@@ -1254,7 +1252,7 @@ class FDesignItem extends DesignItem {
 
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to generate UHDM: ${error instanceof Error ? error.message : String(error)}`);
-            FDesignItem.surelogOutputChannel.show(true);
+            surelogOut.show(true);
             // Optional: Clean up tempDir on failure
             try {
                 await fs.rm(tempDir, { recursive: true, force: true });
