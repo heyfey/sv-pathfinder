@@ -11,6 +11,7 @@ import * as path from 'path';
 import { ScopeContext } from './scope_resolver';
 import { absolutizeFlist, searchDirFlags, blackboxFlags } from '../flist';
 import { NoYosysBackendError, noBackendMessage } from './backend_policy';
+import { isUvmError } from './scope_nav';
 
 export type SchematicPreset = 'rtl' | 'gls';
 
@@ -222,7 +223,14 @@ export async function runYosys(ctx: ScopeContext, preset: SchematicPreset, opts?
                 // (its interface has nothing to connect to) — open a parent scope (in full mode) where
                 // the interface is wired up, and navigate down to it.
                 const ifacePort = /unconnected interface port|interface port on blackbox/.test(out);
-                const hint = incomplete
+                // UVM is testbench-only and non-synthesizable — checked first so a missing
+                // uvm_macros.svh doesn't fall into the "incomplete filelist" branch (wrong advice).
+                const hint = isUvmError(out)
+                    ? '\n\nHint: this scope pulls in UVM (uvm_pkg / uvm_macros.svh) — a testbench-only ' +
+                      'verification library with no synthesizable RTL. Open the DUT scope instead of the ' +
+                      'testbench top; the schematic roots elaboration at the scope you open, so UVM is ' +
+                      'never referenced.'
+                    : incomplete
                     ? '\n\nHint: the filelist looks incomplete. If a header (e.g. *.svh) or a module ' +
                       "isn't found, add its directory to \"sv-pathfinder.schematicIncludeDirs\"."
                     : ifacePort

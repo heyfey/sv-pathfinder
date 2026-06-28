@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 
-import { findParentModuleScope, ancestorFallbackReason, isInterfaceTopError, isParamResolutionError, ScopeNode } from '../schematic/scope_nav';
+import { findParentModuleScope, ancestorFallbackReason, isInterfaceTopError, isParamResolutionError, isUvmError, ScopeNode } from '../schematic/scope_nav';
 
 // Build a leaf→root chain of {type} nodes (all contextValue 'scopeItem') and return the leaf, with
 // .parent links set. e.g. node('module','scope','scopearray','module') is leaf(module) inside a
@@ -69,6 +69,17 @@ suite('isParamResolutionError', () => {
     });
     test('does not match a generic compile error', () => {
         assert.ok(!isParamResolutionError(new Error('syntax error: unexpected token')));
+    });
+});
+
+suite('isUvmError', () => {
+    test('matches a missing uvm_pkg package or uvm_macros.svh include', () => {
+        assert.ok(isUvmError(new Error("tb.sv:12:8: error: unknown package 'uvm_pkg'")));
+        assert.ok(isUvmError("tb.sv:1:10: error: cannot open include file 'uvm_macros.svh'"));
+    });
+    test('does not match unrelated errors (incl. a signal merely named uvm_something)', () => {
+        assert.ok(!isUvmError(new Error("unknown module 'fifo'")));
+        assert.ok(!isUvmError(new Error('uvm_clk is undeclared'))); // \buvm_pkg\b / uvm_macros.svh only
     });
 });
 

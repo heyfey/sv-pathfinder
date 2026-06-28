@@ -36,6 +36,13 @@ export function isParamResolutionError(e: any): boolean {
         .test(String(e?.message ?? e));
 }
 
+// A scope that imports UVM can't be drawn — UVM is a testbench-only, non-synthesizable verification
+// library, so it only appears above the DUT. Its package/macros names are distinctive enough to detect
+// from the slang error ("unknown package 'uvm_pkg'", "cannot open include file 'uvm_macros.svh'").
+export function isUvmError(e: any): boolean {
+    return /\buvm_pkg\b|uvm_macros\.svh/i.test(String(e?.message ?? e));
+}
+
 // Why (if at all) a FAILED standalone elaboration should be retried from a top-able ancestor that
 // supplies the missing context (then extract this scope's subtree). Two scopes can't stand alone:
 //  - 'interface' — an interface port (see above); fires regardless of parent (the ancestor walk
