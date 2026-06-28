@@ -1519,7 +1519,9 @@ function makeFinder({ getPaper, getGraph, container, onGoto }) {
         if (view) {
             hi = view.el; hi.classList.add('sv-find-current');
             if (onGoto) { onGoto(); }
-            if (p.scale().sx < 0.5) { p.scale(0.75); }   // make the match readable if zoomed way out
+            // Don't change zoom on reveal — just pan to center the match. Re-evaluating zoom per match
+            // would ratchet it in as you hit Enter through results; the soft/current highlights keep
+            // the match visible at any zoom, and the user stays in control of zoom level.
             centerOnView(p, view);
         }
         updateCount();
@@ -1667,7 +1669,7 @@ function fitPaper(p, w, h) {
     p.setDimensions(w, h);
     try {
         p.transformToFitContent({
-            padding: 24, minScale: 0.02, maxScale: 1, useModelGeometry: true,
+            padding: 24, minScale: 0.001, maxScale: 1, useModelGeometry: true,
             verticalAlign: 'middle', horizontalAlign: 'middle',
         });
     } catch (e) {
@@ -1894,7 +1896,7 @@ function attachMinimap(p, host) {
 function zoomAround(p, factor, clientX, clientY) {
     autoFit = false;
     const s0 = p.scale().sx;
-    const s1 = Math.min(Math.max(s0 * factor, 0.02), 10);
+    const s1 = Math.min(Math.max(s0 * factor, 0.001), 10);
     if (s1 === s0) { return; }
     const rect = p.el.getBoundingClientRect();
     const px = clientX - rect.left;
@@ -1917,7 +1919,13 @@ function attachNav(p) {
     p.el.addEventListener('wheel', (e) => {
         e.preventDefault();
         if (e.ctrlKey) {
-            zoomAround(p, e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX, e.clientY);
+            // Zoom multiplicatively by the scroll amount (exp). Trackpads fire many small-deltaY pinch
+            // events while mice fire a few large notches, so use a larger per-unit zoom for small
+            // (trackpad) deltas — responsive pinch — and a calibrated one for big (mouse) notches
+            // (~1.12/notch). Clamp each event to [0.5, 2] so nothing jumps wildly.
+            const perUnit = Math.abs(e.deltaY) < 40 ? 0.008 : 0.0011;
+            const factor = Math.min(Math.max(Math.exp(-e.deltaY * perUnit), 0.5), 2);
+            zoomAround(p, factor, e.clientX, e.clientY);
         } else {
             autoFit = false;
             let dx = e.deltaX, dy = e.deltaY;
