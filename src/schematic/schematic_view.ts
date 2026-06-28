@@ -10,7 +10,7 @@ import * as os from 'os';
 import { DesignItem, NetlistItem, HierarchyTreeProvider, replaceFilePathIfNeeded, showTextDocumentLocation } from '../tree_view';
 import { resolveScope, scopeCacheKey, ScopeContext } from './scope_resolver';
 import { runYosys, SchematicPreset, getResolvedBackendName, isResolvedBackendLimited } from './yosys_runner';
-import { convertToDigitalJs, extractSubtree, rootRelativeYosysPath, pickCoveringRoot } from './converter';
+import { convertToDigitalJs, extractSubtree, rootRelativeYosysPath, pickCoveringRoot, pruneToShallowLevel } from './converter';
 import { svLog } from '../output';
 import { findParentModuleScope, ancestorFallbackReason } from './scope_nav';
 import { cleanCelltype } from './celltype';
@@ -106,6 +106,13 @@ export class SchematicViewProvider {
                 if (!reason) { throw e; }
                 digitalJsJson = await this.renderViaTopableAncestor(design, instance, ctx, preset, showDangling, e, reason);
             }
+
+            // Shallow shows only this scope + 1 level. If elaboration fell back to the full subtree
+            // (interface-port children that can't be blackboxed), the circuit carries the whole
+            // hierarchy — new Circuit would build every subcircuit model (cva6: ~175s) though only the
+            // top is drawn and shallow step-in re-elaborates each child anyway. Prune to the displayed
+            // level. No-op for an already-shallow render.
+            if (shallow && digitalJsJson) { digitalJsJson = pruneToShallowLevel(digitalJsJson); }
 
             this.createOrRevealPanel();
             this.panel!.title = `Schematic: ${ctx.instancePath}`;

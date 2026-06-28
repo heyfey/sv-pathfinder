@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import path from 'path';
 
-import { convertToDigitalJs, findDanglingNets, extractSubtree, findSubcircuitKey, rootRelativeYosysPath, pickCoveringRoot } from '../schematic/converter';
+import { convertToDigitalJs, findDanglingNets, extractSubtree, findSubcircuitKey, rootRelativeYosysPath, pickCoveringRoot, pruneToShallowLevel } from '../schematic/converter';
 
 // Fixtures live in src/ (not copied to out/ by tsc), so resolve from the repo root.
 const FIXTURES = path.resolve(__dirname, '../../src/test/fixtures');
@@ -229,6 +229,27 @@ suite('extractSubtree', () => {
     });
     test('a missing scope returns undefined (caller falls back to per-scope elaboration)', () => {
         assert.strictEqual(extractSubtree(fullCircuit(), 'Z', 'top.zzz', 'top'), undefined);
+    });
+});
+
+suite('pruneToShallowLevel', () => {
+    test('keeps the top + direct children emptied to IO ports; drops internals and deeper subcircuits', () => {
+        const c = {
+            devices: { u0: { type: 'Subcircuit', celltype: 'M', label: 'u0' } },
+            connectors: [],
+            subcircuits: {
+                M: { devices: { in0: { type: 'Input', net: 'a', bits: 1 }, out0: { type: 'Output', net: 'b', bits: 1 }, g0: { type: 'And' }, sub: { type: 'Subcircuit', celltype: 'N' } }, connectors: [] },
+                N: { devices: { g: { type: 'Or' } }, connectors: [] }, // deeper — not displayed
+            },
+        };
+        const p = pruneToShallowLevel(c);
+        assert.deepStrictEqual(Object.keys(p.devices), ['u0']);                 // top unchanged
+        assert.deepStrictEqual(Object.keys(p.subcircuits), ['M']);             // N dropped
+        assert.deepStrictEqual(Object.keys(p.subcircuits.M.devices).sort(), ['in0', 'out0']); // only IO kept (g0/sub dropped)
+    });
+    test('no-op when there are no subcircuits (already shallow / flat)', () => {
+        const c = { devices: { g: { type: 'And' } }, connectors: [] };
+        assert.strictEqual(pruneToShallowLevel(c), c);
     });
 });
 

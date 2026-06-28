@@ -393,3 +393,27 @@ export function extractSubtree(fullCircuit: any, moduleName: string, instancePat
     }
     return { ...root, subcircuits: kept };
 }
+
+// Shallow display shows the scope + its direct children as port-only boxes. When full elaboration was
+// forced (interface-port children can't be blackboxed → the shallow attempt threw → ancestor fallback),
+// the extracted circuit carries the WHOLE subtree, so `new Circuit` eagerly builds every subcircuit
+// model (cva6: ~175s) even though only the top is drawn — and shallow step-in re-elaborates each child
+// via expandRequest anyway, so those models are never even used. Prune to the displayed level: keep the
+// root graph + each directly-instantiated child's subcircuit EMPTIED to its IO ports (enough to draw the
+// box), dropping all deeper subcircuits. Visually identical to a blackboxed shallow render; step-in is
+// unchanged. No-op for an already-shallow circuit (children have no subcircuit internals to drop).
+export function pruneToShallowLevel(circuit: any): any {
+    if (!circuit || !circuit.subcircuits) { return circuit; }
+    const subs = circuit.subcircuits;
+    const kept: Record<string, any> = {};
+    for (const dev of Object.values<any>(circuit.devices ?? {})) {
+        const ct: string | undefined = dev.type === 'Subcircuit' ? dev.celltype : undefined;
+        if (!ct || kept[ct] || !subs[ct]) { continue; }
+        const io: Record<string, any> = {};
+        for (const [id, d] of Object.entries<any>(subs[ct].devices ?? {})) {
+            if (d.type === 'Input' || d.type === 'Output') { io[id] = d; }
+        }
+        kept[ct] = { devices: io, connectors: [] };
+    }
+    return { ...circuit, subcircuits: kept };
+}
