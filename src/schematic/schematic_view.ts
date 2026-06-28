@@ -114,6 +114,25 @@ export class SchematicViewProvider {
             // level. No-op for an already-shallow render.
             if (shallow && digitalJsJson) { digitalJsJson = pruneToShallowLevel(digitalJsJson); }
 
+            // Size guard: rendering thousands of cells freezes the webview for minutes (JointJS cell-view
+            // creation/placement doesn't scale — e.g. CVA6's csr_regfile ~6900 cells took ~7 min). Warn
+            // first so the user can back out instead of hanging. Counts the displayed top (what the
+            // webview builds), not subcircuits. Thresholds are deliberately generous — normal RTL scopes
+            // are in the hundreds.
+            const LARGE_DEVICES = 1500, LARGE_NETS = 4000;
+            const devCount = Object.keys((digitalJsJson && digitalJsJson.devices) || {}).length;
+            const netCount = ((digitalJsJson && digitalJsJson.connectors) || []).length;
+            if (devCount > LARGE_DEVICES || netCount > LARGE_NETS) {
+                const proceed = await vscode.window.showWarningMessage(
+                    `This scope is large — ${devCount} cells and ${netCount} wires. Rendering it can take minutes and may freeze the schematic view. Render anyway?`,
+                    { modal: true, detail: 'Tip: open a smaller child scope instead, or use shallow elaboration mode.' },
+                    'Render anyway');
+                if (proceed !== 'Render anyway') {
+                    this.postMessage({ type: 'renderAbort' }); // user opted out → drop the "rendering" overlay
+                    return;
+                }
+            }
+
             this.createOrRevealPanel();
             this.panel!.title = `Schematic: ${ctx.instancePath}`;
             const overview = 'scrollbars'; // minimap option removed — the main schematic always uses scrollbars
