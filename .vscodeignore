@@ -14,3 +14,22 @@ vsc-extension-quickstart.md
 node_modules/**
 !node_modules/web-tree-sitter/
 readme_assets/**
+
+# Planning notes, drafts, agent/CI/dev-only files — not part of the shipped extension.
+docs/**
+.claude/**
+.githooks/**
+.github/**
+scripts/**
+test/**
+binding.gyp
+*.draft.md
+
+# Native addon: keep build/Release/uhdm_addon.node, drop the node-gyp intermediates
+# (a 6.3 MB duplicate under obj.target/, the .o, the Makefiles, and the .deps).
+build/*.mk
+build/Makefile
+build/binding.Makefile
+build/config.gypi
+build/Release/obj.target/**
+build/Release/.deps/**
