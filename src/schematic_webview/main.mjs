@@ -340,17 +340,20 @@ ELK.prototype.layout = function (graph, opts) {
             if (d) { e.labels = [{ id: e.id + ':netlabel', text: d.text, width: d.width, height: d.height }]; }
         }
     }
-    // Time the FIRST root layout of the current render (the ELK phase). Popups' later root layouts
-    // (elkStart already set) are ignored so they don't overwrite the main render's timing.
-    const mine = isRoot && _phase && _phase.elkStart === null;
+    // Time the FIRST ELK layout of the current render (the ELK phase) — NOT gated on `isRoot`: a flat
+    // module's main layout may not match the 'root'/props shape, and we don't want its time silently
+    // lumped into "reposition" (the csr_regfile "ELK 0ms" bug). Later layouts (popups; elkStart already
+    // set) are ignored. Capture on resolve AND reject so the time is recorded even if ELK errors out.
+    const mine = _phase && _phase.elkStart === null;
     if (mine) {
         _phase.elkStart = performance.now();
-        _phase.elkNodes = (graph.children || []).length;
-        _phase.elkEdges = graph.edges.length;
+        _phase.elkNodes = graph && graph.children ? graph.children.length : 0;
+        _phase.elkEdges = graph && Array.isArray(graph.edges) ? graph.edges.length : 0;
     }
     const ret = _origElkLayout.call(this, graph, opts);
     if (mine && ret && typeof ret.then === 'function') {
-        ret.then(() => { _phase.elk = performance.now() - _phase.elkStart; _phase.elkDoneAt = performance.now(); }, () => { });
+        const done = () => { _phase.elk = performance.now() - _phase.elkStart; _phase.elkDoneAt = performance.now(); };
+        ret.then(done, done);
     }
     return ret;
 };
