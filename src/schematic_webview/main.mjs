@@ -760,6 +760,26 @@ function clearValues() {
 // Net names that currently show on-wire value text (≈ last batch's _valueText keys) — the working set
 // for refreshValueText below.
 const _annotatedNets = new Set(); // reused (cleared+refilled) each refresh — no per-batch allocation
+// Per-render index: net name -> the value-bearing views for that net — its wire link(s) plus the
+// element endpoints that show the value (IO boxes, Subcircuit ports). Only NAMED nets carry waveform
+// values, so this lets refreshValueText touch just the annotated nets each marker move instead of
+// walking the whole graph (elements + links). Built once per render; rebuilt by buildNetIndex.
+let _netIndex = new Map();
+function buildNetIndex() {
+    _netIndex = new Map();
+    if (!labelIndex) { return; }
+    for (const l of labelIndex.graph.getLinks()) {
+        const n = l.get('netname');
+        if (!n) { continue; }
+        let e = _netIndex.get(n);
+        if (!e) { e = { links: [], els: new Set() }; _netIndex.set(n, e); }
+        e.links.push(l);
+        const s = l.getSourceElement && l.getSourceElement();
+        const t = l.getTargetElement && l.getTargetElement();
+        if (s) { e.els.add(s); }
+        if (t) { e.els.add(t); }
+    }
+}
 // Re-apply value text from _valueText. The reactive _updateSignal path only runs when a signal
 // actually CHANGES, so a net whose annotated value equals its current signal (e.g. an x value while
 // the load default is also x) would keep stale/blank text. Called once per setValues/clearValues
@@ -774,21 +794,23 @@ const _annotatedNets = new Set(); // reused (cleared+refilled) each refresh — 
 // sweep — far fewer than links, and most are skipped by the method checks.
 function refreshValueText() {
     if (!paper || !labelIndex) { return; }
-    for (const el of labelIndex.graph.getElements()) {
-        const v = paper.findViewByModel(el);
-        if (!v) { continue; }
-        if (typeof v._updateIoValue === 'function') { v._updateIoValue(); }
-        else if (el.get('type') === 'Subcircuit' && typeof v._updatePortSignals === 'function') { v._updatePortSignals(); }
-    }
-    // A link needs the forced refresh only if its net has value text now (_valueText) or had it last
-    // batch (_annotatedNets, now stale -> blanked). Test the two existing collections directly — no
-    // per-batch Set is built. Skip the whole sweep when neither holds anything.
-    if (_valueText.size || _annotatedNets.size) {
-        for (const l of labelIndex.graph.getLinks()) {
-            const n = l.get('netname');
-            if (!n || (!_valueText.has(n) && !_annotatedNets.has(n))) { continue; } // unchanged -> already correct
+    // Only named nets carry waveform values, so a view needs the forced refresh only if its net has
+    // value text now (_valueText) or had it last batch (_annotatedNets — now stale, must be blanked).
+    // Touch just those nets' views via _netIndex — O(annotated), not O(whole graph) — instead of
+    // sweeping every element + link each marker move.
+    for (const n of _valueText.keys()) { _annotatedNets.add(n); } // union: nets to refresh now (current ∪ previous)
+    for (const n of _annotatedNets) {
+        const entry = _netIndex.get(n);
+        if (!entry) { continue; }
+        for (const l of entry.links) {
             const v = paper.findViewByModel(l);
             if (v && typeof v._updateSignal === 'function') { v._updateSignal(); }
+        }
+        for (const el of entry.els) {
+            const v = paper.findViewByModel(el);
+            if (!v) { continue; }
+            if (typeof v._updateIoValue === 'function') { v._updateIoValue(); }
+            else if (el.get('type') === 'Subcircuit' && typeof v._updatePortSignals === 'function') { v._updatePortSignals(); }
         }
     }
     // Snapshot this batch's annotated nets for next batch's blank-pass — reuse the Set (no allocation).
@@ -1190,6 +1212,7 @@ function buildSchematic(msg) {
     _phase.afterDisplayOn = performance.now(); // reposition (render B) is timed from here / ELK-done
     labelIndex = circuit.getLabelIndex();
     cleanSubcircuitCaptions(labelIndex);
+    buildNetIndex(); // net -> value-bearing views, for O(annotated) refreshValueText (used by clearValues below)
     // Reset every net to x up front. digitaljs seeds single-bit nets to 0 (defined low), so
     // without a waveform the schematic would otherwise show red "0" wires everywhere. Start from
     // "unknown" instead: x => no value text + neutral wire, until VaporView pushes real values.
