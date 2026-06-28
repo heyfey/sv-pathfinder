@@ -159,6 +159,11 @@ html, body {
     animation: sv-ro-spin 0.8s linear infinite;
 }
 @keyframes sv-ro-spin { to { transform: rotate(360deg); } }
+/* size hint under "Rendering schematic…" (known from the netlist before layout) */
+#sv-render-overlay .sv-ro-sub {
+    font-size: 11px;
+    opacity: 0.7;
+}
 
 #paper {
     width: 100%;

@@ -897,12 +897,27 @@ function showRenderOverlay() {
         _renderOverlay = document.createElement('div');
         _renderOverlay.id = 'sv-render-overlay';
         _renderOverlay.innerHTML = '<div class="sv-ro-box"><div class="sv-ro-spinner"></div>'
-            + '<div class="sv-ro-text">Rendering schematic…</div></div>';
+            + '<div class="sv-ro-text">Rendering schematic…</div>'
+            + '<div class="sv-ro-sub"></div></div>';
     }
     if (!_renderOverlay.isConnected) { (document.getElementById('paper-container') || document.body).appendChild(_renderOverlay); }
     _renderOverlay.style.display = 'flex';
     clearTimeout(_overlayTimer);
     _overlayTimer = setTimeout(hideRenderOverlay, 30000); // safety: never leave it stuck
+}
+// Render workload = what ELK actually lays out: every device is a box, every connector a wire SEGMENT
+// (a fan-out net is several). This — not the deduped "distinct nets" of the final status — is what the
+// render time scales with, so it's what we show while the user waits. Different wording ("wires/boxes"
+// vs "nets/devices") keeps it from looking like it contradicts the final logical count.
+function rawSize(circuit) {
+    const boxes = circuit && circuit.devices ? Object.keys(circuit.devices).length : 0;
+    const wires = circuit && circuit.connectors ? circuit.connectors.length : 0;
+    return { boxes, wires };
+}
+function rawText(s) { return `${s.wires} wires · ${s.boxes} boxes`; }
+function setRenderOverlaySize(size) {
+    const sub = _renderOverlay && _renderOverlay.querySelector('.sv-ro-sub');
+    if (sub) { sub.textContent = rawText(size); }
 }
 function hideRenderOverlay() {
     clearTimeout(_overlayTimer);
@@ -973,10 +988,13 @@ function loadSchematic(msg) {
     // Heavy → keep the overlay up (already showing from renderStart, or this scope is big) and yield a
     // frame so it paints BEFORE the blocking build; light → build synchronously (no overlay flash). The
     // overlay then hides when rendering goes quiet.
+    // raw connector (segment) count gates the overlay — it tracks render cost (ELK lays out every
+    // segment), unlike the deduped net count shown to the user.
     const conns = (msg.circuit && msg.circuit.connectors && msg.circuit.connectors.length) || 0;
     const overlayUp = !!_renderOverlay && _renderOverlay.style.display !== 'none';
     if (overlayUp || conns > RENDER_OVERLAY_MIN_CONNECTORS) {
         showRenderOverlay();
+        setRenderOverlaySize(rawSize(msg.circuit)); // raw layout workload (what the render time scales with)
         // Yield ~2 frames so the overlay paints BEFORE the blocking build. A timer (not rAF, which can
         // stall on an idle page) reliably runs the build even when no paint is scheduled.
         setTimeout(() => buildSchematic(msg), 30);
@@ -1011,7 +1029,9 @@ function buildSchematic(msg) {
     document.getElementById('go-parent').disabled = !msg.hasParent;
     overviewMode = msg.overview === 'minimap' ? 'minimap' : 'scrollbars'; // main-paper overview
     applyWireValuePalette(); // theme-aware value colors (re-read each load to track theme)
-    setStatus('laying out schematic…');
+    // During layout, show the raw workload (matches the overlay); the final status below switches to
+    // the logical "distinct nets" once the built graph is available.
+    setStatus('laying out schematic… ' + rawText(rawSize(msg.circuit)));
     const container = document.getElementById('paper-container');
     // Reset the paper (and any stale minimap/scrollbars) but KEEP a render overlay showRenderOverlay
     // appended here — innerHTML='' would wipe it mid-render, leaving the heavy build with no feedback.
@@ -1138,7 +1158,7 @@ function buildSchematic(msg) {
         const src = link.get('source');
         if (src && src.id) { drivenNets.add(src.id + ' ' + (src.port ?? '')); }
     }
-    setStatus(`${drivenNets.size} nets (${Object.keys(labelIndex.wires).length} named), ` +
+    setStatus(`${drivenNets.size} distinct nets (${Object.keys(labelIndex.wires).length} named), ` +
               `${Object.keys(labelIndex.devices).length} devices`);
 
     // debug/test handle (also used by the headless webview test)
