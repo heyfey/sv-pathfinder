@@ -4,8 +4,9 @@
   "displayName": "sv-pathfinder",
   "description": "SystemVerilog design navigation and RTL-tracing for VS Code. Seamlessly integrates with waveform viewer for post-simulation debug.",
   "icon": "media/icon.png",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "repository": "https://github.com/heyfey/sv-pathfinder",
+  "license": "SEE LICENSE IN LICENSE",
   "engines": {
     "vscode": "^1.93.0"
   },
