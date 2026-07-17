@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 
-import { findParentModuleScope, ancestorFallbackReason, isInterfaceTopError, isParamResolutionError, isUvmError, ScopeNode } from '../schematic/scope_nav';
+import { findParentModuleScope, ancestorFallbackReason, isInterfaceTopError, isParamResolutionError, isUvmError, isKeptBoundaryError, ScopeNode } from '../schematic/scope_nav';
 
 // Build a leaf→root chain of {type} nodes (all contextValue 'scopeItem') and return the leaf, with
 // .parent links set. e.g. node('module','scope','scopearray','module') is leaf(module) inside a
@@ -69,6 +69,19 @@ suite('isParamResolutionError', () => {
     });
     test('does not match a generic compile error', () => {
         assert.ok(!isParamResolutionError(new Error('syntax error: unexpected token')));
+    });
+});
+
+suite('isKeptBoundaryError', () => {
+    test('matches the read_slang keep-hierarchy modport refusal (the Vortex VX_execute case)', () => {
+        assert.ok(isKeptBoundaryError(new Error(
+            'VX_core.sv:393:26: error: interface port on kept module boundary must be a modport')));
+        assert.ok(isKeptBoundaryError('interface port on kept module boundary must be a modport'));
+    });
+    test('does not match the scope-level interface-port errors (different fallback) or generic errors', () => {
+        assert.ok(!isKeptBoundaryError(new Error('foo: unconnected interface port bar')));
+        assert.ok(!isKeptBoundaryError(new Error('interface port on blackbox instance unsupported')));
+        assert.ok(!isKeptBoundaryError(new Error('a generic compile error')));
     });
 });
 

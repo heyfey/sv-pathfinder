@@ -43,6 +43,16 @@ export function isUvmError(e: any): boolean {
     return /\buvm_pkg\b|uvm_macros\.svh/i.test(String(e?.message ?? e));
 }
 
+// yosys-slang's --keep-hierarchy refuses a module whose interface PORT has no modport
+// ("interface port on kept module boundary must be a modport" — e.g. Vortex's VX_execute).
+// The remedy is --best-effort-hierarchy, which keeps every other boundary and inlines only
+// the offending modules; the runner retries with it when this fires (and warns, since the
+// flattened instances stop being step-into-able boxes). Distinct from isInterfaceTopError:
+// that's about the OPENED scope's own ports; this is about a boundary anywhere inside.
+export function isKeptBoundaryError(e: any): boolean {
+    return /interface port on kept module boundary/.test(String(e?.message ?? e));
+}
+
 // Why (if at all) a FAILED standalone elaboration should be retried from a top-able ancestor that
 // supplies the missing context (then extract this scope's subtree). Two scopes can't stand alone:
 //  - 'interface' — an interface port (see above); fires regardless of parent (the ancestor walk

@@ -11,7 +11,7 @@ import * as path from 'path';
 import { ScopeContext } from './scope_resolver';
 import { absolutizeFlist, searchDirFlags, blackboxFlags, flistWithoutUvm } from '../flist';
 import { NoYosysBackendError, noBackendMessage } from './backend_policy';
-import { isUvmError } from './scope_nav';
+import { isUvmError, isKeptBoundaryError } from './scope_nav';
 import { svLog } from '../output';
 
 // Schematic diagnostics (the actual Yosys command we run, and any workarounds applied) go to the
@@ -113,7 +113,7 @@ export function isResolvedBackendLimited(): boolean {
 }
 
 // Build the read + elaborate + lowering script (Spike 1 presets).
-function buildScript(backend: Backend, ctx: ScopeContext, preset: SchematicPreset, outJson: string, showDangling = false, extraIncludeDirs: string[] = [], shallow = false, ignoreUnknownModules = false): string {
+function buildScript(backend: Backend, ctx: ScopeContext, preset: SchematicPreset, outJson: string, showDangling = false, extraIncludeDirs: string[] = [], shallow = false, ignoreUnknownModules = false, bestEffortHierarchy = false): string {
     const files = ctx.dotF
         ? (backend.slang ? `-F ${quote(ctx.dotF)}` : ctx.fileSet.map(quote).join(' '))
         : ctx.fileSet.map(quote).join(' ');
@@ -147,7 +147,14 @@ function buildScript(backend: Backend, ctx: ScopeContext, preset: SchematicPrese
         // They only make slang ACCEPT more code — the netlist of already-valid code is unchanged —
         // and the schematic is a viewer, not a linter: by the time it runs, the design already
         // loaded for navigation, so failing here on stylistic strictness helps no one.
-        read = `read_slang --keep-hierarchy --ignore-timing --ignore-initial --ignore-assertions --allow-use-before-declare --allow-hierarchical-const ${iu}-D SYNTHESIS ${search} ${bb} ${gFlags} --top ${ctx.moduleName} ${files}`;
+        //
+        // Hierarchy mode: --keep-hierarchy first (every child stays a box). When a module's
+        // interface port has no modport, keep REFUSES its boundary ("interface port on kept module
+        // boundary must be a modport") and the whole read fails; the runYosys fallback retries with
+        // --best-effort-hierarchy, which keeps every other boundary and inlines only those modules
+        // (measured on Vortex: 2 of ~180 dissolve; where keep succeeds the output is identical).
+        const hier = bestEffortHierarchy ? '--best-effort-hierarchy' : '--keep-hierarchy';
+        read = `read_slang ${hier} --ignore-timing --ignore-initial --ignore-assertions --allow-use-before-declare --allow-hierarchical-const ${iu}-D SYNTHESIS ${search} ${bb} ${gFlags} --top ${ctx.moduleName} ${files}`;
     } else {
         const search = searchDirFlags(searchDirs, false); // read_verilog: include dirs only
         read = `read_verilog -sv -DSYNTHESIS ${search} ${files}`;
@@ -170,6 +177,21 @@ function buildScript(backend: Backend, ctx: ScopeContext, preset: SchematicPrese
     // unconnected named nets survive opt_clean for the converter to surface (see findDanglingNets).
     const keepDangling = showDangling ? 'setattr -set keep 1 w:* w:$* %d; ' : '';
     return common + `proc; memory_collect; setattr -mod -set keep 1; setattr -set keep 1 t:$mem*; ${keepDangling}opt_clean; write_json -compat-int ${quote(outJson)}`;
+}
+
+// One warning per design per session when the best-effort hierarchy fallback kicks in, so the
+// user knows why some instances appear flattened (not boxes) without being nagged on every
+// render of that design. Reset only on window reload (module state), like the backend cache.
+const bestEffortWarnedDesigns = new Set<string>();
+function maybeWarnBestEffort(ctx: ScopeContext): void {
+    const designKey = ctx.dotF ?? ctx.fileSet[0] ?? ctx.moduleName;
+    if (bestEffortWarnedDesigns.has(designKey)) { return; }
+    bestEffortWarnedDesigns.add(designKey);
+    vscode.window.showWarningMessage(
+        'Schematic: some modules in this design have interface ports without modports, which ' +
+        "can't be kept as child boxes — those instances were flattened into their parent " +
+        '(best-effort hierarchy). Everything else renders normally; see the "sv-pathfinder" ' +
+        'output for details.');
 }
 
 // macOS Gatekeeper quarantines OSS CAD Suite's unsigned binaries — yosys shells out to a bundled
@@ -261,12 +283,30 @@ export async function runYosys(ctx: ScopeContext, preset: SchematicPreset, opts?
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sv-pathfinder-schematic-'));
     const outJson = path.join(tmpDir, 'schematic.json');
 
-    const runOnce = (c: ScopeContext, ignoreUnknown: boolean) =>
-        spawnYosys(backend, buildScript(backend, c, preset, outJson, opts?.showDangling, extraIncludeDirs, opts?.shallow, ignoreUnknown), ctx.workDir);
+    const runOnce = (c: ScopeContext, ignoreUnknown: boolean, bestEffort = false) =>
+        spawnYosys(backend, buildScript(backend, c, preset, outJson, opts?.showDangling, extraIncludeDirs, opts?.shallow, ignoreUnknown, bestEffort), ctx.workDir);
+
+    // HIERARCHY FALLBACK: --keep-hierarchy refuses any module whose interface port lacks a modport
+    // (e.g. Vortex's VX_execute), failing the whole read. Retry with --best-effort-hierarchy — it
+    // keeps every other boundary and inlines only the offending modules (identical output where
+    // keep succeeds) — and tell the user once per design why some instances aren't boxes.
+    const run = async (c: ScopeContext, ignoreUnknown: boolean): Promise<string> => {
+        try {
+            return await runOnce(c, ignoreUnknown);
+        } catch (e) {
+            if (!backend.slang || !(e instanceof YosysRunError) || !isKeptBoundaryError(e.out)) { throw e; }
+            logSchematic('--keep-hierarchy refused a module boundary (interface port without a ' +
+                'modport); retrying with --best-effort-hierarchy (the offending instances are ' +
+                'flattened into their parent).');
+            const recovered = await runOnce(c, ignoreUnknown, true);
+            maybeWarnBestEffort(ctx);
+            return recovered;
+        }
+    };
 
     let log: string;
     try {
-        log = await runOnce(effectiveCtx, false);
+        log = await run(effectiveCtx, false);
     } catch (e) {
         // UVM WORKAROUND: UVM is testbench-only and breaks read_slang (it compiles every file in the
         // filelist). If the failure is a UVM error and we can identify the offending files, retry with
@@ -288,7 +328,7 @@ export async function runYosys(ctx: ScopeContext, preset: SchematicPreset, opts?
                         'not synthesizable), so it appears as an empty blackbox. See the "sv-pathfinder" output for details.');
                 }
                 try {
-                    recovered = await runOnce({ ...effectiveCtx, dotF: filtered.path }, true);
+                    recovered = await run({ ...effectiveCtx, dotF: filtered.path }, true);
                 } catch (e2) {
                     throw e2 instanceof YosysRunError ? new Error(e2.message + hintFor(e2.out, backend)) : e2;
                 }
