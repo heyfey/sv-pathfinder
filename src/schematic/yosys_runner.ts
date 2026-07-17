@@ -141,7 +141,13 @@ function buildScript(backend: Backend, ctx: ScopeContext, preset: SchematicPrese
         // --ignore-unknown-modules: used by the UVM workaround retry so instantiations of the dropped
         // (verification) modules import as blackboxes instead of erroring as unknown modules.
         const iu = ignoreUnknownModules ? '--ignore-unknown-modules ' : '';
-        read = `read_slang --keep-hierarchy --ignore-timing --ignore-initial --ignore-assertions ${iu}-D SYNTHESIS ${search} ${bb} ${gFlags} --top ${ctx.moduleName} ${files}`;
+        // --allow-use-before-declare / --allow-hierarchical-const: slang compat relaxations for
+        // LRM-strict rejections that simulators tolerate (package localparams referenced before
+        // their declaration; $bits() on interface members — both hit by real designs, e.g. Vortex).
+        // They only make slang ACCEPT more code — the netlist of already-valid code is unchanged —
+        // and the schematic is a viewer, not a linter: by the time it runs, the design already
+        // loaded for navigation, so failing here on stylistic strictness helps no one.
+        read = `read_slang --keep-hierarchy --ignore-timing --ignore-initial --ignore-assertions --allow-use-before-declare --allow-hierarchical-const ${iu}-D SYNTHESIS ${search} ${bb} ${gFlags} --top ${ctx.moduleName} ${files}`;
     } else {
         const search = searchDirFlags(searchDirs, false); // read_verilog: include dirs only
         read = `read_verilog -sv -DSYNTHESIS ${search} ${files}`;
