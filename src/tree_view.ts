@@ -9,6 +9,14 @@ import { isNoOpNavigation, findColumnForPath } from './nav_history';
 import { resolveRenamedBool, resolveRenamedString } from './settings_util';
 import { svOutputChannel, svLog } from './output';
 import { InstanceSearchResult, InstanceSearchHits, InstanceQuickPickItem, toInstanceQuickPickItems, filterAndCapInstances } from './design_search';
+import { showNoActiveDesignMessage } from './ui_util';
+
+// "No active design" guidance with a button that reveals the sv-pathfinder sidebar.
+export function showOpenDesignFirstMessage(message: string = 'Open and select a design first.'): void {
+    void showNoActiveDesignMessage(message,
+        (msg, ...items) => vscode.window.showInformationMessage(msg, ...items),
+        command => vscode.commands.executeCommand(command));
+}
 
 // Whether the "Modules" view is enabled. The setting was renamed showInstancesView → showModulesView;
 // honor the old key for users who set it before the rename.
@@ -1714,7 +1722,7 @@ export class HierarchyTreeProvider implements vscode.TreeDataProvider<NetlistIte
     public searchDesign() {
         const design = this.activeDesign;
         if (!design) {
-            vscode.window.showInformationMessage('Open a design first to search it.');
+            showOpenDesignFirstMessage('Open a design first to search it.');
             return;
         }
         const CAP = 200;

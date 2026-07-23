@@ -7,7 +7,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as os from 'os';
-import { DesignItem, NetlistItem, HierarchyTreeProvider, replaceFilePathIfNeeded, showTextDocumentLocation } from '../tree_view';
+import { DesignItem, NetlistItem, HierarchyTreeProvider, replaceFilePathIfNeeded, showTextDocumentLocation, showOpenDesignFirstMessage } from '../tree_view';
 import { resolveScope, scopeCacheKey, ScopeContext } from './scope_resolver';
 import { runYosys, SchematicPreset, getResolvedBackendName, isResolvedBackendLimited } from './yosys_runner';
 import { convertToDigitalJs, extractSubtree, rootRelativeYosysPath, pickCoveringRoot, pruneToShallowLevel } from './converter';
@@ -51,7 +51,7 @@ export class SchematicViewProvider {
     public async showSchematic(element: NetlistItem | undefined) {
         const design = this.hierarchyProvider.getActiveDesign();
         if (!design) {
-            vscode.window.showWarningMessage('sv-pathfinder: open and select a design first.');
+            showOpenDesignFirstMessage();
             return;
         }
         // Resolve the requested element to a scope instance (same policy as setActiveInstance)

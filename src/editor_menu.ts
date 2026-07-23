@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 
-import { OpenedDesignsTreeProvider, HierarchyTreeProvider, NetlistItem, DesignItem, showModulesViewEnabled } from './tree_view';
+import { OpenedDesignsTreeProvider, HierarchyTreeProvider, NetlistItem, DesignItem, showModulesViewEnabled, showOpenDesignFirstMessage } from './tree_view';
 import { Parser } from './parser';
 
 function getWordAtCursor(): string | undefined {
@@ -30,7 +30,7 @@ export class EditorMenuProvider {
 
     public async selectInstance() {
         const design = this.hierarchyTreeProvider.getActiveDesign();
-        if (!design) { vscode.window.showInformationMessage('Open and select a design first.'); return; }
+        if (!design) { showOpenDesignFirstMessage(); return; }
 
         const moduleName = await this.parser.getModuleAtCursor();
         if (!moduleName) {
@@ -63,7 +63,7 @@ export class EditorMenuProvider {
     // guidance and returns undefined when it can't resolve.
     public async resolveScopeForCursorModule(): Promise<NetlistItem | undefined> {
         const design = this.hierarchyTreeProvider.getActiveDesign();
-        if (!design) { vscode.window.showInformationMessage('Open and select a design first.'); return undefined; }
+        if (!design) { showOpenDesignFirstMessage(); return undefined; }
 
         const cursorModule = await this.parser.getModuleAtCursor();
         if (!cursorModule) { vscode.window.showInformationMessage('Place the cursor inside a module to use this command.'); return undefined; }
