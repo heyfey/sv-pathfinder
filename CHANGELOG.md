@@ -16,14 +16,13 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   - Navigation: a go-to-parent button to move up the hierarchy; child instances rendered
     as labeled, accent-filled boxes that navigate to the child's module declaration.
   - Controls: Ctrl+scroll to zoom around the cursor, drag/wheel to pan, fit/zoom toolbar,
-    and a navigation overview — scrollbars by default (or a minimap, configurable) on the
-    main schematic, and overlay scrollbars on subcircuit popup windows.
+    and a navigation overview — scrollbars on the main schematic, and overlay scrollbars
+    on subcircuit popup windows.
   - Visuals: configurable single accent color, theme-aware wire value colors, and a
     hover highlight that names the cell/net/port in the status bar.
   - Read-only: digitaljs's editor/simulator affordances (wire delete/monitor tools,
     input toggling, memory/FSM content editors) are disabled.
 - Setting `sv-pathfinder.ossCadSuitePath` for locating the Yosys/yosys-slang toolchain.
 - Setting `sv-pathfinder.schematicAccentColor` for the schematic accent color.
-- Setting `sv-pathfinder.schematicOverview` (`minimap` | `scrollbars`) for the main schematic.
 
 - Initial release
