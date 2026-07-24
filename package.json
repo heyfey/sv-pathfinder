@@ -145,7 +145,7 @@
     "viewsWelcome": [
       {
         "view": "openedDesignsView",
-        "contents": "Open a design database (.uhdm, .f or .daidir)\n[Open Design](command:sv-pathfinder.openDesign)\nLearn more on [Github](https://github.com/heyfey/sv-pathfinder)\nTry with an [example design](command:sv-pathfinder.openExampleDesign)"
+        "contents": "Open a design database (.uhdm, .f or .daidir)\n[Open Design](command:sv-pathfinder.openDesign)\nLearn more on [GitHub](https://github.com/heyfey/sv-pathfinder)\nTry with an [example design](command:sv-pathfinder.openExampleDesign) (Linux64)"
       }
     ],
     "views": {
