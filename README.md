@@ -2,7 +2,7 @@
 
 VS Code extension for SystemVerilog design navigation, RTL tracing, schematic viewer, and waveform integration with the [Vaporview](https://github.com/Lramseyer/vaporview) waveform viewer.
 
-[VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=heyfey.sv-pathfinder) | Open VSX | [GitHub](https://github.com/heyfey/sv-pathfinder)
+[VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=heyfey.sv-pathfinder) | [Open VSX](https://open-vsx.org/extension/heyfey/sv-pathfinder) | [GitHub](https://github.com/heyfey/sv-pathfinder)
 
 ![](readme_assets/overview.png)
 
