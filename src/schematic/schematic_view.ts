@@ -12,7 +12,7 @@ import { resolveScope, scopeCacheKey, ScopeContext } from './scope_resolver';
 import { runYosys, SchematicPreset, getResolvedBackendName, isResolvedBackendLimited } from './yosys_runner';
 import { convertToDigitalJs, extractSubtree, rootRelativeYosysPath, pickCoveringRoot, pruneToShallowLevel } from './converter';
 import { svLog } from '../output';
-import { findParentModuleScope, ancestorFallbackReason } from './scope_nav';
+import { findParentModuleScope, ancestorFallbackReason, isNonModuleTopError } from './scope_nav';
 import { cleanCelltype } from './celltype';
 import { isNoYosysBackendError, limitedBackendWarning } from './backend_policy';
 import { FromWebviewMessage, ToWebviewMessage, ElementClickMessage, ContextActionMessage, ExpandRequestMessage, ExportRequestMessage, ExportContentMessage, SourcePosition } from './messages';
@@ -189,7 +189,10 @@ export class SchematicViewProvider {
                     // elaboration of this scope's subtree (no blackbox), which works whenever the scope
                     // itself is elaborable as a top. (If THIS also throws, it propagates — the caller's
                     // interface-ancestor fallback takes over.)
-                    if (!shallow) { throw e; }
+                    // A non-module can never become a valid top by removing child blackboxes. Trust
+                    // read_slang's diagnostic and avoid immediately running the same doomed compile
+                    // a second time in full-subtree mode.
+                    if (!shallow || isNonModuleTopError(e)) { throw e; }
                     const result = await runYosys(ctx, preset, { showDangling, shallow: false });
                     fellBack = true;
                     return convertToDigitalJs(result.yosysJson, { showDangling });
@@ -349,7 +352,12 @@ export class SchematicViewProvider {
     // that fixes it instead of a dead-end message.
     private async showRenderError(e: any) {
         const msg = `sv-pathfinder schematic: ${e?.message ?? e}`;
-        if (isNoYosysBackendError(e)) {
+        if (isNonModuleTopError(e)) {
+            const scope = this.current?.ctx.moduleName ?? 'The selected scope';
+            vscode.window.showWarningMessage(
+                `Schematic unavailable for '${scope}': read_slang reports that it is not a valid ` +
+                'top-level module. Select a module instance that contains or connects this scope instead.');
+        } else if (isNoYosysBackendError(e)) {
             const settings = 'Open Settings';
             const pick = await vscode.window.showErrorMessage(msg, settings);
             if (pick === settings) {

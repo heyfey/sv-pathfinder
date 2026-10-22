@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 
-import { findParentModuleScope, ancestorFallbackReason, isInterfaceTopError, isParamResolutionError, isUvmError, isKeptBoundaryError, ScopeNode } from '../schematic/scope_nav';
+import { findParentModuleScope, ancestorFallbackReason, isInterfaceTopError, isNonModuleTopError, isParamResolutionError, isUvmError, isKeptBoundaryError, ScopeNode } from '../schematic/scope_nav';
 
 // Build a leaf→root chain of {type} nodes (all contextValue 'scopeItem') and return the leaf, with
 // .parent links set. e.g. node('module','scope','scopearray','module') is leaf(module) inside a
@@ -55,6 +55,16 @@ suite('isInterfaceTopError', () => {
     });
     test('does not match an unrelated error', () => {
         assert.ok(!isInterfaceTopError(new Error('a generic compile error')));
+    });
+});
+
+suite('isNonModuleTopError', () => {
+    test('matches read_slang rejecting an interface as --top', () => {
+        assert.ok(isNonModuleTopError(new Error("'openenoc_switch_if' is not a valid top-level module")));
+    });
+    test('does not confuse an interface-port failure or generic compile failure', () => {
+        assert.ok(!isNonModuleTopError('unconnected interface port switch_if'));
+        assert.ok(!isNonModuleTopError('syntax error'));
     });
 });
 

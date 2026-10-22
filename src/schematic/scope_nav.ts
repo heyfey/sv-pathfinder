@@ -28,6 +28,13 @@ export function isInterfaceTopError(e: any): boolean {
     return /unconnected interface port|interface port on blackbox/.test(String(e?.message ?? e));
 }
 
+// read_slang is authoritative about whether the requested declaration can be a Yosys module top.
+// Keep this diagnostic handling separate from interface-PORT failures: the latter can be recovered
+// by rooting at a connected parent, while a declaration that is not a module cannot be a root at all.
+export function isNonModuleTopError(e: any): boolean {
+    return String(e?.message ?? e).includes('is not a valid top-level module');
+}
+
 // read_slang errors that typically mean a scope was elaborated in ISOLATION with a parameter missing:
 // a struct/enum/array config that -G can't carry (e.g. CVA6's CVA6Cfg) falls back to a bogus default,
 // so width counts go non-positive / out of range and config-typed structs collapse to 1-bit logic.

@@ -249,6 +249,11 @@ function hintFor(out: string, backend: Backend): string {
         return '\n\nHint: this scope has a SystemVerilog interface port, so it can\'t be elaborated on its ' +
             'own. Open a parent scope that connects the interface (full mode) and navigate down to this one.';
     }
+    if (out.includes('is not a valid top-level module')) {
+        return '\n\nHint: Yosys schematics must be rooted at a module. The selected scope is likely a ' +
+            'SystemVerilog interface, program, or checker; select a module instance that contains or ' +
+            'connects it instead.';
+    }
     return macQuarantineHint(backend.command);
 }
 
