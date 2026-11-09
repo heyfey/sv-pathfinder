@@ -36,11 +36,22 @@ jobs:
       - name: Webview tests (headless)
         run: npm run test:webview
 
-  # The native .uhdm reader: UHDM (git submodule) + node-gyp. Kept as a separate job so the
-  # pure-TypeScript checks above stay fast; the UHDM build is cached on the submodule commit.
+  # The native .uhdm reader: UHDM (git submodule) + node-gyp. Built on AlmaLinux 8, the EDA
+  # baseline: gcc-toolset gives C++17 while the binary keeps the EL8 glibc 2.28 / libstdc++ floor,
+  # so the shipped .node loads on EL8/EL9 workstations and on anything newer. Kept as a separate
+  # job so the pure-TypeScript checks above stay fast; the UHDM build is cached on the submodule
+  # commit.
   addon:
     runs-on: ubuntu-latest
+    container: almalinux:8
     steps:
+      - name: Install the toolchain (gcc-toolset-14, cmake, python3.11)
+        run: |
+          dnf -y install git gcc-toolset-14 cmake make tar zstd python3.11 python3.11-pip
+          alternatives --set python3 /usr/bin/python3.11
+          python3 -m pip install --quiet orderedmultidict   # UHDM's code generator
+          echo /opt/rh/gcc-toolset-14/root/usr/bin >> "$GITHUB_PATH"
+
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -62,7 +73,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: third_party/UHDM/build
-          key: uhdm-build-${{ runner.os }}-${{ steps.uhdm.outputs.sha }}-${{ hashFiles('scripts/build-uhdm.sh') }}
+          key: uhdm-build-el8-${{ steps.uhdm.outputs.sha }}-${{ hashFiles('scripts/build-uhdm.sh') }}
 
       - name: Build UHDM
         if: steps.uhdm-cache.outputs.cache-hit != 'true'
@@ -70,6 +81,12 @@ jobs:
 
       - name: Build the addon
         run: npm run compile-addon
+
+      - name: Check the glibc floor of the addon (must load on EL8)
+        run: |
+          max=$(objdump -T build/Release/uhdm_addon.node | grep -o 'GLIBC_[0-9.]*' | sort -Vu | tail -1)
+          echo "highest glibc symbol version: $max"
+          test "$(printf '%s\n' "$max" GLIBC_2.28 | sort -V | tail -1)" = GLIBC_2.28
 
       - name: Addon tests
         run: npm run test:unit

@@ -76,7 +76,17 @@ waveform viewer. With a waveform open, sv-pathfinder then:
 ## Building from source
 
 The `.uhdm` reader is a native Node addon linked against UHDM, which is pinned as the
-`third_party/UHDM` git submodule (Linux x64 only). Build it once, then the usual `npm run compile`:
+`third_party/UHDM` git submodule (Linux x64 only). The reference build platform is AlmaLinux 8
+with the GCC toolset, which is what CI uses and what keeps the shipped binary loadable on EL8/EL9:
+
+```sh
+sudo dnf install gcc-toolset-14 cmake make python3.11 python3.11-pip
+sudo alternatives --set python3 /usr/bin/python3.11
+python3 -m pip install --user orderedmultidict   # UHDM's code generator
+scl enable gcc-toolset-14 bash                   # C++17 compiler on PATH for the steps below
+```
+
+Build UHDM once, then the usual `npm run compile`:
 
 ```sh
 git submodule update --init --recursive   # UHDM + its capnproto dependency
