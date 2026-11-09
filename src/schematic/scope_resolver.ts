@@ -3,7 +3,6 @@
 import * as path from 'path';
 import { DesignItem, NetlistItem } from '../tree_view';
 import { collectParamOverrides, collectChildModules, SkippedParam } from './param_util';
-import { loadSurelogOptions } from './uhdm_options';
 
 export interface ResolvedParam {
     name: string;
@@ -24,12 +23,10 @@ export interface ScopeContext {
     // Either a .f command file (preferred: slang understands -f/-F) or an explicit file list.
     dotF?: string;
     fileSet: string[];
-    // For .uhdm designs re-parsed with read_slang: the +incdir+/+define+/-P options Surelog was run
-    // with, recovered from slpp_all/surelog.log (see uhdm_options.ts). -P overrides only apply to the
-    // design top, so extraParams is empty for deeper scopes.
+    // For .uhdm designs re-parsed with read_slang: the directories of the headers the database
+    // records as `include`d. (Defines and -P overrides are not recorded in a UHDM database; the
+    // top instance's parameter values come through resolvedParams instead.)
     extraIncludeDirs?: string[];
-    extraDefines?: string[];
-    extraParams?: ResolvedParam[];
     // Set by the schematic view (not by resolveScope) when THIS run should import the .uhdm database
     // with read_uhdm instead of re-parsing the sources: the already elaborated design, no defines or
     // includes needed. See SchematicViewProvider.renderFromUhdmDesign.
@@ -58,7 +55,7 @@ export async function resolveScope(design: DesignItem, instance: NetlistItem): P
     let dotF: string | undefined;
     let fileSet: string[] = [];
     let workDir: string;
-    let extraIncludeDirs: string[] | undefined, extraDefines: string[] | undefined, extraParams: ResolvedParam[] | undefined;
+    let extraIncludeDirs: string[] | undefined;
     if (designPath.endsWith('.f')) {
         // .f designs (slang-server / Surelog flows): hand the command file to read_slang
         // (-f) — over-providing the whole filelist is the v1-correct approach.
@@ -76,15 +73,8 @@ export async function resolveScope(design: DesignItem, instance: NetlistItem): P
         // Surelog's synthetic builtin.sv is recorded with a bogus cwd-relative path; drop it.
         fileSet = [...files].filter(f => path.basename(f) !== 'builtin.sv');
         workDir = fileSet.length > 0 ? path.dirname(fileSet[0]) : path.dirname(designPath);
-        if (designPath.endsWith('.uhdm')) {
-            const opts = loadSurelogOptions(designPath, undefined, fileSet);
-            if (opts) {
-                extraIncludeDirs = opts.incdirs;
-                extraDefines = opts.defines;
-                extraParams = instancePath.includes('.') ? [] : opts.params.map(p => ({ name: p.name, verilogLiteral: p.value }));
-            }
-        }
+        extraIncludeDirs = design.getIncludeDirs();
     }
 
-    return { instancePath, moduleName, resolvedParams, skippedParams, childModules, dotF, fileSet, workDir, extraIncludeDirs, extraDefines, extraParams };
+    return { instancePath, moduleName, resolvedParams, skippedParams, childModules, dotF, fileSet, workDir, extraIncludeDirs };
 }

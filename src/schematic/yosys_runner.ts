@@ -75,13 +75,7 @@ function buildScript(ctx: ScopeContext, preset: SchematicPreset, outJson: string
         // -D SYNTHESIS: let designs guard sim-only code (e.g. $dumpvars with indexed
         // selects, which slang rejects) behind `ifndef SYNTHESIS`, matching the
         // native read_verilog path below.
-        // Instance params first; a Surelog -P override (recovered from the .uhdm's log) only when the
-        // instance did not already pin that parameter.
-        const pinned = new Set(ctx.resolvedParams.map(p => p.name));
-        const gFlags = [...ctx.resolvedParams, ...(ctx.extraParams ?? []).filter(p => !pinned.has(p.name))]
-            .map(p => `-G ${p.name}=${p.verilogLiteral}`).join(' ');
-        // +define+s the .uhdm was built with, so `ifdef-guarded code takes the same branches.
-        const dFlags = (ctx.extraDefines ?? []).map(d => `-D ${d}`).join(' ');
+        const gFlags = ctx.resolvedParams.map(p => `-G ${p.name}=${p.verilogLiteral}`).join(' ');
         const search = searchDirFlags(searchDirs, true); // -I + -y (libdir) so missing modules resolve
         // shallow ("selected + 1"): blackbox the direct children so only this scope's body elaborates.
         const bb = shallow ? blackboxFlags(ctx.childModules) : '';
@@ -101,7 +95,7 @@ function buildScript(ctx: ScopeContext, preset: SchematicPreset, outJson: string
         // --best-effort-hierarchy, which keeps every other boundary and inlines only those modules
         // (measured on Vortex: 2 of ~180 dissolve; where keep succeeds the output is identical).
         const hier = bestEffortHierarchy ? '--best-effort-hierarchy' : '--keep-hierarchy';
-        read = `read_slang ${hier} --ignore-timing --ignore-initial --ignore-assertions --allow-use-before-declare --allow-hierarchical-const ${iu}-D SYNTHESIS ${dFlags} ${search} ${bb} ${gFlags} --top ${ctx.moduleName} ${files}`;
+        read = `read_slang ${hier} --ignore-timing --ignore-initial --ignore-assertions --allow-use-before-declare --allow-hierarchical-const ${iu}-D SYNTHESIS ${search} ${bb} ${gFlags} --top ${ctx.moduleName} ${files}`;
     }
     // read_uhdm imports $display/$finish and assertions as $print/$check cells, which the converter
     // does not draw (read_slang drops them via --ignore-initial/--ignore-assertions). Delete them

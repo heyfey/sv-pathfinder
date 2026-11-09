@@ -922,6 +922,40 @@ Napi::Value GetSourceFiles(const Napi::CallbackInfo& info) {
   return arr;
 }
 
+// Directories of the files the design `include`d, from UHDM's include_file_info records, so a
+// read_slang re-parse of the sources finds the same headers. Empty when the database has none.
+Napi::Value GetIncludeDirs(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  if (info.Length() < 1 || !info[0].IsNumber()) {
+    Napi::TypeError::New(env, "Number argument (designId) expected").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  int designId = info[0].As<Napi::Number>().Int32Value();
+  std::shared_ptr<DesignContext> dc;
+  {
+    std::lock_guard<std::mutex> lock(designContextMapMutex);
+    auto it = designContextMap.find(designId);
+    if (it == designContextMap.end()) {
+      Napi::Error::New(env, "Design ID not found").ThrowAsJavaScriptException();
+      return env.Null();
+    }
+    dc = it->second;
+  }
+  const UHDM::design* d = (const UHDM::design*)((const uhdm_handle*)dc->design)->object;
+  std::set<std::string> dirs;
+  if (d->Include_file_infos()) {
+    for (const auto* inc : *d->Include_file_infos()) {
+      std::string_view f = inc->VpiIncludedFile();
+      auto slash = f.find_last_of('/');
+      if (slash != std::string_view::npos && slash > 0) dirs.emplace(f.substr(0, slash));
+    }
+  }
+  Napi::Array arr = Napi::Array::New(env);
+  uint32_t i = 0;
+  for (const auto& p : dirs) arr[i++] = Napi::String::New(env, p);
+  return arr;
+}
+
 Napi::Value UnloadDesign(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
@@ -964,6 +998,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("getModuleDef", Napi::Function::New(env, GetModuleDef));
   exports.Set("getModuleDefs", Napi::Function::New(env, GetModuleDefs));
   exports.Set("getSourceFiles", Napi::Function::New(env, GetSourceFiles));
+  exports.Set("getIncludeDirs", Napi::Function::New(env, GetIncludeDirs));
   exports.Set("getModuleInstances",
               Napi::Function::New(env, GetModuleInstances));
   exports.Set("searchInstances", Napi::Function::New(env, SearchInstances));

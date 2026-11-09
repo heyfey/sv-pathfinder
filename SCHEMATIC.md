@@ -42,11 +42,10 @@ sources by `toolchain/build-schematic-runtime.sh` (see `toolchain/versions.json`
   v0.68) is **experimental**: it fails on some real designs (known: interface ports inside generate
   loops, parameter conditions inside async resets, some hierarchical references in generate scopes,
   and a crash on one design). When it fails, `auto` warns once and re-parses the source files the
-  database points to with `read_slang`, using the `+incdir+`/`+define+`/`-P` options recovered from
-  Surelog's `slpp_all/surelog.log` next to the database (and the `-f` files it names). Keep that
-  directory with the database; without the log, set `schematicIncludeDirs` if headers are missing.
-  The database must come from the Surelog release the extension's UHDM reader is built for (see
-  GETTING_STARTED.md).
+  database records (modules, packages, interfaces) with `read_slang`, with the include directories
+  the database records and the selected instance's parameter values. Defines are not recorded in a
+  UHDM database, so `ifdef`-dependent designs may need the `.f` flow instead. The database must
+  come from the Surelog release the extension's UHDM reader is built for (see GETTING_STARTED.md).
 - A plain `yosys` on PATH or an installed OSS CAD Suite is **not** detected; use the override above
   if you want a specific Yosys build.
 

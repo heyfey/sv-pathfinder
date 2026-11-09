@@ -52,6 +52,18 @@ suite('uhdm_addon', function () {
         assert.throws(() => addon.getSourceFiles(999999), /Design ID not found/);
     });
 
+    test('getIncludeDirs returns the directories of included headers (none in the example)', async () => {
+        const id = await addon.loadDesign(EXAMPLE_DB);
+        try {
+            const dirs: string[] = addon.getIncludeDirs(id);
+            assert.ok(Array.isArray(dirs));
+            assert.ok(dirs.every(d => typeof d === 'string' && d.startsWith('/')));
+        } finally {
+            await addon.unloadDesign(id);
+        }
+        assert.throws(() => addon.getIncludeDirs(999999), /Design ID not found/);
+    });
+
     test('rejects (does not abort on) a missing file', async () => {
         await assert.rejects(addon.loadDesign(path.join(ROOT, 'does-not-exist.uhdm')), /Failed to load/);
     });
