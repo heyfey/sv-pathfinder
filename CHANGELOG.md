@@ -49,7 +49,10 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - Schematics for directly opened `.uhdm` designs through `read_uhdm` (experimental, Linux x64
   runtime): the elaborated database is imported as it is, no defines/includes/parameters
   re-supplied. Setting `sv-pathfinder.schematicUhdmFrontend` (`auto` default): when the importer
-  fails, the schematic falls back to re-parsing the source files with `read_slang` as before.
+  fails, the schematic falls back to re-parsing the source files with `read_slang` as before —
+  now with every source file of the database (packages included) and the `+incdir+`/`+define+`/`-P`
+  options recovered from Surelog's `slpp_all/surelog.log`, through a generated filelist (Yosys
+  truncates long commands).
 - A Yosys process killed by a signal (crash, out of memory) is now reported as such instead of
   "failed with code -1".
 

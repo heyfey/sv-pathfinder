@@ -57,7 +57,7 @@ function buildScript(ctx: ScopeContext, preset: SchematicPreset, outJson: string
     // Search dirs so a curated/partial filelist still elaborates: the .f's own directory + each
     // source file's directory (resolves co-located includes and sibling modules the .f omits), plus
     // any user-provided include dirs (for headers outside the source tree, e.g. vendored prim/dv).
-    const searchDirs = [ctx.workDir, ...ctx.fileSet.map(f => path.dirname(f)), ...extraIncludeDirs];
+    const searchDirs = [ctx.workDir, ...ctx.fileSet.map(f => path.dirname(f)), ...extraIncludeDirs, ...(ctx.extraIncludeDirs ?? [])];
     let read: string;
     if (ctx.uhdmFile) {
         // Direct .uhdm design: import the elaborated UHDM as it is. Parameters, defines and includes
@@ -75,7 +75,13 @@ function buildScript(ctx: ScopeContext, preset: SchematicPreset, outJson: string
         // -D SYNTHESIS: let designs guard sim-only code (e.g. $dumpvars with indexed
         // selects, which slang rejects) behind `ifndef SYNTHESIS`, matching the
         // native read_verilog path below.
-        const gFlags = ctx.resolvedParams.map(p => `-G ${p.name}=${p.verilogLiteral}`).join(' ');
+        // Instance params first; a Surelog -P override (recovered from the .uhdm's log) only when the
+        // instance did not already pin that parameter.
+        const pinned = new Set(ctx.resolvedParams.map(p => p.name));
+        const gFlags = [...ctx.resolvedParams, ...(ctx.extraParams ?? []).filter(p => !pinned.has(p.name))]
+            .map(p => `-G ${p.name}=${p.verilogLiteral}`).join(' ');
+        // +define+s the .uhdm was built with, so `ifdef-guarded code takes the same branches.
+        const dFlags = (ctx.extraDefines ?? []).map(d => `-D ${d}`).join(' ');
         const search = searchDirFlags(searchDirs, true); // -I + -y (libdir) so missing modules resolve
         // shallow ("selected + 1"): blackbox the direct children so only this scope's body elaborates.
         const bb = shallow ? blackboxFlags(ctx.childModules) : '';
@@ -95,7 +101,7 @@ function buildScript(ctx: ScopeContext, preset: SchematicPreset, outJson: string
         // --best-effort-hierarchy, which keeps every other boundary and inlines only those modules
         // (measured on Vortex: 2 of ~180 dissolve; where keep succeeds the output is identical).
         const hier = bestEffortHierarchy ? '--best-effort-hierarchy' : '--keep-hierarchy';
-        read = `read_slang ${hier} --ignore-timing --ignore-initial --ignore-assertions --allow-use-before-declare --allow-hierarchical-const ${iu}-D SYNTHESIS ${search} ${bb} ${gFlags} --top ${ctx.moduleName} ${files}`;
+        read = `read_slang ${hier} --ignore-timing --ignore-initial --ignore-assertions --allow-use-before-declare --allow-hierarchical-const ${iu}-D SYNTHESIS ${dFlags} ${search} ${bb} ${gFlags} --top ${ctx.moduleName} ${files}`;
     }
     // read_uhdm imports $display/$finish and assertions as $print/$check cells, which the converter
     // does not draw (read_slang drops them via --ignore-initial/--ignore-assertions). Delete them
@@ -224,6 +230,15 @@ export async function runYosys(ctx: ScopeContext, preset: SchematicPreset, opts?
 
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sv-pathfinder-schematic-'));
     const outJson = path.join(tmpDir, 'schematic.json');
+
+    // An explicit file set (a .uhdm design re-parsed from its sources) goes through a generated
+    // filelist, not the command line: Yosys cuts a script command at a few KB and reports
+    // "Bad command", which a 100+ file design exceeds (HummingbirdV2 E203: 16 KB of paths).
+    if (!useUhdm && !effectiveCtx.dotF && effectiveCtx.fileSet.length > 0) {
+        const generated = path.join(tmpDir, 'sources.f');
+        await fs.writeFile(generated, effectiveCtx.fileSet.join('\n') + '\n');
+        effectiveCtx = { ...effectiveCtx, dotF: generated };
+    }
 
     const runOnce = (c: ScopeContext, ignoreUnknown: boolean, bestEffort = false) =>
         spawnYosys(backend, buildScript(c, preset, outJson, opts?.showDangling, extraIncludeDirs, opts?.shallow, ignoreUnknown, bestEffort), ctx.workDir, useUhdm);
