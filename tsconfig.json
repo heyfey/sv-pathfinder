@@ -13,5 +13,6 @@
 		// "noFallthroughCasesInSwitch": true, /* Report errors for fallthrough cases in switch statement. */
 		"noUnusedParameters": false,  /* Report errors on unused parameters. */
 		// "moduleResolution": "Node16",
-	}
+	},
+  "exclude": ["node_modules", "third_party", "out", "dist", ".vscode-test"]
 }

@@ -1,0 +1,4 @@
+[submodule "third_party/UHDM"]
+	path = third_party/UHDM
+	url = https://github.com/chipsalliance/UHDM.git
+	ignore = untracked

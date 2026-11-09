@@ -72,3 +72,18 @@ waveform viewer. With a waveform open, sv-pathfinder then:
 | `sv-pathfinder.sourcePathFrom` / `sourcePathTo` | Remap source paths across machines (both must be set). |
 | `sv-pathfinder.ossCadSuitePath` | OSS CAD Suite dir (the `bin/yosys` parent) for the schematic. |
 | `sv-pathfinder.schematic*` | Schematic appearance & elaboration — see [SCHEMATIC.md](SCHEMATIC.md). |
+
+## Building from source
+
+The `.uhdm` reader is a native Node addon linked against UHDM, which is pinned as the
+`third_party/UHDM` git submodule (Linux x64 only). Build it once, then the usual `npm run compile`:
+
+```sh
+git submodule update --init --recursive   # UHDM + its capnproto dependency
+npm install
+npm run build-uhdm                         # cmake: Release, -fPIC, no tests (scripts/build-uhdm.sh)
+npm run compile                            # node-gyp rebuild + type-check + lint + esbuild
+```
+
+`binding.gyp` reads the UHDM build from `third_party/UHDM/build`; set `UHDM_HOME=/path/to/uhdm/build`
+to use another build (it must be compiled with `-DCMAKE_POSITION_INDEPENDENT_CODE=ON`).

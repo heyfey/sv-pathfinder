@@ -11,6 +11,9 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - Native UHDM reader rebuilt against UHDM v1.87 (was v1.84); use Surelog v1.87 to
   generate compatible `.uhdm` databases. The bundled example database was regenerated
   with Surelog v1.87.
+- UHDM is now pinned as the `third_party/UHDM` git submodule and built by
+  `npm run build-uhdm` (`scripts/build-uhdm.sh`); `binding.gyp` no longer hardcodes a
+  machine-specific path (`UHDM_HOME` overrides the submodule build).
 
 ### Added
 

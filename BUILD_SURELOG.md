@@ -1,6 +1,6 @@
 # Build Surelog (v1.87)
 
-This extension is built with UHDM v1.87. It's recommended to use Surelog v1.87 to ensure compatibility.
+This extension is built with UHDM v1.87 (the `third_party/UHDM` submodule). The `.uhdm` format is not stable across UHDM releases, so use Surelog v1.87 to generate databases; the reader rejects a database from another release.
 
 ```
 git clone https://github.com/chipsalliance/Surelog.git Surelog-1.87

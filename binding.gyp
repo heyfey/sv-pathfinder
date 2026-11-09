@@ -1,6 +1,8 @@
 {
   "variables": {
-    "UHDM_HOME": "/home/heyfey/git-repos/UHDM/build", # /path/to/uhdm (v1.87), configured with -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+    # UHDM build directory: the third_party/UHDM submodule built by scripts/build-uhdm.sh
+    # (Release, -fPIC, see that script). Override with UHDM_HOME=/path/to/uhdm/build.
+    "UHDM_HOME": "<!(node -p \"require('path').resolve(process.env.UHDM_HOME || 'third_party/UHDM/build')\")",
   },
   "targets": [
     {

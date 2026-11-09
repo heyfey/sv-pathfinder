@@ -21,6 +21,7 @@ docs/**
 .githooks/**
 .github/**
 scripts/**
+third_party/**
 test/**
 binding.gyp
 *.draft.md

@@ -35,3 +35,41 @@ jobs:
 
       - name: Webview tests (headless)
         run: npm run test:webview
+
+  # The native .uhdm reader: UHDM (git submodule) + node-gyp. Kept as a separate job so the
+  # pure-TypeScript checks above stay fast; the UHDM build is cached on the submodule commit.
+  addon:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies (skip the implicit node-gyp rebuild, UHDM is not built yet)
+        run: npm ci --ignore-scripts
+
+      - name: UHDM submodule commit
+        id: uhdm
+        run: echo "sha=$(git -C third_party/UHDM rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the UHDM build
+        id: uhdm-cache
+        uses: actions/cache@v4
+        with:
+          path: third_party/UHDM/build
+          key: uhdm-build-${{ runner.os }}-${{ steps.uhdm.outputs.sha }}-${{ hashFiles('scripts/build-uhdm.sh') }}
+
+      - name: Build UHDM
+        if: steps.uhdm-cache.outputs.cache-hit != 'true'
+        run: npm run build-uhdm
+
+      - name: Build the addon
+        run: npm run compile-addon
+
+      - name: Addon tests
+        run: npm run test:unit
