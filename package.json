@@ -70,6 +70,17 @@
           "default": "",
           "markdownDescription": "Override for the schematic runtime: a directory containing `bin/yosys` (Yosys with the `slang` frontend built in; `share/yosys/plugins/uhdm2rtlil.so` for `.uhdm` designs). Leave empty to use the managed runtime, which sv-pathfinder downloads from its GitHub releases on the first schematic request (Linux x64). The environment variable `SV_PATHFINDER_SCHEMATIC_RUNTIME` is honoured when this setting is empty."
         },
+        "sv-pathfinder.schematicUhdmFrontend": {
+          "type": "string",
+          "enum": ["auto", "read_uhdm", "read_slang"],
+          "default": "auto",
+          "markdownEnumDescriptions": [
+            "Try `read_uhdm` (experimental importer); if it fails, re-parse the design's source files with `read_slang`.",
+            "Only `read_uhdm`; show its errors.",
+            "Never import the database; re-parse the source files with `read_slang` (works on every platform)."
+          ],
+          "markdownDescription": "How a directly opened `.uhdm` design is elaborated for the schematic. `read_uhdm` imports the already elaborated database (no defines/includes to re-supply) but the uhdm2rtlil importer is experimental and fails on some designs; `read_slang` re-parses the source files the database points to."
+        },
         "sv-pathfinder.schematicAccentColor": {
           "type": "string",
           "default": "",

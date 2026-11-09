@@ -21,6 +21,35 @@ export function isNoYosysBackendError(e: unknown): boolean {
     return typeof e === 'object' && e !== null && (e as { code?: unknown }).code === 'NO_YOSYS_BACKEND';
 }
 
+// How a directly opened .uhdm design is elaborated (setting sv-pathfinder.schematicUhdmFrontend):
+//  'auto'       try read_uhdm (experimental importer); on any failure fall back to read_slang over the
+//               design's source files (the behavior before read_uhdm existed);
+//  'read_uhdm'  read_uhdm only, surface its errors;
+//  'read_slang' never import the database, re-parse the sources (works on every platform).
+export type UhdmFrontendMode = 'auto' | 'read_uhdm' | 'read_slang';
+export function uhdmFrontendMode(setting: unknown): UhdmFrontendMode {
+    return setting === 'read_uhdm' || setting === 'read_slang' ? setting : 'auto';
+}
+
+// The one-time note when 'auto' falls back. The first error line is enough to point at the cause.
+export function uhdmFallbackWarning(designName: string, firstErrorLine: string): string {
+    return `Schematic: read_uhdm (experimental) could not import '${designName}' — falling back to re-parsing ` +
+        `its source files with read_slang (defines/includes the database had are not available there). ` +
+        `Importer error: ${firstErrorLine.trim() || 'see the "sv-pathfinder" output'}`;
+}
+
+// Message for a Yosys process that ended abnormally. `signal` is set when the OS killed it (a crash in
+// Yosys or the plugin, or the OOM killer); `code` otherwise.
+export function yosysExitMessage(backendName: string, code: number | null, signal: string | null, usingUhdm: boolean): string {
+    if (signal) {
+        return `Yosys (${backendName}) was terminated by ${signal}` +
+            (usingUhdm ? ' while importing the .uhdm database — most likely a crash in the uhdm2rtlil importer ' +
+                '(please report it upstream with the database), or the machine ran out of memory.'
+                : ' — most likely a crash or the machine ran out of memory.');
+    }
+    return `Yosys (${backendName}) failed with code ${code ?? -1}:`;
+}
+
 // A direct .uhdm design needs the read_uhdm frontend, which only the Linux x64 runtime has.
 export function uhdmFrontendUnavailableMessage(runtimeName: string): string {
     return `This design is a .uhdm database, which the schematic reads with the read_uhdm frontend; ` +

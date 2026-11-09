@@ -14,7 +14,7 @@ import { convertToDigitalJs, extractSubtree, rootRelativeYosysPath, pickCovering
 import { svLog } from '../output';
 import { findParentModuleScope, ancestorFallbackReason, isNonModuleTopError } from './scope_nav';
 import { cleanCelltype } from './celltype';
-import { isNoYosysBackendError } from './backend_policy';
+import { isNoYosysBackendError, uhdmFrontendMode, uhdmFallbackWarning } from './backend_policy';
 import { RUNTIME_SETTING } from './runtime_policy';
 import { FromWebviewMessage, ToWebviewMessage, ElementClickMessage, ContextActionMessage, ExpandRequestMessage, ExportRequestMessage, ExportContentMessage, SourcePosition } from './messages';
 
@@ -87,14 +87,27 @@ export class SchematicViewProvider {
             // Falls back to a per-scope elaboration if the scope isn't found in the whole-design circuit
             // (e.g. a generate-name quirk). shallow mode: elaborate this scope + 1 level on demand.
             let digitalJsJson;
-            try {
-                if (ctx.uhdmFile) {
-                    // .uhdm design: read_uhdm imports the whole elaborated database (no per-scope
-                    // re-parse exists), so elaborate once at the design top and extract every scope
-                    // from that circuit. Shallow is a display prune. No ancestor fallback applies.
+            // .uhdm design: read_uhdm imports the whole elaborated database (no per-scope re-parse
+            // exists), so elaborate once at the design top and extract every scope from that circuit;
+            // shallow is a display prune. The importer (uhdm2rtlil) is EXPERIMENTAL — it fails on some
+            // real designs — so in 'auto' mode any failure falls back to the read_slang path below
+            // (re-parse the design's known source files), which is what .uhdm designs always used.
+            const uhdmMode = uhdmFrontendMode(cfg.get<string>('schematicUhdmFrontend', 'auto'));
+            let viaUhdm = false;
+            if (design.resourceUri.fsPath.endsWith('.uhdm') && uhdmMode !== 'read_slang') {
+                try {
                     digitalJsJson = await this.renderFromUhdmDesign(design, instance, ctx, preset, showDangling, force);
                     if (shallow) { digitalJsJson = pruneToShallowLevel(digitalJsJson); }
-                } else {
+                    viaUhdm = true;
+                } catch (e: any) {
+                    if (uhdmMode === 'read_uhdm') { throw e; }
+                    const first = String(e?.message ?? e).split('\n').find(l => /ERROR|terminated|not found/.test(l)) ?? String(e?.message ?? e).split('\n')[0];
+                    svLog('schematic', `read_uhdm import failed; falling back to read_slang over the source files: ${first}`);
+                    this.maybeWarnUhdmFallback(design, first);
+                }
+            }
+            try {
+                if (!digitalJsJson) {
                     digitalJsJson = !shallow
                         ? await this.renderFromFullCircuit(design, ctx, preset, showDangling, force)
                         : undefined;
@@ -103,7 +116,6 @@ export class SchematicViewProvider {
                     }
                 }
             } catch (e: any) {
-                if (ctx.uhdmFile) { throw e; }
                 // Some scopes can't be elaborated as a standalone top: one with a SystemVerilog
                 // interface port (nothing to connect it to), or one whose config comes from a param we
                 // can't reconstruct via Yosys -G (a struct/enum/array like CVA6's CVA6Cfg — in isolation
@@ -120,7 +132,7 @@ export class SchematicViewProvider {
             // hierarchy — new Circuit would build every subcircuit model (cva6: ~175s) though only the
             // top is drawn and shallow step-in re-elaborates each child anyway. Prune to the displayed
             // level. No-op for an already-shallow render.
-            if (shallow && digitalJsJson && !ctx.uhdmFile) { digitalJsJson = pruneToShallowLevel(digitalJsJson); }
+            if (shallow && digitalJsJson && !viaUhdm) { digitalJsJson = pruneToShallowLevel(digitalJsJson); }
 
             // Size guard: rendering thousands of cells freezes the webview for minutes (JointJS cell-view
             // creation/placement doesn't scale — e.g. CVA6's csr_regfile ~6900 cells took ~7 min). Warn
@@ -166,7 +178,7 @@ export class SchematicViewProvider {
             this.debouncePushValues();
             // Param-override caveat only applies to shallow's per-scope elaboration; full mode
             // elaborates from the real top so every scope's params are in-context accurate.
-            if (shallow && !ctx.uhdmFile) { this.maybeWarnSkippedParams(ctx); }
+            if (shallow && !viaUhdm) { this.maybeWarnSkippedParams(ctx); }
         } catch (e: any) {
             this.postMessage({ type: 'renderAbort' }); // no loadSchematic is coming → drop the overlay
             this.showRenderError(e);
@@ -216,14 +228,23 @@ export class SchematicViewProvider {
         return json;
     }
 
+    // One warning per design per session when read_uhdm fell back to read_slang (details are logged).
+    private readonly uhdmFallbackWarned = new Set<string>();
+    private maybeWarnUhdmFallback(design: DesignItem, firstErrorLine: string) {
+        const key = design.resourceUri.fsPath;
+        if (this.uhdmFallbackWarned.has(key)) { return; }
+        this.uhdmFallbackWarned.add(key);
+        vscode.window.showWarningMessage(uhdmFallbackWarning(path.basename(key), firstErrorLine));
+    }
+
     // .uhdm designs: one read_uhdm import of the whole database, rooted at the design's top instance,
     // cached per design/preset; every scope is extracted from it by walking instance labels (module
     // names are per-parameterization `$paramod` names there, not per-instance like read_slang's).
     private async renderFromUhdmDesign(design: DesignItem, instance: NetlistItem, ctx: ScopeContext, preset: SchematicPreset, showDangling: boolean, force: boolean): Promise<any> {
         let root = instance;
         for (let p = findParentModuleScope(root); p; p = findParentModuleScope(p)) { root = p; }
-        const rootCtx = root === instance ? ctx : await resolveScope(design, root);
-        const key = `${design.resourceUri.fsPath}|${preset}${showDangling ? '+dangling' : ''}|${rootCtx.instancePath}`;
+        const rootCtx: ScopeContext = { ...(root === instance ? ctx : await resolveScope(design, root)), uhdmFile: design.resourceUri.fsPath };
+        const key = `${design.resourceUri.fsPath}|${preset}${showDangling ? '+dangling' : ''}|read_uhdm|${rootCtx.instancePath}`;
         let entry = !force ? this.fullCircuitCache.get(key) : undefined;
         if (!entry) {
             const circuit = await vscode.window.withProgress({

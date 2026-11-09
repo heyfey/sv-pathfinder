@@ -35,10 +35,16 @@ sources by `toolchain/build-schematic-runtime.sh` (see `toolchain/versions.json`
 
 - **`.f` designs → `read_slang`.** The filelist is re-parsed with the instance's resolved parameters
   (`-G`), `-D SYNTHESIS`, and the search directories described below.
-- **`.uhdm` designs → `read_uhdm`** (Linux x64). The already elaborated UHDM database is imported as
-  it is: defines, includes and parameters were resolved by Surelog, so nothing has to be re-supplied.
-  Every parameterization is a separate module in the import. Requires a database written by the
-  Surelog release the extension's UHDM reader is built for (see GETTING_STARTED.md).
+- **`.uhdm` designs → `read_uhdm` first, `read_slang` as fallback** (`schematicUhdmFrontend`, default
+  `auto`). `read_uhdm` (Linux x64) imports the already elaborated database as it is: defines, includes
+  and parameters were resolved by Surelog, so nothing has to be re-supplied, and every
+  parameterization is a separate module. The importer ([uhdm2rtlil](https://github.com/alainmarcel/uhdm2rtlil)
+  v0.68) is **experimental**: it fails on some real designs (known: interface ports inside generate
+  loops, parameter conditions inside async resets, some hierarchical references in generate scopes,
+  and a crash on one design). When it fails, `auto` warns once and re-parses the source files the
+  database points to with `read_slang` (no defines or include dirs are known in that path; set
+  `schematicIncludeDirs` if needed). The database must come from the Surelog release the extension's
+  UHDM reader is built for (see GETTING_STARTED.md).
 - A plain `yosys` on PATH or an installed OSS CAD Suite is **not** detected; use the override above
   if you want a specific Yosys build.
 
@@ -72,6 +78,7 @@ and each source file's directory are searched automatically, so a `.f` that omit
 |---|---|
 | `sv-pathfinder.schematicRuntimePath` | Override: a runtime dir (the `bin/yosys` parent). Empty = the managed runtime, downloaded on first use. `SV_PATHFINDER_SCHEMATIC_RUNTIME` is honoured when empty. |
 | `sv-pathfinder.schematicElaborationMode` | `shallow` (default) or `full` — see above. |
+| `sv-pathfinder.schematicUhdmFrontend` | `.uhdm` designs: `auto` (default: `read_uhdm`, fall back to `read_slang`), `read_uhdm`, or `read_slang`. |
 | `sv-pathfinder.schematicIncludeDirs` | Extra `` `include`` search dirs for Yosys elaboration. |
 | `sv-pathfinder.schematicAccentColor` | Accent color for child-instance fills / hover highlights. Any CSS color; empty = theme-aware default. |
 | `sv-pathfinder.schematicShowDanglingNets` | Surface declared-but-unconnected nets. Default off. |

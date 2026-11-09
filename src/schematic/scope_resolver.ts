@@ -23,8 +23,9 @@ export interface ScopeContext {
     // Either a .f command file (preferred: slang understands -f/-F) or an explicit file list.
     dotF?: string;
     fileSet: string[];
-    // A directly opened .uhdm database: the schematic imports the already elaborated design with the
-    // read_uhdm frontend (no reparse of the sources, so no defines/includes are needed).
+    // Set by the schematic view (not by resolveScope) when THIS run should import the .uhdm database
+    // with read_uhdm instead of re-parsing the sources: the already elaborated design, no defines or
+    // includes needed. See SchematicViewProvider.renderFromUhdmDesign.
     uhdmFile?: string;
     workDir: string;               // cwd for the Yosys subprocess (relative .f paths)
 }
@@ -48,13 +49,9 @@ export async function resolveScope(design: DesignItem, instance: NetlistItem): P
 
     const designPath = design.resourceUri.fsPath;
     let dotF: string | undefined;
-    let uhdmFile: string | undefined;
     let fileSet: string[] = [];
     let workDir: string;
-    if (designPath.endsWith('.uhdm')) {
-        uhdmFile = designPath;
-        workDir = path.dirname(designPath);
-    } else if (designPath.endsWith('.f')) {
+    if (designPath.endsWith('.f')) {
         // .f designs (slang-server / Surelog flows): hand the command file to read_slang
         // (-f) — over-providing the whole filelist is the v1-correct approach.
         dotF = designPath;
@@ -70,5 +67,5 @@ export async function resolveScope(design: DesignItem, instance: NetlistItem): P
         workDir = fileSet.length > 0 ? path.dirname(fileSet[0]) : path.dirname(designPath);
     }
 
-    return { instancePath, moduleName, resolvedParams, skippedParams, childModules, dotF, fileSet, uhdmFile, workDir };
+    return { instancePath, moduleName, resolvedParams, skippedParams, childModules, dotF, fileSet, workDir };
 }

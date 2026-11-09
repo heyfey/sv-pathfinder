@@ -46,8 +46,12 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   (uhdm2rtlil v0.68, Yosys v0.68 fork, Surelog/UHDM v1.87).
 - Setting `sv-pathfinder.schematicRuntimePath` (and env `SV_PATHFINDER_SCHEMATIC_RUNTIME`) to
   point the schematic at a runtime directory of your own.
-- Schematics for directly opened `.uhdm` designs through `read_uhdm`: the elaborated database is
-  imported as it is, no defines/includes/parameters re-supplied (Linux x64 runtime).
+- Schematics for directly opened `.uhdm` designs through `read_uhdm` (experimental, Linux x64
+  runtime): the elaborated database is imported as it is, no defines/includes/parameters
+  re-supplied. Setting `sv-pathfinder.schematicUhdmFrontend` (`auto` default): when the importer
+  fails, the schematic falls back to re-parsing the source files with `read_slang` as before.
+- A Yosys process killed by a signal (crash, out of memory) is now reported as such instead of
+  "failed with code -1".
 
 ### Removed
 

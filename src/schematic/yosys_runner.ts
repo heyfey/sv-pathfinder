@@ -8,7 +8,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { ScopeContext } from './scope_resolver';
 import { absolutizeFlist, searchDirFlags, blackboxFlags, flistWithoutUvm } from '../flist';
-import { NoYosysBackendError, uhdmFrontendUnavailableMessage } from './backend_policy';
+import { NoYosysBackendError, uhdmFrontendUnavailableMessage, yosysExitMessage } from './backend_policy';
 import { isUvmError, isKeptBoundaryError } from './scope_nav';
 import { svLog } from '../output';
 import { ensureRuntime, resetRuntimeCache, resolvedRuntimeName, ResolvedRuntime } from './runtime_manager';
@@ -146,10 +146,11 @@ function macQuarantineHint(yosysCmd: string): string {
         + `  xattr -dr com.apple.quarantine "${dir}"`;
 }
 
-// A non-zero Yosys exit, carrying the raw output so callers can classify it (UVM / incomplete / …).
+// A non-zero Yosys exit or a signal death, carrying the raw output so callers can classify it
+// (UVM / incomplete / …).
 class YosysRunError extends Error {
-    constructor(public readonly out: string, public readonly code: number, backendName: string) {
-        super(`Yosys (${backendName}) failed with code ${code}:\n` + out.slice(-4000));
+    constructor(public readonly out: string, public readonly code: number, backendName: string, signal: string | null = null, usingUhdm = false) {
+        super(yosysExitMessage(backendName, code, signal, usingUhdm) + '\n' + out.slice(-4000));
         this.name = 'YosysRunError';
     }
 }
@@ -169,7 +170,7 @@ function spawnYosys(backend: Backend, script: string, workDir: string, plugin: b
             reject(new Error('Yosys timed out after 120s.' + macQuarantineHint(backend.command) + '\n' + out.slice(-4000)));
         }, 120000);
         proc.on('error', err => { clearTimeout(timer); reject(new Error(`Failed to run Yosys (${backend.command}): ${err.message}` + macQuarantineHint(backend.command))); });
-        proc.on('close', code => { clearTimeout(timer); if (code === 0) { resolve(out); } else { reject(new YosysRunError(out, code ?? -1, backend.name)); } });
+        proc.on('close', (code, signal) => { clearTimeout(timer); if (code === 0) { resolve(out); } else { reject(new YosysRunError(out, code ?? -1, backend.name, signal, plugin)); } });
     });
 }
 
