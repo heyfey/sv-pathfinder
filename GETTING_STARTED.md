@@ -46,7 +46,7 @@ Design**) and pick a **`.f`** or **`.uhdm`**.
 surelog dut.v tb.sv -elabuhdm -parse -sverilog -d uhdm
 ```
 
-Built against UHDM v1.84 — use Surelog v1.84 for compatibility. See
+Built against UHDM v1.87 — use Surelog v1.87 for compatibility. See
 [BUILD_SURELOG.md](BUILD_SURELOG.md).
 
 ## Schematic viewer

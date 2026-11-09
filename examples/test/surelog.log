@@ -636,7 +636,7 @@ design: (work@top)
             \_hier_path: (drv.vif), line:126:5, endln:126:12
             |vpiName:vif
             |vpiActual:
-            \_logic_var: (work@Env::vif), line:121:22, endln:121:25
+            \_logic_var: (work@Driver::vif), line:62:22, endln:62:25
           |vpiName:drv.vif
       |vpiStmt:
       \_assignment: , line:127:5, endln:127:22
@@ -723,7 +723,7 @@ design: (work@top)
             \_hier_path: (mon.vif), line:129:5, endln:129:12
             |vpiName:vif
             |vpiActual:
-            \_logic_var: (work@Env::vif), line:121:22, endln:121:25
+            \_logic_var: (work@Monitor::vif), line:83:22, endln:83:25
           |vpiName:mon.vif
       |vpiStmt:
       \_assignment: , line:130:5, endln:130:22
@@ -1855,14 +1855,14 @@ design: (work@top)
               \_ref_var: (work@Trans::print::k), line:56:22, endln:56:23
           |vpiName:$display
 |uhdmallClasses:
-\_class_defn: (work@mailbox), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:1:3, endln:27:11
+\_class_defn: (work@mailbox), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:1:3, endln:27:11
   |vpiParent:
   \_design: (work@top)
   |vpiName:work@mailbox
   |vpiMethod:
   \_function: (work@mailbox::new), line:3:5, endln:4:16
     |vpiParent:
-    \_class_defn: (work@mailbox), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:1:3, endln:27:11
+    \_class_defn: (work@mailbox), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:1:3, endln:27:11
     |vpiName:new
     |vpiFullName:work@mailbox::new
     |vpiMethod:1
@@ -1900,7 +1900,7 @@ design: (work@top)
   |vpiMethod:
   \_function: (work@mailbox::num), line:6:5, endln:7:16
     |vpiParent:
-    \_class_defn: (work@mailbox), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:1:3, endln:27:11
+    \_class_defn: (work@mailbox), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:1:3, endln:27:11
     |vpiName:num
     |vpiFullName:work@mailbox::num
     |vpiMethod:1
@@ -1921,7 +1921,7 @@ design: (work@top)
   |vpiMethod:
   \_task: (work@mailbox::put), line:9:5, endln:10:12
     |vpiParent:
-    \_class_defn: (work@mailbox), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:1:3, endln:27:11
+    \_class_defn: (work@mailbox), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:1:3, endln:27:11
     |vpiName:put
     |vpiFullName:work@mailbox::put
     |vpiMethod:1
@@ -1935,7 +1935,7 @@ design: (work@top)
   |vpiMethod:
   \_function: (work@mailbox::try_put), line:12:5, endln:13:16
     |vpiParent:
-    \_class_defn: (work@mailbox), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:1:3, endln:27:11
+    \_class_defn: (work@mailbox), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:1:3, endln:27:11
     |vpiName:try_put
     |vpiFullName:work@mailbox::try_put
     |vpiMethod:1
@@ -1954,7 +1954,7 @@ design: (work@top)
   |vpiMethod:
   \_task: (work@mailbox::get), line:15:5, endln:16:12
     |vpiParent:
-    \_class_defn: (work@mailbox), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:1:3, endln:27:11
+    \_class_defn: (work@mailbox), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:1:3, endln:27:11
     |vpiName:get
     |vpiFullName:work@mailbox::get
     |vpiMethod:1
@@ -1968,7 +1968,7 @@ design: (work@top)
   |vpiMethod:
   \_function: (work@mailbox::try_get), line:18:5, endln:19:16
     |vpiParent:
-    \_class_defn: (work@mailbox), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:1:3, endln:27:11
+    \_class_defn: (work@mailbox), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:1:3, endln:27:11
     |vpiName:try_get
     |vpiFullName:work@mailbox::try_get
     |vpiMethod:1
@@ -1995,7 +1995,7 @@ design: (work@top)
   |vpiMethod:
   \_task: (work@mailbox::peek), line:21:5, endln:22:12
     |vpiParent:
-    \_class_defn: (work@mailbox), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:1:3, endln:27:11
+    \_class_defn: (work@mailbox), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:1:3, endln:27:11
     |vpiName:peek
     |vpiFullName:work@mailbox::peek
     |vpiMethod:1
@@ -2009,7 +2009,7 @@ design: (work@top)
   |vpiMethod:
   \_function: (work@mailbox::try_peek), line:24:5, endln:25:16
     |vpiParent:
-    \_class_defn: (work@mailbox), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:1:3, endln:27:11
+    \_class_defn: (work@mailbox), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:1:3, endln:27:11
     |vpiName:try_peek
     |vpiFullName:work@mailbox::try_peek
     |vpiMethod:1
@@ -2034,14 +2034,14 @@ design: (work@top)
       |vpiDirection:6
       |vpiName:message
 |uhdmallClasses:
-\_class_defn: (work@process), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:30:3, endln:52:11
+\_class_defn: (work@process), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:30:3, endln:52:11
   |vpiParent:
   \_design: (work@top)
   |vpiName:work@process
   |vpiTypedef:
   \_enum_typespec: (state), line:32:5, endln:32:74
     |vpiParent:
-    \_class_defn: (work@process), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:30:3, endln:52:11
+    \_class_defn: (work@process), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:30:3, endln:52:11
     |vpiName:state
     |vpiEnumConst:
     \_enum_const: (FINISHED), line:32:20, endln:32:28
@@ -2086,7 +2086,7 @@ design: (work@top)
   |vpiMethod:
   \_function: (work@process::self), line:34:5, endln:34:11
     |vpiParent:
-    \_class_defn: (work@process), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:30:3, endln:52:11
+    \_class_defn: (work@process), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:30:3, endln:52:11
     |vpiName:self
     |vpiFullName:work@process::self
     |vpiMethod:1
@@ -2106,7 +2106,7 @@ design: (work@top)
   |vpiMethod:
   \_function: (work@process::status), line:37:5, endln:38:16
     |vpiParent:
-    \_class_defn: (work@process), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:30:3, endln:52:11
+    \_class_defn: (work@process), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:30:3, endln:52:11
     |vpiName:status
     |vpiFullName:work@process::status
     |vpiMethod:1
@@ -2126,7 +2126,7 @@ design: (work@top)
   |vpiMethod:
   \_task: (work@process::kill), line:40:5, endln:41:12
     |vpiParent:
-    \_class_defn: (work@process), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:30:3, endln:52:11
+    \_class_defn: (work@process), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:30:3, endln:52:11
     |vpiName:kill
     |vpiFullName:work@process::kill
     |vpiMethod:1
@@ -2134,7 +2134,7 @@ design: (work@top)
   |vpiMethod:
   \_task: (work@process::await), line:43:5, endln:44:12
     |vpiParent:
-    \_class_defn: (work@process), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:30:3, endln:52:11
+    \_class_defn: (work@process), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:30:3, endln:52:11
     |vpiName:await
     |vpiFullName:work@process::await
     |vpiMethod:1
@@ -2142,7 +2142,7 @@ design: (work@top)
   |vpiMethod:
   \_task: (work@process::suspend), line:46:5, endln:47:12
     |vpiParent:
-    \_class_defn: (work@process), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:30:3, endln:52:11
+    \_class_defn: (work@process), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:30:3, endln:52:11
     |vpiName:suspend
     |vpiFullName:work@process::suspend
     |vpiMethod:1
@@ -2150,20 +2150,20 @@ design: (work@top)
   |vpiMethod:
   \_task: (work@process::resume), line:49:5, endln:50:12
     |vpiParent:
-    \_class_defn: (work@process), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:30:3, endln:52:11
+    \_class_defn: (work@process), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:30:3, endln:52:11
     |vpiName:resume
     |vpiFullName:work@process::resume
     |vpiMethod:1
     |vpiVisibility:1
 |uhdmallClasses:
-\_class_defn: (work@semaphore), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:55:3, endln:69:11
+\_class_defn: (work@semaphore), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:55:3, endln:69:11
   |vpiParent:
   \_design: (work@top)
   |vpiName:work@semaphore
   |vpiMethod:
   \_function: (work@semaphore::new), line:57:5, endln:58:16
     |vpiParent:
-    \_class_defn: (work@semaphore), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:55:3, endln:69:11
+    \_class_defn: (work@semaphore), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:55:3, endln:69:11
     |vpiName:new
     |vpiFullName:work@semaphore::new
     |vpiMethod:1
@@ -2201,7 +2201,7 @@ design: (work@top)
   |vpiMethod:
   \_task: (work@semaphore::put), line:60:5, endln:61:12
     |vpiParent:
-    \_class_defn: (work@semaphore), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:55:3, endln:69:11
+    \_class_defn: (work@semaphore), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:55:3, endln:69:11
     |vpiName:put
     |vpiFullName:work@semaphore::put
     |vpiMethod:1
@@ -2228,7 +2228,7 @@ design: (work@top)
   |vpiMethod:
   \_task: (work@semaphore::get), line:63:5, endln:64:12
     |vpiParent:
-    \_class_defn: (work@semaphore), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:55:3, endln:69:11
+    \_class_defn: (work@semaphore), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:55:3, endln:69:11
     |vpiName:get
     |vpiFullName:work@semaphore::get
     |vpiMethod:1
@@ -2255,7 +2255,7 @@ design: (work@top)
   |vpiMethod:
   \_function: (work@semaphore::try_get), line:66:5, endln:67:16
     |vpiParent:
-    \_class_defn: (work@semaphore), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:55:3, endln:69:11
+    \_class_defn: (work@semaphore), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:55:3, endln:69:11
     |vpiName:try_get
     |vpiFullName:work@semaphore::try_get
     |vpiMethod:1
@@ -5147,6 +5147,8 @@ design: (work@top)
         \_logic_var: (double_offset), line:9:10, endln:9:15
 |uhdmtopModules:
 \_module_inst: work@top (work@top), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/dut.v, line:178:1, endln:193:10
+  |vpiParent:
+  \_design: (work@top)
   |vpiName:work@top
   |vpiVariables:
   \_logic_var: (work@top.clk), line:179:9, endln:179:16
@@ -5447,7 +5449,7 @@ design: (work@top)
         |vpiName:clk
         |vpiFullName:work@top.clk
         |vpiActual:
-        \_logic_net: (work@top.cif.clk), line:2:35, endln:2:38
+        \_logic_var: (work@top.clk), line:179:9, endln:179:16
       |vpiLowConn:
       \_ref_obj: (work@top.cif.clk), line:182:18, endln:182:21
         |vpiParent:
@@ -5681,7 +5683,7 @@ design: (work@top)
           |vpiName:clk
           |vpiFullName:work@top.smc_inst.clk.clk
           |vpiActual:
-          \_logic_net: (work@top.smc_inst.clk), line:127:14, endln:127:17
+          \_logic_net: (work@top.cif.clk), line:2:35, endln:2:38
         |vpiName:cif.clk
       |vpiLowConn:
       \_ref_obj: (work@top.smc_inst.clk), line:186:6, endln:186:9
@@ -5724,7 +5726,7 @@ design: (work@top)
           |vpiName:rst
           |vpiFullName:work@top.smc_inst.rst.rst
           |vpiActual:
-          \_logic_net: (work@top.smc_inst.rst), line:128:14, endln:128:17
+          \_logic_var: (work@top.cif.rst), line:3:9, endln:3:12
         |vpiName:cif.rst
       |vpiLowConn:
       \_ref_obj: (work@top.smc_inst.rst), line:187:6, endln:187:9
@@ -5767,7 +5769,7 @@ design: (work@top)
           |vpiName:load
           |vpiFullName:work@top.smc_inst.load.load
           |vpiActual:
-          \_logic_net: (work@top.smc_inst.load), line:129:14, endln:129:18
+          \_logic_var: (work@top.cif.load), line:3:14, endln:3:18
         |vpiName:cif.load
       |vpiLowConn:
       \_ref_obj: (work@top.smc_inst.load), line:188:6, endln:188:10
@@ -5810,7 +5812,7 @@ design: (work@top)
           |vpiName:data
           |vpiFullName:work@top.smc_inst.data.data
           |vpiActual:
-          \_logic_net: (work@top.smc_inst.data), line:130:20, endln:130:24
+          \_logic_var: (work@top.cif.data), line:4:15, endln:4:19
         |vpiName:cif.data
       |vpiLowConn:
       \_ref_obj: (work@top.smc_inst.data), line:189:6, endln:189:10
@@ -5853,7 +5855,7 @@ design: (work@top)
           |vpiName:count
           |vpiFullName:work@top.smc_inst.count.count
           |vpiActual:
-          \_logic_net: (work@top.smc_inst.count), line:131:21, endln:131:26
+          \_logic_var: (work@top.cif.count), line:4:21, endln:4:26
         |vpiName:cif.count
       |vpiLowConn:
       \_ref_obj: (work@top.smc_inst.count), line:190:6, endln:190:11
@@ -6120,7 +6122,7 @@ design: (work@top)
               |vpiName:clk
               |vpiFullName:work@top.smc_inst.gen_mc[0].clk
               |vpiActual:
-              \_logic_net: (work@top.smc_inst.gen_mc[0].mc_inst.clk), line:86:14, endln:86:17
+              \_logic_net: (work@top.smc_inst.clk), line:127:14, endln:127:17
             |vpiLowConn:
             \_ref_obj: (work@top.smc_inst.gen_mc[0].mc_inst.clk), line:141:10, endln:141:13
               |vpiParent:
@@ -6151,7 +6153,7 @@ design: (work@top)
               |vpiName:rst
               |vpiFullName:work@top.smc_inst.gen_mc[0].rst
               |vpiActual:
-              \_logic_net: (work@top.smc_inst.gen_mc[0].mc_inst.rst), line:87:14, endln:87:17
+              \_logic_net: (work@top.smc_inst.rst), line:128:14, endln:128:17
             |vpiLowConn:
             \_ref_obj: (work@top.smc_inst.gen_mc[0].mc_inst.rst), line:142:10, endln:142:13
               |vpiParent:
@@ -6182,7 +6184,7 @@ design: (work@top)
               |vpiName:load
               |vpiFullName:work@top.smc_inst.gen_mc[0].load
               |vpiActual:
-              \_logic_net: (work@top.smc_inst.gen_mc[0].mc_inst.load), line:88:14, endln:88:18
+              \_logic_net: (work@top.smc_inst.load), line:129:14, endln:129:18
             |vpiLowConn:
             \_ref_obj: (work@top.smc_inst.gen_mc[0].mc_inst.load), line:143:10, endln:143:14
               |vpiParent:
@@ -6213,7 +6215,7 @@ design: (work@top)
               |vpiName:data
               |vpiFullName:work@top.smc_inst.gen_mc[0].data
               |vpiActual:
-              \_logic_net: (work@top.smc_inst.gen_mc[0].mc_inst.data), line:89:20, endln:89:24
+              \_logic_net: (work@top.smc_inst.data), line:130:20, endln:130:24
             |vpiLowConn:
             \_ref_obj: (work@top.smc_inst.gen_mc[0].mc_inst.data), line:144:10, endln:144:14
               |vpiParent:
@@ -6244,7 +6246,7 @@ design: (work@top)
               |vpiName:internal_count
               |vpiFullName:work@top.smc_inst.gen_mc[0].mc_inst.internal_count
               |vpiActual:
-              \_array_net: (work@top.smc_inst.gen_mc[0].mc_inst.internal_count), line:96:14, endln:96:28
+              \_array_net: (work@top.smc_inst.internal_count), line:135:14, endln:135:28
               |vpiIndex:
               \_constant: , line:145:31, endln:145:32
                 |vpiParent:
@@ -6481,7 +6483,7 @@ design: (work@top)
                     |vpiName:clk
                     |vpiFullName:work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].clk
                     |vpiActual:
-                    \_logic_net: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.clk), line:64:14, endln:64:17
+                    \_logic_net: (work@top.smc_inst.gen_mc[0].mc_inst.clk), line:86:14, endln:86:17
                   |vpiLowConn:
                   \_ref_obj: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.clk), line:112:10, endln:112:13
                     |vpiParent:
@@ -6512,7 +6514,7 @@ design: (work@top)
                     |vpiName:rst
                     |vpiFullName:work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].rst
                     |vpiActual:
-                    \_logic_net: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.rst), line:65:14, endln:65:17
+                    \_logic_net: (work@top.smc_inst.gen_mc[0].mc_inst.rst), line:87:14, endln:87:17
                   |vpiLowConn:
                   \_ref_obj: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.rst), line:113:10, endln:113:13
                     |vpiParent:
@@ -6747,7 +6749,7 @@ design: (work@top)
                       |vpiName:clk
                       |vpiFullName:work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.clk
                       |vpiActual:
-                      \_logic_net: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.ccell.clk), line:43:14, endln:43:17
+                      \_logic_net: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.clk), line:64:14, endln:64:17
                     |vpiLowConn:
                     \_ref_obj: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.ccell.clk), line:73:6, endln:73:9
                       |vpiParent:
@@ -6778,7 +6780,7 @@ design: (work@top)
                       |vpiName:rst
                       |vpiFullName:work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.rst
                       |vpiActual:
-                      \_logic_net: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.ccell.rst), line:44:14, endln:44:17
+                      \_logic_net: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.rst), line:65:14, endln:65:17
                     |vpiLowConn:
                     \_ref_obj: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.ccell.rst), line:74:6, endln:74:9
                       |vpiParent:
@@ -6809,7 +6811,7 @@ design: (work@top)
                       |vpiName:load
                       |vpiFullName:work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.load
                       |vpiActual:
-                      \_logic_net: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.ccell.load), line:45:14, endln:45:18
+                      \_logic_net: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.load), line:66:14, endln:66:18
                     |vpiLowConn:
                     \_ref_obj: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.ccell.load), line:75:6, endln:75:10
                       |vpiParent:
@@ -6840,7 +6842,7 @@ design: (work@top)
                       |vpiName:data
                       |vpiFullName:work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.data
                       |vpiActual:
-                      \_logic_net: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.ccell.data), line:46:20, endln:46:24
+                      \_logic_net: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.data), line:67:20, endln:67:24
                     |vpiLowConn:
                     \_ref_obj: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.ccell.data), line:76:6, endln:76:10
                       |vpiParent:
@@ -6871,7 +6873,7 @@ design: (work@top)
                       |vpiName:count
                       |vpiFullName:work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.count
                       |vpiActual:
-                      \_logic_net: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.ccell.count), line:47:21, endln:47:26
+                      \_logic_net: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.count), line:68:21, endln:68:26
                     |vpiLowConn:
                     \_ref_obj: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.ccell.count), line:77:6, endln:77:11
                       |vpiParent:
@@ -6983,7 +6985,7 @@ design: (work@top)
                         |vpiName:clk
                         |vpiFullName:work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.ccell.clk
                         |vpiActual:
-                        \_logic_net: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.ccell.dut.clk), line:18:14, endln:18:17
+                        \_logic_net: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.ccell.clk), line:43:14, endln:43:17
                       |vpiLowConn:
                       \_ref_obj: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.ccell.dut.clk), line:52:6, endln:52:9
                         |vpiParent:
@@ -7014,7 +7016,7 @@ design: (work@top)
                         |vpiName:rst
                         |vpiFullName:work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.ccell.rst
                         |vpiActual:
-                        \_logic_net: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.ccell.dut.rst), line:19:14, endln:19:17
+                        \_logic_net: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.ccell.rst), line:44:14, endln:44:17
                       |vpiLowConn:
                       \_ref_obj: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.ccell.dut.rst), line:53:6, endln:53:9
                         |vpiParent:
@@ -7045,7 +7047,7 @@ design: (work@top)
                         |vpiName:load
                         |vpiFullName:work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.ccell.load
                         |vpiActual:
-                        \_logic_net: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.ccell.dut.load), line:20:14, endln:20:18
+                        \_logic_net: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.ccell.load), line:45:14, endln:45:18
                       |vpiLowConn:
                       \_ref_obj: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.ccell.dut.load), line:54:6, endln:54:10
                         |vpiParent:
@@ -7128,7 +7130,7 @@ design: (work@top)
                         |vpiName:count
                         |vpiFullName:work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.ccell.count
                         |vpiActual:
-                        \_logic_net: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.ccell.dut.count), line:22:20, endln:22:25
+                        \_logic_net: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.ccell.count), line:47:21, endln:47:26
                       |vpiLowConn:
                       \_ref_obj: (work@top.smc_inst.gen_mc[0].mc_inst.gen_wrappers[0].wrp.ccell.dut.count), line:56:6, endln:56:11
                         |vpiParent:
@@ -7635,7 +7637,7 @@ design: (work@top)
               |vpiName:clk
               |vpiFullName:work@top.smc_inst.gen_mc[1].clk
               |vpiActual:
-              \_logic_net: (work@top.smc_inst.gen_mc[1].mc_inst.clk), line:86:14, endln:86:17
+              \_logic_net: (work@top.smc_inst.clk), line:127:14, endln:127:17
             |vpiLowConn:
             \_ref_obj: (work@top.smc_inst.gen_mc[1].mc_inst.clk), line:141:10, endln:141:13
               |vpiParent:
@@ -7666,7 +7668,7 @@ design: (work@top)
               |vpiName:rst
               |vpiFullName:work@top.smc_inst.gen_mc[1].rst
               |vpiActual:
-              \_logic_net: (work@top.smc_inst.gen_mc[1].mc_inst.rst), line:87:14, endln:87:17
+              \_logic_net: (work@top.smc_inst.rst), line:128:14, endln:128:17
             |vpiLowConn:
             \_ref_obj: (work@top.smc_inst.gen_mc[1].mc_inst.rst), line:142:10, endln:142:13
               |vpiParent:
@@ -7697,7 +7699,7 @@ design: (work@top)
               |vpiName:load
               |vpiFullName:work@top.smc_inst.gen_mc[1].load
               |vpiActual:
-              \_logic_net: (work@top.smc_inst.gen_mc[1].mc_inst.load), line:88:14, endln:88:18
+              \_logic_net: (work@top.smc_inst.load), line:129:14, endln:129:18
             |vpiLowConn:
             \_ref_obj: (work@top.smc_inst.gen_mc[1].mc_inst.load), line:143:10, endln:143:14
               |vpiParent:
@@ -7728,7 +7730,7 @@ design: (work@top)
               |vpiName:data
               |vpiFullName:work@top.smc_inst.gen_mc[1].data
               |vpiActual:
-              \_logic_net: (work@top.smc_inst.gen_mc[1].mc_inst.data), line:89:20, endln:89:24
+              \_logic_net: (work@top.smc_inst.data), line:130:20, endln:130:24
             |vpiLowConn:
             \_ref_obj: (work@top.smc_inst.gen_mc[1].mc_inst.data), line:144:10, endln:144:14
               |vpiParent:
@@ -7759,7 +7761,7 @@ design: (work@top)
               |vpiName:internal_count
               |vpiFullName:work@top.smc_inst.gen_mc[1].mc_inst.internal_count
               |vpiActual:
-              \_array_net: (work@top.smc_inst.gen_mc[1].mc_inst.internal_count), line:96:14, endln:96:28
+              \_array_net: (work@top.smc_inst.internal_count), line:135:14, endln:135:28
               |vpiIndex:
               \_constant: , line:145:31, endln:145:32
                 |vpiParent:
@@ -7996,7 +7998,7 @@ design: (work@top)
                     |vpiName:clk
                     |vpiFullName:work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].clk
                     |vpiActual:
-                    \_logic_net: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.clk), line:64:14, endln:64:17
+                    \_logic_net: (work@top.smc_inst.gen_mc[1].mc_inst.clk), line:86:14, endln:86:17
                   |vpiLowConn:
                   \_ref_obj: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.clk), line:112:10, endln:112:13
                     |vpiParent:
@@ -8027,7 +8029,7 @@ design: (work@top)
                     |vpiName:rst
                     |vpiFullName:work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].rst
                     |vpiActual:
-                    \_logic_net: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.rst), line:65:14, endln:65:17
+                    \_logic_net: (work@top.smc_inst.gen_mc[1].mc_inst.rst), line:87:14, endln:87:17
                   |vpiLowConn:
                   \_ref_obj: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.rst), line:113:10, endln:113:13
                     |vpiParent:
@@ -8262,7 +8264,7 @@ design: (work@top)
                       |vpiName:clk
                       |vpiFullName:work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.clk
                       |vpiActual:
-                      \_logic_net: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.ccell.clk), line:43:14, endln:43:17
+                      \_logic_net: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.clk), line:64:14, endln:64:17
                     |vpiLowConn:
                     \_ref_obj: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.ccell.clk), line:73:6, endln:73:9
                       |vpiParent:
@@ -8293,7 +8295,7 @@ design: (work@top)
                       |vpiName:rst
                       |vpiFullName:work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.rst
                       |vpiActual:
-                      \_logic_net: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.ccell.rst), line:44:14, endln:44:17
+                      \_logic_net: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.rst), line:65:14, endln:65:17
                     |vpiLowConn:
                     \_ref_obj: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.ccell.rst), line:74:6, endln:74:9
                       |vpiParent:
@@ -8324,7 +8326,7 @@ design: (work@top)
                       |vpiName:load
                       |vpiFullName:work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.load
                       |vpiActual:
-                      \_logic_net: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.ccell.load), line:45:14, endln:45:18
+                      \_logic_net: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.load), line:66:14, endln:66:18
                     |vpiLowConn:
                     \_ref_obj: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.ccell.load), line:75:6, endln:75:10
                       |vpiParent:
@@ -8355,7 +8357,7 @@ design: (work@top)
                       |vpiName:data
                       |vpiFullName:work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.data
                       |vpiActual:
-                      \_logic_net: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.ccell.data), line:46:20, endln:46:24
+                      \_logic_net: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.data), line:67:20, endln:67:24
                     |vpiLowConn:
                     \_ref_obj: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.ccell.data), line:76:6, endln:76:10
                       |vpiParent:
@@ -8386,7 +8388,7 @@ design: (work@top)
                       |vpiName:count
                       |vpiFullName:work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.count
                       |vpiActual:
-                      \_logic_net: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.ccell.count), line:47:21, endln:47:26
+                      \_logic_net: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.count), line:68:21, endln:68:26
                     |vpiLowConn:
                     \_ref_obj: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.ccell.count), line:77:6, endln:77:11
                       |vpiParent:
@@ -8498,7 +8500,7 @@ design: (work@top)
                         |vpiName:clk
                         |vpiFullName:work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.ccell.clk
                         |vpiActual:
-                        \_logic_net: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.ccell.dut.clk), line:18:14, endln:18:17
+                        \_logic_net: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.ccell.clk), line:43:14, endln:43:17
                       |vpiLowConn:
                       \_ref_obj: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.ccell.dut.clk), line:52:6, endln:52:9
                         |vpiParent:
@@ -8529,7 +8531,7 @@ design: (work@top)
                         |vpiName:rst
                         |vpiFullName:work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.ccell.rst
                         |vpiActual:
-                        \_logic_net: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.ccell.dut.rst), line:19:14, endln:19:17
+                        \_logic_net: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.ccell.rst), line:44:14, endln:44:17
                       |vpiLowConn:
                       \_ref_obj: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.ccell.dut.rst), line:53:6, endln:53:9
                         |vpiParent:
@@ -8560,7 +8562,7 @@ design: (work@top)
                         |vpiName:load
                         |vpiFullName:work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.ccell.load
                         |vpiActual:
-                        \_logic_net: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.ccell.dut.load), line:20:14, endln:20:18
+                        \_logic_net: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.ccell.load), line:45:14, endln:45:18
                       |vpiLowConn:
                       \_ref_obj: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.ccell.dut.load), line:54:6, endln:54:10
                         |vpiParent:
@@ -8643,7 +8645,7 @@ design: (work@top)
                         |vpiName:count
                         |vpiFullName:work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.ccell.count
                         |vpiActual:
-                        \_logic_net: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.ccell.dut.count), line:22:20, endln:22:25
+                        \_logic_net: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.ccell.count), line:47:21, endln:47:26
                       |vpiLowConn:
                       \_ref_obj: (work@top.smc_inst.gen_mc[1].mc_inst.gen_wrappers[0].wrp.ccell.dut.count), line:56:6, endln:56:11
                         |vpiParent:
@@ -9419,7 +9421,7 @@ design: (work@top)
   |vpiName:i
 \_function: (work@mailbox::new), line:3:5, endln:4:16
   |vpiParent:
-  \_class_defn: (work@mailbox), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:1:3, endln:27:11
+  \_class_defn: (work@mailbox), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:1:3, endln:27:11
   |vpiName:new
   |vpiFullName:work@mailbox::new
   |vpiMethod:1
@@ -9442,12 +9444,12 @@ design: (work@top)
       \_int_typespec: , line:3:19, endln:3:22
 \_class_typespec: 
   |vpiClassDefn:
-  \_class_defn: (work@mailbox), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:1:3, endln:27:11
+  \_class_defn: (work@mailbox), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:1:3, endln:27:11
 \_int_typespec: , line:3:19, endln:3:22
   |vpiSigned:1
 \_function: (work@mailbox::num), line:6:5, endln:7:16
   |vpiParent:
-  \_class_defn: (work@mailbox), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:1:3, endln:27:11
+  \_class_defn: (work@mailbox), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:1:3, endln:27:11
   |vpiName:num
   |vpiFullName:work@mailbox::num
   |vpiMethod:1
@@ -9458,7 +9460,7 @@ design: (work@top)
   |vpiSigned:1
 \_task: (work@mailbox::put), line:9:5, endln:10:12
   |vpiParent:
-  \_class_defn: (work@mailbox), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:1:3, endln:27:11
+  \_class_defn: (work@mailbox), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:1:3, endln:27:11
   |vpiName:put
   |vpiFullName:work@mailbox::put
   |vpiMethod:1
@@ -9471,7 +9473,7 @@ design: (work@top)
     |vpiName:message
 \_function: (work@mailbox::try_put), line:12:5, endln:13:16
   |vpiParent:
-  \_class_defn: (work@mailbox), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:1:3, endln:27:11
+  \_class_defn: (work@mailbox), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:1:3, endln:27:11
   |vpiName:try_put
   |vpiFullName:work@mailbox::try_put
   |vpiMethod:1
@@ -9486,7 +9488,7 @@ design: (work@top)
     |vpiName:message
 \_task: (work@mailbox::get), line:15:5, endln:16:12
   |vpiParent:
-  \_class_defn: (work@mailbox), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:1:3, endln:27:11
+  \_class_defn: (work@mailbox), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:1:3, endln:27:11
   |vpiName:get
   |vpiFullName:work@mailbox::get
   |vpiMethod:1
@@ -9499,7 +9501,7 @@ design: (work@top)
     |vpiName:message
 \_function: (work@mailbox::try_get), line:18:5, endln:19:16
   |vpiParent:
-  \_class_defn: (work@mailbox), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:1:3, endln:27:11
+  \_class_defn: (work@mailbox), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:1:3, endln:27:11
   |vpiName:try_get
   |vpiFullName:work@mailbox::try_get
   |vpiMethod:1
@@ -9516,7 +9518,7 @@ design: (work@top)
   |vpiSigned:1
 \_function: (work@mailbox::try_peek), line:24:5, endln:25:16
   |vpiParent:
-  \_class_defn: (work@mailbox), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:1:3, endln:27:11
+  \_class_defn: (work@mailbox), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:1:3, endln:27:11
   |vpiName:try_peek
   |vpiFullName:work@mailbox::try_peek
   |vpiMethod:1
@@ -9533,7 +9535,7 @@ design: (work@top)
   |vpiSigned:1
 \_enum_typespec: (state), line:32:5, endln:32:74
   |vpiParent:
-  \_class_defn: (work@process), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:30:3, endln:52:11
+  \_class_defn: (work@process), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:30:3, endln:52:11
   |vpiName:state
   |vpiEnumConst:
   \_enum_const: (FINISHED), line:32:20, endln:32:28
@@ -9577,7 +9579,7 @@ design: (work@top)
     |vpiSize:64
 \_function: (work@process::self), line:34:5, endln:34:11
   |vpiParent:
-  \_class_defn: (work@process), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:30:3, endln:52:11
+  \_class_defn: (work@process), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:30:3, endln:52:11
   |vpiName:self
   |vpiFullName:work@process::self
   |vpiMethod:1
@@ -9586,10 +9588,10 @@ design: (work@top)
   \_class_var: (work@process::self), line:34:21, endln:34:28
 \_class_typespec: , line:34:21, endln:34:28
   |vpiClassDefn:
-  \_class_defn: (work@process), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:30:3, endln:52:11
+  \_class_defn: (work@process), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:30:3, endln:52:11
 \_function: (work@process::status), line:37:5, endln:38:16
   |vpiParent:
-  \_class_defn: (work@process), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:30:3, endln:52:11
+  \_class_defn: (work@process), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:30:3, endln:52:11
   |vpiName:status
   |vpiFullName:work@process::status
   |vpiMethod:1
@@ -9598,7 +9600,7 @@ design: (work@top)
   \_enum_var: (work@process::status), line:37:14, endln:37:19
 \_function: (work@semaphore::new), line:57:5, endln:58:16
   |vpiParent:
-  \_class_defn: (work@semaphore), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:55:3, endln:69:11
+  \_class_defn: (work@semaphore), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:55:3, endln:69:11
   |vpiName:new
   |vpiFullName:work@semaphore::new
   |vpiMethod:1
@@ -9621,12 +9623,12 @@ design: (work@top)
       \_int_typespec: , line:57:18, endln:57:21
 \_class_typespec: 
   |vpiClassDefn:
-  \_class_defn: (work@semaphore), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:55:3, endln:69:11
+  \_class_defn: (work@semaphore), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:55:3, endln:69:11
 \_int_typespec: , line:57:18, endln:57:21
   |vpiSigned:1
 \_task: (work@semaphore::put), line:60:5, endln:61:12
   |vpiParent:
-  \_class_defn: (work@semaphore), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:55:3, endln:69:11
+  \_class_defn: (work@semaphore), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:55:3, endln:69:11
   |vpiName:put
   |vpiFullName:work@semaphore::put
   |vpiMethod:1
@@ -9650,7 +9652,7 @@ design: (work@top)
   |vpiSigned:1
 \_task: (work@semaphore::get), line:63:5, endln:64:12
   |vpiParent:
-  \_class_defn: (work@semaphore), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:55:3, endln:69:11
+  \_class_defn: (work@semaphore), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:55:3, endln:69:11
   |vpiName:get
   |vpiFullName:work@semaphore::get
   |vpiMethod:1
@@ -9674,7 +9676,7 @@ design: (work@top)
   |vpiSigned:1
 \_function: (work@semaphore::try_get), line:66:5, endln:67:16
   |vpiParent:
-  \_class_defn: (work@semaphore), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:55:3, endln:69:11
+  \_class_defn: (work@semaphore), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:55:3, endln:69:11
   |vpiName:try_get
   |vpiFullName:work@semaphore::try_get
   |vpiMethod:1
@@ -9704,31 +9706,31 @@ design: (work@top)
   |vpiName:Trans
   |vpiClassDefn:
   \_class_defn: (work@Trans), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/tb.sv, line:32:1, endln:58:9
-\_sys_func_call: ($display), line:68:5, endln:68:35
+\_class_var: (work@Driver::run::t), line:67:11, endln:67:12
   |vpiParent:
   \_begin: (work@Driver::run), line:68:5, endln:68:36
-  |vpiArgument:
-  \_constant: , line:68:14, endln:68:34
-  |vpiName:$display
+  |vpiTypespec:
+  \_ref_typespec: (work@Driver::run::t)
+    |vpiParent:
+    \_class_var: (work@Driver::run::t), line:67:11, endln:67:12
+    |vpiFullName:work@Driver::run::t
+    |vpiActual:
+    \_class_typespec: (Trans), line:67:5, endln:67:10
+  |vpiName:t
+  |vpiFullName:work@Driver::run::t
 \_begin: (work@Driver::run), line:68:5, endln:68:36
   |vpiParent:
   \_task: (work@Driver::run), line:66:3, endln:78:10
   |vpiFullName:work@Driver::run
   |vpiVariables:
   \_class_var: (work@Driver::run::t), line:67:11, endln:67:12
-    |vpiParent:
-    \_begin: (work@Driver::run), line:68:5, endln:68:36
-    |vpiTypespec:
-    \_ref_typespec: (work@Driver::run::t)
-      |vpiParent:
-      \_class_var: (work@Driver::run::t), line:67:11, endln:67:12
-      |vpiFullName:work@Driver::run::t
-      |vpiActual:
-      \_class_typespec: (Trans), line:67:5, endln:67:10
-    |vpiName:t
-    |vpiFullName:work@Driver::run::t
   |vpiStmt:
   \_sys_func_call: ($display), line:68:5, endln:68:35
+    |vpiParent:
+    \_begin: (work@Driver::run), line:68:5, endln:68:36
+    |vpiArgument:
+    \_constant: , line:68:14, endln:68:34
+    |vpiName:$display
   |vpiStmt:
   \_forever_stmt: , line:69:5, endln:69:12
     |vpiParent:
@@ -12320,12 +12322,19 @@ design: (work@top)
   |vpiStmt:
   \_event_control: , line:168:18, endln:168:22
   |vpiAlwaysType:1
+\_logic_var: (work@Driver::vif), line:62:22, endln:62:25
+  |vpiParent:
+  \_class_defn: (work@Driver), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/tb.sv, line:61:1, endln:79:9
+  |vpiName:vif
+  |vpiFullName:work@Driver::vif
+  |vpiAutomatic:1
+  |vpiVisibility:1
 \_class_typespec: (mailbox), line:63:3, endln:63:10
   |vpiParent:
   \_class_var: (work@Driver::mbx), line:63:20, endln:63:23
   |vpiName:mailbox
   |vpiClassDefn:
-  \_class_defn: (work@mailbox), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:1:3, endln:27:11
+  \_class_defn: (work@mailbox), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:1:3, endln:27:11
 \_class_var: (work@Driver::mbx), line:63:20, endln:63:23
   |vpiParent:
   \_class_defn: (work@Driver), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/tb.sv, line:61:1, endln:79:9
@@ -12345,7 +12354,7 @@ design: (work@top)
   \_class_var: (work@Driver::sem), line:64:13, endln:64:16
   |vpiName:semaphore
   |vpiClassDefn:
-  \_class_defn: (work@semaphore), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:55:3, endln:69:11
+  \_class_defn: (work@semaphore), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:55:3, endln:69:11
 \_method_func_call: (new)
   |vpiParent:
   \_class_var: (work@Driver::sem), line:64:13, endln:64:16
@@ -12433,7 +12442,7 @@ design: (work@top)
   \_class_var: (work@Env::drv_mbx), line:119:20, endln:119:27
   |vpiName:mailbox
   |vpiClassDefn:
-  \_class_defn: (work@mailbox), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:1:3, endln:27:11
+  \_class_defn: (work@mailbox), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:1:3, endln:27:11
 \_class_var: (work@Env::drv_mbx), line:119:20, endln:119:27
   |vpiParent:
   \_class_defn: (work@Env), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/tb.sv, line:115:1, endln:142:9
@@ -12458,7 +12467,7 @@ design: (work@top)
   \_class_var: (work@Env::mon_mbx), line:120:24, endln:120:31
   |vpiName:mailbox
   |vpiClassDefn:
-  \_class_defn: (work@mailbox), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:1:3, endln:27:11
+  \_class_defn: (work@mailbox), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:1:3, endln:27:11
 \_class_var: (work@Env::mon_mbx), line:120:24, endln:120:31
   |vpiParent:
   \_class_defn: (work@Env), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/tb.sv, line:115:1, endln:142:9
@@ -12478,12 +12487,19 @@ design: (work@top)
     |vpiParent:
     \_class_var: (work@Env::mon_mbx), line:120:24, endln:120:31
     |vpiName:new
+\_logic_var: (work@Monitor::vif), line:83:22, endln:83:25
+  |vpiParent:
+  \_class_defn: (work@Monitor), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/tb.sv, line:82:1, endln:94:9
+  |vpiName:vif
+  |vpiFullName:work@Monitor::vif
+  |vpiAutomatic:1
+  |vpiVisibility:1
 \_class_typespec: (mailbox), line:84:3, endln:84:10
   |vpiParent:
   \_class_var: (work@Monitor::mbx), line:84:24, endln:84:27
   |vpiName:mailbox
   |vpiClassDefn:
-  \_class_defn: (work@mailbox), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:1:3, endln:27:11
+  \_class_defn: (work@mailbox), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:1:3, endln:27:11
 \_class_var: (work@Monitor::mbx), line:84:24, endln:84:27
   |vpiParent:
   \_class_defn: (work@Monitor), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/tb.sv, line:82:1, endln:94:9
@@ -12503,7 +12519,7 @@ design: (work@top)
   \_class_var: (work@Scoreboard::mbx), line:98:24, endln:98:27
   |vpiName:mailbox
   |vpiClassDefn:
-  \_class_defn: (work@mailbox), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/builtin.sv, line:1:3, endln:27:11
+  \_class_defn: (work@mailbox), file:/home/heyfey/orca/workspaces/sv-pathfinder/koi/builtin.sv, line:1:3, endln:27:11
 \_class_var: (work@Scoreboard::mbx), line:98:24, endln:98:27
   |vpiParent:
   \_class_defn: (work@Scoreboard), file:/home/heyfey/git-repos/sv-pathfinder/examples/test/tb.sv, line:97:1, endln:112:9

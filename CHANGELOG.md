@@ -6,6 +6,12 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+### Changed
+
+- Native UHDM reader rebuilt against UHDM v1.87 (was v1.84); use Surelog v1.87 to
+  generate compatible `.uhdm` databases. The bundled example database was regenerated
+  with Surelog v1.87.
+
 ### Added
 
 - Interactive schematic viewer (preview): "Show Schematic" on a hierarchy scope,

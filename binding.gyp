@@ -1,6 +1,6 @@
 {
   "variables": {
-    "UHDM_HOME": "/home/heyfey/git-repos/UHDM-1.84/build", # /path/to/uhdm
+    "UHDM_HOME": "/home/heyfey/git-repos/UHDM/build", # /path/to/uhdm (v1.87), configured with -DCMAKE_POSITION_INDEPENDENT_CODE=ON
   },
   "targets": [
     {

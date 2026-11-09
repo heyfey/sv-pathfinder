@@ -1,11 +1,11 @@
-# Build Surelog (v1.84)
+# Build Surelog (v1.87)
 
-This extension is built with UHDM v1.84. It's recommended to use Surelog v1.84 to ensure compatibility.
+This extension is built with UHDM v1.87. It's recommended to use Surelog v1.87 to ensure compatibility.
 
 ```
-git clone https://github.com/chipsalliance/Surelog.git Surelog-1.84
-cd Surelog-1.84
-git checkout v1.84
+git clone https://github.com/chipsalliance/Surelog.git Surelog-1.87
+cd Surelog-1.87
+git checkout v1.87
 git submodule update --init --recursive
 make
 ```
