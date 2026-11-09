@@ -15,6 +15,13 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   `npm run build-uhdm` (`scripts/build-uhdm.sh`); `binding.gyp` no longer hardcodes a
   machine-specific path (`UHDM_HOME` overrides the submodule build).
 
+### Fixed
+
+- Opening a missing, truncated or otherwise unreadable `.uhdm` file now fails with an error
+  message instead of aborting the extension host. The reader also exports `uhdmVersion`.
+- `loadDesign`, `getModuleDefs` and `searchInstances` left their promise pending forever
+  on failure; they now reject.
+
 ### Added
 
 - Interactive schematic viewer (preview): "Show Schematic" on a hierarchy scope,

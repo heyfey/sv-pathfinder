@@ -1,6 +1,7 @@
 #include <napi.h>
 #include <uhdm/ElaboratorListener.h>
 #include <uhdm/VpiListener.h>
+#include <uhdm/uhdm-version.h>
 #include <uhdm/uhdm.h>
 #include <uhdm/vpi_user.h>
 
@@ -270,6 +271,12 @@ bool FuzzySubseqMatch(const std::string& query, const std::string& candidate) {
   return qi == query.size();
 }
 
+// The UHDM version this addon was compiled against, e.g. "1.87". A .uhdm database must come from
+// a Surelog built on the same UHDM version: the serialized schema is not stable across releases.
+static std::string UhdmVersionString() {
+  return std::to_string(UHDM_VERSION_MAJOR) + "." + std::to_string(UHDM_VERSION_MINOR);
+}
+
 // Worker for LoadDesign
 class LoadDesignWorker : public Napi::AsyncWorker {
  public:
@@ -280,7 +287,19 @@ class LoadDesignWorker : public Napi::AsyncWorker {
 
   void Execute() override {
     serializer = std::make_unique<UHDM::Serializer>();
-    restoredDesigns = serializer->Restore(filename);
+    // NOTE: a database written by a different UHDM release (the .uhdm schema is not versioned
+    // in a way Restore() checks) still crashes inside Restore(); nothing here can catch that.
+    try {
+      restoredDesigns = serializer->Restore(filename);
+    } catch (const std::exception& e) {
+      // capnp/kj throw on a missing, truncated or otherwise unreadable file. Uncaught, that
+      // would std::terminate() the extension host. kj appends a "\nstack: <hex...>" line to
+      // what(); drop it, it means nothing to the user.
+      std::string what = e.what();
+      what = what.substr(0, what.find("\nstack:"));
+      SetError("Failed to load " + filename + ": " + what);
+      return;
+    }
     if (restoredDesigns.empty()) {
       SetError("Failed to restore design from " + filename);
       return;
@@ -313,6 +332,10 @@ class LoadDesignWorker : public Napi::AsyncWorker {
     Napi::Env env = Env();
     deferred.Resolve(Napi::Number::New(env, designId));
   }
+
+  // Without this override a SetError() in Execute() would leave the promise pending forever
+  // (AsyncWorker's default OnError calls a callback this promise-based worker does not have).
+  void OnError(const Napi::Error& e) override { deferred.Reject(e.Value()); }
 
  private:
   Napi::Promise::Deferred deferred;
@@ -387,6 +410,10 @@ class GetModuleDefsWorker : public Napi::AsyncWorker {
     }
     deferred.Resolve(result);
   }
+
+  // Without this override a SetError() in Execute() would leave the promise pending forever
+  // (AsyncWorker's default OnError calls a callback this promise-based worker does not have).
+  void OnError(const Napi::Error& e) override { deferred.Reject(e.Value()); }
 
  private:
   Napi::Promise::Deferred deferred;
@@ -816,6 +843,10 @@ class SearchInstancesWorker : public Napi::AsyncWorker {
     deferred.Resolve(out);
   }
 
+  // Without this override a SetError() in Execute() would leave the promise pending forever
+  // (AsyncWorker's default OnError calls a callback this promise-based worker does not have).
+  void OnError(const Napi::Error& e) override { deferred.Reject(e.Value()); }
+
  private:
   struct Match {
     instContext inst;
@@ -882,6 +913,7 @@ Napi::Value UnloadDesign(const Napi::CallbackInfo& info) {
 // Initialize the addon
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   VpiHandleWrap::Init(env);  // Set up the VpiHandleWrap class
+  exports.Set("uhdmVersion", Napi::String::New(env, UhdmVersionString()));
   exports.Set("loadDesign", Napi::Function::New(env, LoadDesign));
   exports.Set("unloadDesign", Napi::Function::New(env, UnloadDesign));
   exports.Set("getTopModules", Napi::Function::New(env, GetTopModules));

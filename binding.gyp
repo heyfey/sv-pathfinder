@@ -22,7 +22,10 @@
         "-lrt",
         "-lpthread"
       ],
-      "cflags_cc": ["-std=c++17", "-fPIC"],
+      # The Serializer error handler aborts a mismatched restore with a C++ exception, so the
+      # addon needs exceptions on (node-gyp's common.gypi turns them off by default).
+      "cflags_cc!": ["-fno-exceptions"],
+      "cflags_cc": ["-std=c++17", "-fPIC", "-fexceptions"],
       "defines": ["NAPI_DISABLE_CPP_EXCEPTIONS"],
     }
   ]
