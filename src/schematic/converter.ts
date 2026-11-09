@@ -296,7 +296,31 @@ function addDanglingNetStubs(djs: any, dangling: { name: string; bits: number }[
     }
 }
 
+// yosys2digitaljs picks the top module by topological order over the module-dependency graph, so
+// any module nobody instantiates is a candidate. Yosys's `hierarchy -top` normally leaves exactly one,
+// but the read_uhdm import keeps empty, uninstantiated stand-ins (cva6: `sram_cache`, `unread`, an
+// unused `fpu_wrap` specialization) and yosys2digitaljs then "converts" one of those as the top: a
+// schematic with a single input. Keep only the module marked `top` by Yosys and everything reachable
+// from it. No-op when no module (or more than one) carries the attribute.
+export function pruneUnreachableModules(yosysJson: any): any {
+    const mods = yosysJson?.modules ?? {};
+    const tops = Object.keys(mods).filter(m => mods[m]?.attributes?.top !== undefined && String(mods[m].attributes.top) !== '0');
+    if (tops.length !== 1) { return yosysJson; }
+    const keep = new Set<string>([tops[0]]);
+    const queue = [tops[0]];
+    while (queue.length) {
+        const m = queue.shift()!;
+        for (const cell of Object.values<any>(mods[m]?.cells ?? {})) {
+            const t = cell.type;
+            if (typeof t === 'string' && mods[t] && !keep.has(t)) { keep.add(t); queue.push(t); }
+        }
+    }
+    for (const m of Object.keys(mods)) { if (!keep.has(m)) { delete mods[m]; } }
+    return yosysJson;
+}
+
 export function convertToDigitalJs(yosysJson: any, opts?: { showDangling?: boolean }): any {
+    pruneUnreachableModules(yosysJson);
     // compute BEFORE normalizeForDigitaljs mutates the netlist
     const dangling = opts?.showDangling ? findDanglingNets(yosysJson) : [];
     try {

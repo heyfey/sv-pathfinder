@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import path from 'path';
 
-import { convertToDigitalJs, findDanglingNets, extractSubtree, findSubcircuitKey, rootRelativeYosysPath, pickCoveringRoot, pruneToShallowLevel, extractSubtreeByPath } from '../schematic/converter';
+import { convertToDigitalJs, findDanglingNets, extractSubtree, findSubcircuitKey, rootRelativeYosysPath, pickCoveringRoot, pruneToShallowLevel, extractSubtreeByPath, pruneUnreachableModules } from '../schematic/converter';
 
 // Fixtures live in src/ (not copied to out/ by tsc), so resolve from the repo root.
 const FIXTURES = path.resolve(__dirname, '../../src/test/fixtures');
@@ -338,5 +338,43 @@ suite('extractSubtreeByPath (read_uhdm: shared $paramod modules, walk by instanc
         assert.strictEqual(extractSubtreeByPath(full, 'nope'), undefined);
         assert.strictEqual(extractSubtreeByPath(full, 'u1.nope'), undefined);
         assert.strictEqual(extractSubtreeByPath(undefined, 'u1'), undefined);
+    });
+});
+
+suite('pruneUnreachableModules (read_uhdm leaves uninstantiated stand-in modules)', () => {
+    const mod = (cells: Record<string, string>, top?: boolean) => ({
+        attributes: top ? { top: 1 } : {},
+        ports: {}, netnames: {},
+        cells: Object.fromEntries(Object.entries(cells).map(([n, t]) => [n, { type: t, connections: {} }])),
+    });
+    test('keeps the Yosys top and its transitive instances, drops the rest', () => {
+        const j = { modules: { top: mod({ a: 'alu', c: '$and' }, true), alu: mod({ s: 'sub' }), sub: mod({}), sram_cache: mod({}), unread: mod({}) } };
+        pruneUnreachableModules(j);
+        assert.deepStrictEqual(Object.keys(j.modules).sort(), ['alu', 'sub', 'top']);
+    });
+    test('no-op without exactly one top-attributed module', () => {
+        const none = { modules: { a: mod({}), b: mod({}) } };
+        pruneUnreachableModules(none);
+        assert.deepStrictEqual(Object.keys(none.modules).sort(), ['a', 'b']);
+        const two = { modules: { a: mod({}, true), b: mod({}, true), c: mod({}) } };
+        pruneUnreachableModules(two);
+        assert.deepStrictEqual(Object.keys(two.modules).sort(), ['a', 'b', 'c']);
+    });
+    test('convertToDigitalJs then renders the real top, not a stray empty module', () => {
+        const j = {
+            creator: 'test', modules: {
+                top: { attributes: { top: 1 }, ports: { i: { direction: 'input', bits: [2] }, o: { direction: 'output', bits: [3] } },
+                    cells: { u: { type: 'leaf', port_directions: { i: 'input', o: 'output' }, connections: { i: [2], o: [3] } } },
+                    netnames: { i: { bits: [2], hide_name: 0 }, o: { bits: [3], hide_name: 0 } } },
+                leaf: { attributes: {}, ports: { i: { direction: 'input', bits: [2] }, o: { direction: 'output', bits: [3] } },
+                    cells: { n: { type: '$not', parameters: { A_SIGNED: 0, A_WIDTH: 1, Y_WIDTH: 1 }, port_directions: { A: 'input', Y: 'output' }, connections: { A: [2], Y: [3] } } },
+                    netnames: { i: { bits: [2], hide_name: 0 }, o: { bits: [3], hide_name: 0 } } },
+                unread: { attributes: {}, ports: { x: { direction: 'input', bits: [2] } }, cells: {}, netnames: { x: { bits: [2], hide_name: 0 } } },
+            },
+        };
+        const c = convertToDigitalJs(j);
+        const kinds = Object.values<any>(c.devices).map(d => d.type).sort();
+        assert.ok(kinds.includes('Subcircuit'), `top must contain the instance, got ${kinds.join(',')}`);
+        assert.deepStrictEqual(Object.keys(c.subcircuits), ['leaf']);
     });
 });
