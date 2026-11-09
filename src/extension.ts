@@ -6,9 +6,15 @@ import { WaveformValueAnnotationProvider } from './value_annotation';
 import { Parser } from './parser';
 import { SchematicViewProvider } from './schematic/schematic_view';
 import { SourceStalenessMonitor } from './source_staleness';
+import { initSchematicRuntime, reinstallRuntimeCommand } from './schematic/runtime_manager';
 
 export function activate(context: vscode.ExtensionContext) {
 	console.log('sv-pathfinder: there are venoms and virtues aplenty in the wilds, if you know where to look.');
+
+	// Managed schematic runtime (Yosys + read_slang + read_uhdm): installed into global storage on
+	// the first schematic request; the command re-downloads it (repair / after a manual delete).
+	initSchematicRuntime(context);
+	context.subscriptions.push(vscode.commands.registerCommand('sv-pathfinder.installSchematicRuntime', () => reinstallRuntimeCommand()));
 
 	// #region TreeView
 	const driversProvider = new DriversLoadsTreeProvider();

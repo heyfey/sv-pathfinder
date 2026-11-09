@@ -38,7 +38,22 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
     hover highlight that names the cell/net/port in the status bar.
   - Read-only: digitaljs's editor/simulator affordances (wire delete/monitor tools,
     input toggling, memory/FSM content editors) are disabled.
-- Setting `sv-pathfinder.ossCadSuitePath` for locating the Yosys/yosys-slang toolchain.
+- Managed schematic runtime: on the first schematic request sv-pathfinder offers to download one
+  Yosys (with `read_slang` built in and the uhdm2rtlil `read_uhdm` plugin) from its GitHub
+  releases, verifies its SHA-256, self-tests it, and installs it into the extension's global
+  storage. Linux x64 (AlmaLinux 8 baseline). Command `sv-pathfinder: Install Schematic Runtime`
+  re-downloads it. Built from pinned sources by `toolchain/build-schematic-runtime.sh`
+  (uhdm2rtlil v0.68, Yosys v0.68 fork, Surelog/UHDM v1.87).
+- Setting `sv-pathfinder.schematicRuntimePath` (and env `SV_PATHFINDER_SCHEMATIC_RUNTIME`) to
+  point the schematic at a runtime directory of your own.
+- Schematics for directly opened `.uhdm` designs through `read_uhdm`: the elaborated database is
+  imported as it is, no defines/includes/parameters re-supplied (Linux x64 runtime).
+
+### Removed
+
+- Detection of an installed OSS CAD Suite / `yosys` on PATH and the `yowasp-yosys` WASM fallback,
+  with the setting `sv-pathfinder.ossCadSuitePath` and the "limited engine" badge. Use
+  `sv-pathfinder.schematicRuntimePath` to point at a Yosys build of your own.
 - Setting `sv-pathfinder.schematicAccentColor` for the schematic accent color.
 
 - Initial release

@@ -1,11 +1,13 @@
 // vscode-free policy helpers for the schematic Yosys backend, so they can be unit-tested.
 //
-// Policy: the schematic wants Yosys + the slang frontend (full SystemVerilog). A plain Yosys without
-// slang (Verilog-only read_verilog) is NOT used — its limitations make failures look like our bug.
-// The only non-slang fallback is yowasp-yosys (WASM), which is "limited" and must be flagged loudly.
+// Policy: the schematic runs on the managed schematic runtime (Yosys with read_slang built in plus the
+// uhdm2rtlil plugin for read_uhdm), installed on first use, or on a directory the user points at via
+// the `schematicRuntimePath` setting / SV_PATHFINDER_SCHEMATIC_RUNTIME. No PATH probing, no
+// Verilog-only fallback: a plain Yosys without slang would make failures look like our bug.
 
-// Thrown when no usable Yosys backend is found. Typed (and code-tagged) so the UI can offer setup
-// actions instead of fragile message string-matching.
+// Thrown when no usable runtime is available (not installed, declined, unsupported platform, or a
+// bad override). Typed (and code-tagged) so the UI can offer setup actions instead of fragile
+// message string-matching.
 export class NoYosysBackendError extends Error {
     readonly code = 'NO_YOSYS_BACKEND';
     constructor(message: string) {
@@ -19,29 +21,9 @@ export function isNoYosysBackendError(e: unknown): boolean {
     return typeof e === 'object' && e !== null && (e as { code?: unknown }).code === 'NO_YOSYS_BACKEND';
 }
 
-// A backend is "limited" when it lacks the slang frontend (i.e. yowasp-yosys) — major SystemVerilog
-// gaps; designs may render incompletely or fail to elaborate.
-export function isLimitedBackend(b: { slang: boolean } | null | undefined): boolean {
-    return !!b && !b.slang;
-}
-
-// Message for the "no backend" case. When a plain Yosys was seen on PATH but rejected for lacking
-// slang, say so — otherwise the user wonders why their installed yosys "isn't detected".
-export function noBackendMessage(sawYosysWithoutSlang: boolean): string {
-    const base =
-        'No usable Yosys found for the schematic. Install OSS CAD Suite (bundles Yosys + the slang ' +
-        'frontend) and set "sv-pathfinder.ossCadSuitePath" for full SystemVerilog support, or ' +
-        '`pip install yowasp-yosys` as a limited fallback.';
-    if (!sawYosysWithoutSlang) { return base; }
-    return base +
-        ' (A Yosys without the slang frontend was found but is not used — it supports only limited Verilog.)';
-}
-
-// The one-time warning shown when the schematic renders with the limited (yowasp) fallback. Worded
-// so the user knows the gaps are the fallback toolchain's, not the design's or this extension's.
-export function limitedBackendWarning(backendName: string): string {
-    return `Rendering the schematic with ${backendName} — a limited fallback with major SystemVerilog ` +
-        `gaps. Some designs render incompletely or fail to elaborate; this is a limitation of the ` +
-        `fallback toolchain, not your design or this extension. For full support, install OSS CAD Suite ` +
-        `and set "sv-pathfinder.ossCadSuitePath".`;
+// A direct .uhdm design needs the read_uhdm frontend, which only the Linux x64 runtime has.
+export function uhdmFrontendUnavailableMessage(runtimeName: string): string {
+    return `This design is a .uhdm database, which the schematic reads with the read_uhdm frontend; ` +
+        `the active runtime (${runtimeName}) does not provide it. On Linux x64 the managed runtime does; ` +
+        'elsewhere, open the design from its .f filelist to use read_slang instead.';
 }

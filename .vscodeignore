@@ -21,6 +21,7 @@ docs/**
 .githooks/**
 .github/**
 scripts/**
+toolchain/**
 third_party/**
 test/**
 binding.gyp

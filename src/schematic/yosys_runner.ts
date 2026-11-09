@@ -1,8 +1,6 @@
-// C2 — Yosys runner with a configurable backend.
-// PRIMARY:  native Yosys + read_slang (OSS CAD Suite), run as a subprocess.
-// FALLBACK: native Yosys without the slang plugin (read_verilog), then
-//           yowasp-yosys (WASM, pip-installed CLI) with read_verilog.
-// Script presets validated by Spike 1 (docs/spikes/rtl-structural/).
+// C2 — Yosys runner on the managed schematic runtime (Yosys with read_slang built in, plus the
+// uhdm2rtlil plugin for read_uhdm), run as a subprocess. See runtime_manager.ts for how the runtime
+// is resolved/installed. Script presets validated by Spike 1 (docs/spikes/rtl-structural/).
 import * as vscode from 'vscode';
 import * as cp from 'child_process';
 import * as fs from 'fs/promises';
@@ -10,9 +8,11 @@ import * as os from 'os';
 import * as path from 'path';
 import { ScopeContext } from './scope_resolver';
 import { absolutizeFlist, searchDirFlags, blackboxFlags, flistWithoutUvm } from '../flist';
-import { NoYosysBackendError, noBackendMessage } from './backend_policy';
+import { NoYosysBackendError, uhdmFrontendUnavailableMessage } from './backend_policy';
 import { isUvmError, isKeptBoundaryError } from './scope_nav';
 import { svLog } from '../output';
+import { ensureRuntime, resetRuntimeCache, resolvedRuntimeName, ResolvedRuntime } from './runtime_manager';
+import { UHDM_PLUGIN } from './runtime_policy';
 
 // Schematic diagnostics (the actual Yosys command we run, and any workarounds applied) go to the
 // shared "sv-pathfinder" output channel, tagged [schematic].
@@ -26,104 +26,45 @@ export interface YosysResult {
     log: string;
 }
 
+// The runtime the schematic runs on; `plugin` is set when the script needs `yosys -m uhdm2rtlil`.
 interface Backend {
     name: string;
     command: string;
-    prelude: string;   // e.g. "plugin -i slang; "
-    slang: boolean;    // read_slang available?
-    limited: boolean;  // lacks slang (yowasp) → major SystemVerilog gaps
+    readUhdm: boolean; // the uhdm2rtlil plugin is available (Linux x64 managed runtime)
 }
 
-let cachedBackend: Backend | null | undefined; // undefined = not probed yet
-// Set by findBackend(): a plain Yosys was seen on PATH but rejected for lacking the slang frontend.
-// Used to tailor the "no backend" message so the user understands why their yosys "isn't detected".
-let sawYosysWithoutSlang = false;
+function toBackend(rt: ResolvedRuntime): Backend {
+    return { name: rt.name, command: rt.yosys, readUhdm: rt.features.read_uhdm };
+}
 
 function quote(p: string): string {
     return p.includes(' ') ? `"${p}"` : p;
 }
 
-async function probeCommand(cmd: string, args: string[]): Promise<boolean> {
-    return new Promise(resolve => {
-        try {
-            const proc = cp.spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-            let out = '';
-            proc.stdout.on('data', d => out += d.toString());
-            proc.stderr.on('data', d => out += d.toString());
-            proc.on('error', () => resolve(false));
-            proc.on('close', code => resolve(code === 0));
-        } catch {
-            resolve(false);
-        }
-    });
-}
-
-// Resolve the yosys backend. Policy: prefer Yosys + the slang frontend (OSS CAD Suite path, or a PATH
-// yosys that carries slang). A plain Yosys WITHOUT slang is NOT used — its Verilog-only read_verilog
-// makes failures look like our bug. The sole non-slang fallback is yowasp-yosys (WASM), flagged
-// `limited`.
-async function findBackend(): Promise<Backend | null> {
-    if (cachedBackend !== undefined) { return cachedBackend; }
-    sawYosysWithoutSlang = false;
-    const config = vscode.workspace.getConfiguration('sv-pathfinder');
-    const candidates: string[] = [];
-    const ossPath = config.get<string>('ossCadSuitePath', '');
-    if (ossPath) {
-        candidates.push(path.join(ossPath, 'bin', 'yosys'));
-        candidates.push(path.join(ossPath, 'yosys')); // user pointed at bin/ directly
-    }
-    candidates.push('yosys');
-
-    for (const cmd of candidates) {
-        if (!await probeCommand(cmd, ['--version'])) { continue; }
-        // slang.so ships in OSS CAD Suite but is NOT auto-registered (Spike 1)
-        if (await probeCommand(cmd, ['-p', 'plugin -i slang'])) {
-            cachedBackend = { name: `yosys+slang (${cmd})`, command: cmd, prelude: 'plugin -i slang; ', slang: true, limited: false };
-            return cachedBackend;
-        }
-        // A Yosys without slang would only do limited Verilog — deliberately not used (see policy).
-        sawYosysWithoutSlang = true;
-    }
-    // Sole non-slang fallback: yowasp-yosys CLI (pip install yowasp-yosys). Flagged limited.
-    for (const cmd of ['yowasp-yosys', path.join(os.homedir(), '.local', 'bin', 'yowasp-yosys')]) {
-        if (await probeCommand(cmd, ['--version'])) {
-            cachedBackend = { name: `yowasp-yosys WASM (${cmd})`, command: cmd, prelude: '', slang: false, limited: true };
-            return cachedBackend;
-        }
-    }
-    cachedBackend = null;
-    return null;
-}
-
 export function resetBackendCache(): void {
-    cachedBackend = undefined;
+    resetRuntimeCache();
 }
 
-// The yosys backend that was actually resolved (name includes the binary path and slang/native).
-// Surfaced to the webview so a render failure can name the toolchain that produced the netlist —
-// e.g. when another extension puts a different `yosys` on PATH and it gets picked up.
+// The runtime that was actually resolved (version + where it came from). Surfaced to the webview so
+// a render failure can name the toolchain that produced the netlist.
 export function getResolvedBackendName(): string | undefined {
-    return cachedBackend ? cachedBackend.name : undefined;
-}
-
-// True when the resolved backend lacks the slang frontend (the limited yowasp fallback). The UI uses
-// this to warn the user and badge the schematic so a limited render isn't mistaken for our bug.
-export function isResolvedBackendLimited(): boolean {
-    return !!cachedBackend && cachedBackend.limited;
+    return resolvedRuntimeName();
 }
 
 // Build the read + elaborate + lowering script (Spike 1 presets).
-function buildScript(backend: Backend, ctx: ScopeContext, preset: SchematicPreset, outJson: string, showDangling = false, extraIncludeDirs: string[] = [], shallow = false, ignoreUnknownModules = false, bestEffortHierarchy = false): string {
-    const files = ctx.dotF
-        ? (backend.slang ? `-F ${quote(ctx.dotF)}` : ctx.fileSet.map(quote).join(' '))
-        : ctx.fileSet.map(quote).join(' ');
+function buildScript(ctx: ScopeContext, preset: SchematicPreset, outJson: string, showDangling = false, extraIncludeDirs: string[] = [], shallow = false, ignoreUnknownModules = false, bestEffortHierarchy = false): string {
+    const files = ctx.dotF ? `-F ${quote(ctx.dotF)}` : ctx.fileSet.map(quote).join(' ');
     // Search dirs so a curated/partial filelist still elaborates: the .f's own directory + each
     // source file's directory (resolves co-located includes and sibling modules the .f omits), plus
     // any user-provided include dirs (for headers outside the source tree, e.g. vendored prim/dv).
     const searchDirs = [ctx.workDir, ...ctx.fileSet.map(f => path.dirname(f)), ...extraIncludeDirs];
     let read: string;
-    let chparam = '';
-    if (backend.slang) {
+    if (ctx.uhdmFile) {
+        // Direct .uhdm design: import the elaborated UHDM as it is. Parameters, defines and includes
+        // were resolved by Surelog before serialization, so no -G/-D/-I; every parameterization is
+        // already a separate module in the import (Yosys-style $paramod names), so no chparam either.
+        read = `read_uhdm ${quote(ctx.uhdmFile)}`;
+    } else {
         // -G applies resolved instance params at elaboration; --keep-hierarchy keeps
         // children as boxes (without it yosys-slang inlines everything).
         // --ignore-timing / --ignore-initial / --ignore-assertions: delays (`a = #1 b;`), initial
@@ -155,16 +96,12 @@ function buildScript(backend: Backend, ctx: ScopeContext, preset: SchematicPrese
         // (measured on Vortex: 2 of ~180 dissolve; where keep succeeds the output is identical).
         const hier = bestEffortHierarchy ? '--best-effort-hierarchy' : '--keep-hierarchy';
         read = `read_slang ${hier} --ignore-timing --ignore-initial --ignore-assertions --allow-use-before-declare --allow-hierarchical-const ${iu}-D SYNTHESIS ${search} ${bb} ${gFlags} --top ${ctx.moduleName} ${files}`;
-    } else {
-        const search = searchDirFlags(searchDirs, false); // read_verilog: include dirs only
-        read = `read_verilog -sv -DSYNTHESIS ${search} ${files}`;
-        chparam = ctx.resolvedParams.map(p => ` -chparam ${p.name} ${p.verilogLiteral}`).join('');
     }
-    const common = `${backend.prelude}${read}; hierarchy -top ${ctx.moduleName}${chparam}; `;
+    const common = `${read}; hierarchy -top ${ctx.moduleName}; `;
     if (preset === 'gls') {
-        // Gate-level view: synth flow. -noabc because OSS CAD Suite's yosys resolves its
-        // bundled abc via a path that breaks when yosys is invoked directly (not via the
-        // env script); techmap'd $_AND_/$_OR_/... cells are gate-level and converter-supported.
+        // Gate-level view: synth flow. -noabc: the managed runtime's Yosys is built without ABC
+        // (nothing in the schematic needs it); techmap'd $_AND_/$_OR_/... cells are gate-level and
+        // converter-supported.
         return common + `synth -top ${ctx.moduleName} -noabc; opt_clean; write_json -compat-int ${quote(outJson)}`;
     }
     // RTL-structural (validated): proc -> coarse cells; memory_collect merges
@@ -194,15 +131,14 @@ function maybeWarnBestEffort(ctx: ScopeContext): void {
         'output for details.');
 }
 
-// macOS Gatekeeper quarantines OSS CAD Suite's unsigned binaries — yosys shells out to a bundled
-// `realpath` while loading the slang plugin, so the schematic dies with an "Apple could not verify
-// … is free of malware" dialog. Surface the one-shot fix (with the actual folder) when on macOS.
+// macOS Gatekeeper quarantines downloaded unsigned binaries, so a runtime the user pointed at by hand
+// can die with an "Apple could not verify … is free of malware" dialog. Surface the one-shot fix
+// (with the actual folder) when on macOS.
 function macQuarantineHint(yosysCmd: string): string {
     if (process.platform !== 'darwin') { return ''; }
-    // <ossPath>/bin/yosys -> <ossPath>; fall back to a placeholder for a bare `yosys` on PATH.
-    const dir = yosysCmd.includes('/bin/') ? path.dirname(path.dirname(yosysCmd)) : '<oss-cad-suite dir>';
-    return '\n\nOn macOS, OSS CAD Suite binaries may be blocked by Gatekeeper ("Apple could not verify '
-        + '… is free of malware"). Clear the quarantine flag on the OSS CAD Suite folder, then reload:\n'
+    const dir = yosysCmd.includes('/bin/') ? path.dirname(path.dirname(yosysCmd)) : '<runtime dir>';
+    return '\n\nOn macOS, downloaded binaries may be blocked by Gatekeeper ("Apple could not verify '
+        + '… is free of malware"). Clear the quarantine flag on the runtime folder, then reload:\n'
         + `  xattr -dr com.apple.quarantine "${dir}"`;
 }
 
@@ -214,12 +150,13 @@ class YosysRunError extends Error {
     }
 }
 
-// Spawn `yosys -p <script>`; resolve its combined output, or reject (YosysRunError on non-zero exit,
-// plain hinted Error on spawn failure / timeout). Logs the exact command for transparency.
-function spawnYosys(backend: Backend, script: string, workDir: string): Promise<string> {
-    logSchematic(`$ ${backend.command} -p '${script}'`);
+// Spawn `yosys [-m uhdm2rtlil] -p <script>`; resolve its combined output, or reject (YosysRunError on
+// non-zero exit, plain hinted Error on spawn failure / timeout). Logs the exact command for transparency.
+function spawnYosys(backend: Backend, script: string, workDir: string, plugin: boolean): Promise<string> {
+    const args = plugin ? ['-m', UHDM_PLUGIN, '-p', script] : ['-p', script];
+    logSchematic(`$ ${backend.command} ${args.slice(0, -1).join(' ')} '${script}'`);
     return new Promise<string>((resolve, reject) => {
-        const proc = cp.spawn(backend.command, ['-p', script], { cwd: workDir });
+        const proc = cp.spawn(backend.command, args, { cwd: workDir });
         let out = '';
         proc.stdout.on('data', d => out += d.toString());
         proc.stderr.on('data', d => out += d.toString());
@@ -258,17 +195,12 @@ function hintFor(out: string, backend: Backend): string {
 }
 
 export async function runYosys(ctx: ScopeContext, preset: SchematicPreset, opts?: { showDangling?: boolean; shallow?: boolean }): Promise<YosysResult> {
-    const backend = await findBackend();
-    if (!backend) {
-        throw new NoYosysBackendError(noBackendMessage(sawYosysWithoutSlang));
-    }
-    if (!backend.slang && ctx.dotF) {
-        // native read_verilog can't consume .f command files; warn but try the raw file list
-        if (ctx.fileSet.length === 0) {
-            throw new Error(
-                `The ${backend.name} backend cannot read .f filelists (read_slang required). ` +
-                'Install OSS CAD Suite for full SystemVerilog support.');
-        }
+    // Resolves the override or the managed install; on first use this is where the one-time download
+    // prompt appears. Throws NoYosysBackendError (typed, so the view can offer actions) when declined.
+    const backend = toBackend(await ensureRuntime({ interactive: true }));
+    const useUhdm = !!ctx.uhdmFile;
+    if (useUhdm && !backend.readUhdm) {
+        throw new NoYosysBackendError(uhdmFrontendUnavailableMessage(backend.name));
     }
 
     // read_slang resolves relative .f entries (and nested -f/-F/-C includes)
@@ -276,7 +208,7 @@ export async function runYosys(ctx: ScopeContext, preset: SchematicPreset, opts?
     // workDir-relative paths fail to load. Rewrite the .f (recursively) with
     // absolute paths first; absolute paths resolve regardless of CWD.
     let effectiveCtx = ctx;
-    if (backend.slang && ctx.dotF) {
+    if (ctx.dotF) {
         effectiveCtx = { ...ctx, dotF: await absolutizeFlist(ctx.dotF) };
     }
 
@@ -289,7 +221,7 @@ export async function runYosys(ctx: ScopeContext, preset: SchematicPreset, opts?
     const outJson = path.join(tmpDir, 'schematic.json');
 
     const runOnce = (c: ScopeContext, ignoreUnknown: boolean, bestEffort = false) =>
-        spawnYosys(backend, buildScript(backend, c, preset, outJson, opts?.showDangling, extraIncludeDirs, opts?.shallow, ignoreUnknown, bestEffort), ctx.workDir);
+        spawnYosys(backend, buildScript(c, preset, outJson, opts?.showDangling, extraIncludeDirs, opts?.shallow, ignoreUnknown, bestEffort), ctx.workDir, useUhdm);
 
     // HIERARCHY FALLBACK: --keep-hierarchy refuses any module whose interface port lacks a modport
     // (e.g. Vortex's VX_execute), failing the whole read. Retry with --best-effort-hierarchy — it
@@ -299,7 +231,7 @@ export async function runYosys(ctx: ScopeContext, preset: SchematicPreset, opts?
         try {
             return await runOnce(c, ignoreUnknown);
         } catch (e) {
-            if (!backend.slang || !(e instanceof YosysRunError) || !isKeptBoundaryError(e.out)) { throw e; }
+            if (useUhdm || !(e instanceof YosysRunError) || !isKeptBoundaryError(e.out)) { throw e; }
             logSchematic('--keep-hierarchy refused a module boundary (interface port without a ' +
                 'modport); retrying with --best-effort-hierarchy (the offending instances are ' +
                 'flattened into their parent).');
@@ -319,7 +251,7 @@ export async function runYosys(ctx: ScopeContext, preset: SchematicPreset, opts?
         // workaround, not a real elaboration — log it and tell the user what we dropped.
         const out = e instanceof YosysRunError ? e.out : '';
         let recovered: string | undefined;
-        if (backend.slang && effectiveCtx.dotF && out && isUvmError(out)) {
+        if (effectiveCtx.dotF && out && isUvmError(out)) {
             const filtered = await flistWithoutUvm(effectiveCtx.dotF, tmpDir, ctx.moduleName).catch(() => null);
             if (filtered) {
                 logSchematic(`UVM workaround — read_slang failed on UVM; retrying with ${filtered.dropped.length} verification file(s) dropped (blackboxed). Filtered filelist: ${filtered.path}`);

@@ -9,12 +9,13 @@ import * as path from 'path';
 import * as os from 'os';
 import { DesignItem, NetlistItem, HierarchyTreeProvider, replaceFilePathIfNeeded, showTextDocumentLocation, showOpenDesignFirstMessage } from '../tree_view';
 import { resolveScope, scopeCacheKey, ScopeContext } from './scope_resolver';
-import { runYosys, SchematicPreset, getResolvedBackendName, isResolvedBackendLimited } from './yosys_runner';
+import { runYosys, SchematicPreset, getResolvedBackendName } from './yosys_runner';
 import { convertToDigitalJs, extractSubtree, rootRelativeYosysPath, pickCoveringRoot, pruneToShallowLevel } from './converter';
 import { svLog } from '../output';
 import { findParentModuleScope, ancestorFallbackReason, isNonModuleTopError } from './scope_nav';
 import { cleanCelltype } from './celltype';
-import { isNoYosysBackendError, limitedBackendWarning } from './backend_policy';
+import { isNoYosysBackendError } from './backend_policy';
+import { RUNTIME_SETTING } from './runtime_policy';
 import { FromWebviewMessage, ToWebviewMessage, ElementClickMessage, ContextActionMessage, ExpandRequestMessage, ExportRequestMessage, ExportContentMessage, SourcePosition } from './messages';
 
 interface ShownSchematic {
@@ -38,8 +39,6 @@ export class SchematicViewProvider {
     private fullCircuitCache = new Map<string, { rootModule: string; rootInstancePath: string; circuit: any }>();
     private timestamp = -1;
     private valueTimer: NodeJS.Timeout | undefined;
-    private limitedBackendWarned = false; // one-time-per-session warning for the limited fallback
-    private static readonly SUPPRESS_LIMITED_KEY = 'sv-pathfinder.suppressLimitedBackendWarning';
     private static readonly SUPPRESS_PARAM_KEY = 'sv-pathfinder.suppressParamWarning';
 
     constructor(
@@ -148,7 +147,6 @@ export class SchematicViewProvider {
                 overview,
                 spacing,
                 backend: getResolvedBackendName(),
-                limited: isResolvedBackendLimited(),
                 shallow, // webview: in shallow mode a child box has no loaded internals → expand re-elaborates
                 // Stable identity of this scope's content so the webview can cache + reuse its ELK layout
                 // across back-and-forth navigation. `force` (Refresh) re-elaborates → don't reuse a stale layout.
@@ -157,7 +155,6 @@ export class SchematicViewProvider {
             });
             // push current waveform values onto the fresh schematic
             this.debouncePushValues();
-            this.maybeWarnLimitedBackend();
             // Param-override caveat only applies to shallow's per-scope elaboration; full mode
             // elaborates from the real top so every scope's params are in-context accurate.
             if (shallow) { this.maybeWarnSkippedParams(ctx); }
@@ -331,23 +328,6 @@ export class SchematicViewProvider {
         }
     }
 
-    // Warn once per session when the schematic was rendered with the limited (yowasp) fallback, so a
-    // partial/incorrect render isn't mistaken for a bug in the design or this extension.
-    private async maybeWarnLimitedBackend() {
-        if (this.limitedBackendWarned || !isResolvedBackendLimited()) { return; }
-        if (this.context.globalState.get<boolean>(SchematicViewProvider.SUPPRESS_LIMITED_KEY, false)) { return; }
-        this.limitedBackendWarned = true;
-        const settings = 'Open Settings';
-        const suppress = "Don't show again";
-        const pick = await vscode.window.showWarningMessage(
-            limitedBackendWarning(getResolvedBackendName() ?? 'yowasp-yosys'), settings, suppress);
-        if (pick === settings) {
-            await vscode.commands.executeCommand('workbench.action.openSettings', 'sv-pathfinder.ossCadSuitePath');
-        } else if (pick === suppress) {
-            await this.context.globalState.update(SchematicViewProvider.SUPPRESS_LIMITED_KEY, true);
-        }
-    }
-
     // Surface a render failure. The "no Yosys backend" case gets an actionable button to the setting
     // that fixes it instead of a dead-end message.
     private async showRenderError(e: any) {
@@ -358,10 +338,13 @@ export class SchematicViewProvider {
                 `Schematic unavailable for '${scope}': read_slang reports that it is not a valid ` +
                 'top-level module. Select a module instance that contains or connects this scope instead.');
         } else if (isNoYosysBackendError(e)) {
+            const install = 'Install Runtime';
             const settings = 'Open Settings';
-            const pick = await vscode.window.showErrorMessage(msg, settings);
-            if (pick === settings) {
-                await vscode.commands.executeCommand('workbench.action.openSettings', 'sv-pathfinder.ossCadSuitePath');
+            const pick = await vscode.window.showErrorMessage(msg, install, settings);
+            if (pick === install) {
+                await vscode.commands.executeCommand('sv-pathfinder.installSchematicRuntime');
+            } else if (pick === settings) {
+                await vscode.commands.executeCommand('workbench.action.openSettings', `sv-pathfinder.${RUNTIME_SETTING}`);
             }
         } else {
             vscode.window.showErrorMessage(msg);

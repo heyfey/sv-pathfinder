@@ -49,13 +49,27 @@ The compiled tree-sitter SystemVerilog grammar from
 [hudson-trading/slang-server](https://github.com/hudson-trading/slang-server), **MIT**,
 © 2024–2025 Hudson River Trading LLC. The MIT notice is preserved in each file's header.
 
+## Downloaded at run time — the schematic runtime (not inside the VSIX)
+
+On the first schematic request the extension offers to download `sv-pathfinder-schematic-runtime-
+linux-x64-<version>.tar.gz` from this project's GitHub releases. It is built from pinned sources by
+`toolchain/build-schematic-runtime.sh` (pins in `toolchain/versions.json`) and ships the license
+texts of everything it contains in its `LICENSES/` directory:
+
+- [Yosys](https://github.com/YosysHQ/yosys) (ISC; the `alainmarcel/yosys` fork pinned by uhdm2rtlil),
+  built without readline, Tcl and ABC.
+- [slang](https://github.com/MikePopoloski/slang) (MIT) and its `sv-elab` Yosys frontend, built into
+  that Yosys as `read_slang`; Yosys's bundled libs fmt (MIT), cxxopts (MIT), tomlplusplus (MIT),
+  boost regex (BSL-1.0).
+- [uhdm2rtlil](https://github.com/alainmarcel/uhdm2rtlil) (Apache-2.0) — the `read_uhdm` plugin,
+  statically linking [Surelog](https://github.com/chipsalliance/Surelog) (Apache-2.0),
+  [UHDM](https://github.com/chipsalliance/UHDM) (Apache-2.0), ANTLR4 (BSD-3) and Cap'n Proto (MIT).
+
 ## External tools (not bundled — acknowledgement only)
 
 These are run as separate processes / extensions that the user installs; sv-pathfinder does **not**
 redistribute them, so no license obligation falls on this package — credited here with thanks:
 
-- [Yosys](https://github.com/YosysHQ/yosys) + the [slang](https://github.com/MikePopoloski/slang)
-  frontend (via [OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build)) — the schematic.
 - [Surelog](https://github.com/chipsalliance/Surelog) — the Surelog/UHDM backend.
 - [slang-server VS Code extension](https://github.com/hudson-trading/slang-server) — the default
   navigation backend.

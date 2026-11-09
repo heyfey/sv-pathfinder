@@ -1,0 +1,91 @@
+name: Schematic runtime
+
+# Builds the managed schematic runtime (Yosys + read_slang + uhdm2rtlil/read_uhdm) for Linux x64 from
+# the sources pinned in toolchain/versions.json, inside an AlmaLinux 8 container so the binaries keep
+# the EL8 glibc 2.28 floor, and publishes it as a GitHub Release asset. The extension downloads the
+# asset named in toolchain/versions.json on first schematic use.
+#
+# Trigger: push a tag `schematic-runtime-v<version>` matching versions.json, or run manually (the
+# manual run only uploads the artifact, it does not publish a release).
+
+on:
+  push:
+    tags: ['schematic-runtime-v*']
+  workflow_dispatch:
+
+jobs:
+  linux-x64:
+    runs-on: ubuntu-latest
+    container: almalinux:8
+    permissions:
+      contents: write
+    steps:
+      - name: Install the toolchain (gcc-toolset-14, cmake, python3.11, Java 11 for Surelog's ANTLR step)
+        run: |
+          dnf -y install git gcc-toolset-14 cmake make tar gzip zstd binutils bison flex zlib-devel \
+            python3.11 python3.11-pip java-11-openjdk-headless
+          alternatives --set python3 /usr/bin/python3.11
+          python3 -m pip install --quiet orderedmultidict   # UHDM's code generator
+          echo /opt/rh/gcc-toolset-14/root/usr/bin >> "$GITHUB_PATH"
+
+      - uses: actions/checkout@v4
+
+      - name: Check the tag matches toolchain/versions.json
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          v="$(python3 -c "import json; print(json.load(open('toolchain/versions.json'))['runtimeVersion'])")"
+          test "${GITHUB_REF_NAME}" = "schematic-runtime-v${v}" || { echo "tag ${GITHUB_REF_NAME} != schematic-runtime-v${v}"; exit 1; }
+
+      - name: Cache the Yosys + Surelog builds
+        uses: actions/cache@v4
+        with:
+          path: |
+            toolchain/work/yosys/build
+            toolchain/work/uhdm2rtlil/out/current
+            toolchain/work/plugin-build
+          key: schematic-runtime-el8-${{ hashFiles('toolchain/versions.json', 'toolchain/build-schematic-runtime.sh') }}
+
+      - name: Build, package, smoke-test
+        run: toolchain/build-schematic-runtime.sh
+
+      - name: Smoke test the archive on a fresh extraction
+        run: |
+          set -e
+          d="$(mktemp -d)"; tar -C "$d" -xzf toolchain/work/dist/*.tar.gz
+          pkg="$(ls -d "$d"/*/)"
+          "$pkg/bin/yosys" -q -p 'help read_slang' | head -2
+          "$pkg/bin/yosys" -q -m uhdm2rtlil -p 'help read_uhdm' | head -2
+          "$pkg/bin/yosys" -q -m uhdm2rtlil -p 'read_uhdm examples/test/surelog.uhdm; hierarchy -top top; proc; opt_clean; write_json /tmp/u.json' && grep -q '"top"' /tmp/u.json
+          du -sh "$pkg" toolchain/work/dist/*.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: schematic-runtime-linux-x64
+          path: toolchain/work/dist/*
+
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: toolchain/work/dist/*
+          body: |
+            Managed schematic runtime for sv-pathfinder (Linux x64, AlmaLinux 8 / glibc 2.28 baseline).
+            Pins: see `toolchain/versions.json` at this tag. Installed automatically by the extension on
+            the first schematic request; or extract by hand and set `sv-pathfinder.schematicRuntimePath`.
+
+  # The same archive must run on a current distribution too.
+  verify-ubuntu:
+    needs: linux-x64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: schematic-runtime-linux-x64
+          path: dist
+      - run: |
+          set -e
+          sha256sum -c dist/*.sha256 --ignore-missing || (cd dist && sha256sum -c *.sha256)
+          d="$(mktemp -d)"; tar -C "$d" -xzf dist/*.tar.gz; pkg="$(ls -d "$d"/*/)"
+          "$pkg/bin/yosys" -q -p 'help read_slang' | head -1
+          "$pkg/bin/yosys" -q -m uhdm2rtlil -p 'read_uhdm examples/test/surelog.uhdm; hierarchy -top top; proc; write_json /tmp/u.json' && grep -q '"top"' /tmp/u.json

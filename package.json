@@ -65,10 +65,10 @@
           "default": true,
           "markdownDescription": "Show the Modules view (every module in the design; expand one to see its instances). Reload the window to apply."
         },
-        "sv-pathfinder.ossCadSuitePath": {
+        "sv-pathfinder.schematicRuntimePath": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Path to the [OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build) installation directory (the folder containing `bin/yosys`). OSS CAD Suite bundles Yosys with the [yosys-slang](https://github.com/povik/yosys-slang) SystemVerilog frontend, which the schematic feature uses as its primary backend. If empty, `yosys` is resolved from PATH; `yowasp-yosys` (`pip install yowasp-yosys`) is the zero-install fallback for simple designs."
+          "markdownDescription": "Override for the schematic runtime: a directory containing `bin/yosys` (Yosys with the `slang` frontend built in; `share/yosys/plugins/uhdm2rtlil.so` for `.uhdm` designs). Leave empty to use the managed runtime, which sv-pathfinder downloads from its GitHub releases on the first schematic request (Linux x64). The environment variable `SV_PATHFINDER_SCHEMATIC_RUNTIME` is honoured when this setting is empty."
         },
         "sv-pathfinder.schematicAccentColor": {
           "type": "string",
@@ -336,6 +336,11 @@
         "title": "Open Example Design"
       },
       {
+        "command": "sv-pathfinder.installSchematicRuntime",
+        "title": "Install Schematic Runtime (Yosys + read_slang + read_uhdm)",
+        "category": "sv-pathfinder"
+      },
+      {
         "command": "sv-pathfinder.closeDesign",
         "title": "Close Design",
         "icon": "$(close)"
@@ -479,6 +484,7 @@
     "@vscode/codicons": "^0.0.45",
     "3vl": "^1.0.1",
     "digitaljs": "^0.14.2",
+    "tar": "^7.5.22",
     "web-tree-sitter": "^0.25.6",
     "yosys2digitaljs": "^0.10.3"
   }

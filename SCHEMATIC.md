@@ -4,38 +4,43 @@ The schematic renders the RTL (or gate-level) structure of any scope — ports, 
 
 ![](readme_assets/schematic.png)
 
-## Setup (OSS CAD Suite)
+## Setup (managed runtime)
 
-The schematic needs **Yosys + the `slang` SystemVerilog frontend**, both of which ship in
-[OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build):
+The schematic runs on a **sv-pathfinder-managed runtime**: one Yosys with the `slang` SystemVerilog
+frontend built in (`read_slang`) and the [uhdm2rtlil](https://github.com/alainmarcel/uhdm2rtlil)
+plugin (`read_uhdm`). You do not install Yosys yourself:
 
-1. Download the suite for your platform from the
-   [releases](https://github.com/YosysHQ/oss-cad-suite-build/releases).
-2. Extract it (`tar xzf oss-cad-suite-linux-x64-YYYYMMDD.tgz`).
-3. Point the setting at the extracted **`oss-cad-suite`** folder (the one containing `bin/yosys`):
-   ```jsonc
-   // settings.json
-   "sv-pathfinder.ossCadSuitePath": "/path/to/oss-cad-suite"
-   ```
-4. Right-click a scope in the Hierarchy view → **Show Schematic** to verify.
+1. Right-click a scope in the Hierarchy view → **Show Schematic**.
+2. On first use sv-pathfinder asks once to download the runtime (from this project's
+   [GitHub releases](https://github.com/heyfey/sv-pathfinder/releases); SHA-256 verified, self-tested
+   before it is installed into the extension's global storage). Later schematics reuse it.
+3. **Linux x64** only for now (built on AlmaLinux 8, so it runs on EL8/EL9 and newer distributions).
+   macOS and Windows `read_slang` packages are planned.
 
-> **macOS:** OSS CAD Suite's binaries aren't Apple-notarized, so Gatekeeper blocks them on first run
-> (*"Apple could not verify 'realpath' is free of malware…"*). Clear the quarantine flag on the whole
-> folder once, then reload the window:
+Re-download or repair with the command **sv-pathfinder: Install Schematic Runtime**.
+
+**Override** (air-gapped sites, developers): point `sv-pathfinder.schematicRuntimePath` — or the
+environment variable `SV_PATHFINDER_SCHEMATIC_RUNTIME` — at a directory that contains `bin/yosys`
+(and `share/yosys/plugins/uhdm2rtlil.so` for `.uhdm` designs). Download the same release archive by
+hand and extract it there; the setting wins over the variable. The runtime is built from pinned
+sources by `toolchain/build-schematic-runtime.sh` (see `toolchain/versions.json`).
+
+> **macOS (override only):** downloaded binaries may be blocked by Gatekeeper on first run. Clear
+> the quarantine flag on the runtime folder once, then reload the window:
 > ```bash
-> xattr -dr com.apple.quarantine "/path/to/oss-cad-suite"
+> xattr -dr com.apple.quarantine "/path/to/runtime"
 > ```
-> Use the same folder as `sv-pathfinder.ossCadSuitePath`. Don't approve binaries one-by-one in System
-> Settings — yosys pulls in several (`realpath`, `abc`, the `slang` plugin, …).
 
-## Backend tiers
+## Frontends
 
-- **OSS CAD Suite / any slang-capable Yosys** — full SystemVerilog support via `read_slang`. (Recommended)
-- **`yowasp-yosys`** (`pip install yowasp-yosys`) — a zero-install WASM **fallback with major
-  SystemVerilog gaps**; many designs render incompletely or fail to elaborate. The schematic shows a
-  "limited engine" badge and warns once when it falls back. These failures are a limitation of the
-  fallback toolchain, not your design or this extension.
-- A plain `yosys` on PATH **without** the slang frontend is **not used** (Verilog-only).
+- **`.f` designs → `read_slang`.** The filelist is re-parsed with the instance's resolved parameters
+  (`-G`), `-D SYNTHESIS`, and the search directories described below.
+- **`.uhdm` designs → `read_uhdm`** (Linux x64). The already elaborated UHDM database is imported as
+  it is: defines, includes and parameters were resolved by Surelog, so nothing has to be re-supplied.
+  Every parameterization is a separate module in the import. Requires a database written by the
+  Surelog release the extension's UHDM reader is built for (see GETTING_STARTED.md).
+- A plain `yosys` on PATH or an installed OSS CAD Suite is **not** detected; use the override above
+  if you want a specific Yosys build.
 
 ## Elaboration modes (`schematicElaborationMode`)
 
@@ -65,7 +70,7 @@ and each source file's directory are searched automatically, so a `.f` that omit
 
 | Setting | Description |
 |---|---|
-| `sv-pathfinder.ossCadSuitePath` | OSS CAD Suite dir (the `bin/yosys` parent). If empty, `yosys` then `yowasp-yosys` are resolved from PATH. |
+| `sv-pathfinder.schematicRuntimePath` | Override: a runtime dir (the `bin/yosys` parent). Empty = the managed runtime, downloaded on first use. `SV_PATHFINDER_SCHEMATIC_RUNTIME` is honoured when empty. |
 | `sv-pathfinder.schematicElaborationMode` | `shallow` (default) or `full` — see above. |
 | `sv-pathfinder.schematicIncludeDirs` | Extra `` `include`` search dirs for Yosys elaboration. |
 | `sv-pathfinder.schematicAccentColor` | Accent color for child-instance fills / hover highlights. Any CSS color; empty = theme-aware default. |

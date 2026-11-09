@@ -1,0 +1,19 @@
+{
+  "$comment": "Pinned sources and release assets of the managed schematic runtime (Yosys + read_slang + read_uhdm). Built by toolchain/build-schematic-runtime.sh; consumed by the extension's runtime manager.",
+  "runtimeVersion": "0.1.0",
+  "manifestSchema": 1,
+  "sources": {
+    "uhdm2rtlil": { "repo": "https://github.com/alainmarcel/uhdm2rtlil.git", "tag": "v0.68", "sha": "ddef9ffd369a35ffcd2597f5b64f29dbe1e4c6d5" },
+    "yosys":      { "repo": "https://github.com/alainmarcel/yosys.git", "sha": "bbc149ed5f087078ce4cb4e1454ad1b336bd2d35", "note": "Yosys v0.68 + proc_dlatch memoization (branch v0.68-proc-dlatch-memo); pinned by uhdm2rtlil v0.68" },
+    "surelog":    { "repo": "https://github.com/chipsalliance/Surelog.git", "sha": "04a865c00b81e0433c1ba3a56576de87a33d4f94", "note": "v1.87-5; pinned by uhdm2rtlil v0.68" },
+    "uhdm":       { "repo": "https://github.com/chipsalliance/UHDM.git", "sha": "6cb43ae0626e4462cc5804a30a7a2305e1f34003", "note": "v1.87-3; data model identical to v1.87" }
+  },
+  "assets": {
+    "linux-x64": {
+      "url": "https://github.com/heyfey/sv-pathfinder/releases/download/schematic-runtime-v0.1.0/sv-pathfinder-schematic-runtime-linux-x64-0.1.0.tar.gz",
+      "sha256": "",
+      "features": { "read_slang": true, "read_uhdm": true },
+      "glibcFloor": "2.28"
+    }
+  }
+}

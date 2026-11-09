@@ -1,10 +1,8 @@
 import * as assert from 'assert';
-
 import {
     NoYosysBackendError,
     isNoYosysBackendError,
-    isLimitedBackend,
-    noBackendMessage,
+    uhdmFrontendUnavailableMessage,
 } from '../schematic/backend_policy';
 
 suite('backend_policy', () => {
@@ -20,22 +18,13 @@ suite('backend_policy', () => {
         const e = new NoYosysBackendError('boom');
         assert.strictEqual(e.message, 'boom');
         assert.strictEqual(e.code, 'NO_YOSYS_BACKEND');
-        assert.ok(e instanceof Error);
+        assert.strictEqual(e.name, 'NoYosysBackendError');
     });
 
-    test('isLimitedBackend: a non-slang backend is limited', () => {
-        assert.strictEqual(isLimitedBackend({ slang: true }), false);
-        assert.strictEqual(isLimitedBackend({ slang: false }), true);
-        assert.strictEqual(isLimitedBackend(null), false);
-        assert.strictEqual(isLimitedBackend(undefined), false);
-    });
-
-    test('noBackendMessage mentions the slang-less Yosys only when one was seen', () => {
-        assert.ok(!noBackendMessage(false).includes('without the slang frontend'));
-        assert.ok(noBackendMessage(true).includes('without the slang frontend'));
-        // both always point at the supported fix
-        for (const m of [noBackendMessage(false), noBackendMessage(true)]) {
-            assert.ok(m.includes('ossCadSuitePath'));
-        }
+    test('uhdmFrontendUnavailableMessage names the runtime and the .f alternative', () => {
+        const m = uhdmFrontendUnavailableMessage('schematic runtime (env: /x)');
+        assert.ok(m.includes('schematic runtime (env: /x)'));
+        assert.ok(m.includes('read_uhdm'));
+        assert.ok(m.includes('.f filelist'));
     });
 });
