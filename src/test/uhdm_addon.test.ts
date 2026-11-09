@@ -40,6 +40,18 @@ suite('uhdm_addon', function () {
         }
     });
 
+    test('getSourceFiles lists every compiled source file of the design', async () => {
+        const id = await addon.loadDesign(EXAMPLE_DB);
+        try {
+            const files: string[] = addon.getSourceFiles(id);
+            assert.ok(files.some(f => f.endsWith('/examples/test/dut.v')), files.join(','));
+            assert.ok(files.some(f => f.endsWith('/examples/test/tb.sv')), files.join(','));
+        } finally {
+            await addon.unloadDesign(id);
+        }
+        assert.throws(() => addon.getSourceFiles(999999), /Design ID not found/);
+    });
+
     test('rejects (does not abort on) a missing file', async () => {
         await assert.rejects(addon.loadDesign(path.join(ROOT, 'does-not-exist.uhdm')), /Failed to load/);
     });

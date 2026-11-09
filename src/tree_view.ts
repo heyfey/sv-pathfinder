@@ -422,6 +422,10 @@ export abstract class DesignItem extends vscode.TreeItem {
 
     public getTreeData(): NetlistItem[] { return this.treeData; }
     public getModuleInstances(): NetlistItem[] { return this.moduleInstances; }
+    // Every source file the design was compiled from, when the backend knows them (UHDM does:
+    // module, package, interface, program and class definition files). Used by the schematic to
+    // re-parse a .uhdm design with read_slang. Empty when unknown.
+    public getSourceFiles(): string[] { return []; }
 
     public unloadTreeData() {
         this.treeData = [];
@@ -740,6 +744,8 @@ class KuzuDesignItem extends DesignItem {
 // #region UhdmDesignItem
 class UhdmDesignItem extends DesignItem {
     private designId = -1; // Used to identify the design in UHDM addon
+    private sourceFiles: string[] = [];
+    public getSourceFiles(): string[] { return this.sourceFiles; }
     public uhdmAddon?: any | undefined; // TODO(heyfey): make it private
 
     public async load(): Promise<boolean> {
@@ -756,6 +762,8 @@ class UhdmDesignItem extends DesignItem {
                 cancellable: false
             }, async () => {
                 this.designId = await this.uhdmAddon.loadDesign(this.resourceUri.fsPath);
+                this.sourceFiles = typeof this.uhdmAddon.getSourceFiles === 'function'
+                    ? this.uhdmAddon.getSourceFiles(this.designId) : [];
                 if (showModulesViewEnabled()) {
                     // Consider remove "await" for large designs, but:
                     //   1. Need to make sure loadModuleDefs is finished before selectInstance called
@@ -1299,6 +1307,7 @@ class FDesignItem extends DesignItem {
     // tree data and module instances are from delegate design
     public getTreeData(): NetlistItem[] { return this.delegateDesign.getTreeData(); }
     public getModuleInstances(): NetlistItem[] { return this.delegateDesign.getModuleInstances(); }
+    public getSourceFiles(): string[] { return this.delegateDesign.getSourceFiles(); }
     public get DelegateDesign(): DesignItem { return this.delegateDesign; }
 
     public async getChildrenExternal(element: NetlistItem | undefined): Promise<NetlistItem[]> {

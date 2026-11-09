@@ -3,6 +3,7 @@
 #include <uhdm/VpiListener.h>
 #include <uhdm/uhdm-version.h>
 #include <uhdm/uhdm.h>
+#include <uhdm/vpi_uhdm.h>
 #include <uhdm/vpi_user.h>
 
 #include <algorithm>
@@ -10,6 +11,7 @@
 #include <cctype>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <string>
 // #include <map>
 #include <unordered_map>
@@ -880,6 +882,46 @@ Napi::Value SearchInstances(const Napi::CallbackInfo& info) {
   return deferred.Promise();
 }
 
+// Every source file the design was compiled from: definitions of modules, packages, interfaces,
+// programs and classes. The schematic re-parses these with read_slang when the .uhdm cannot be
+// imported directly; the module-instance files alone miss the packages the modules import.
+Napi::Value GetSourceFiles(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  if (info.Length() < 1 || !info[0].IsNumber()) {
+    Napi::TypeError::New(env, "Number argument (designId) expected").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  int designId = info[0].As<Napi::Number>().Int32Value();
+  std::shared_ptr<DesignContext> dc;
+  {
+    std::lock_guard<std::mutex> lock(designContextMapMutex);
+    auto it = designContextMap.find(designId);
+    if (it == designContextMap.end()) {
+      Napi::Error::New(env, "Design ID not found").ThrowAsJavaScriptException();
+      return env.Null();
+    }
+    dc = it->second;
+  }
+  const UHDM::design* d = (const UHDM::design*)((const uhdm_handle*)dc->design)->object;
+  std::set<std::string> files;
+  auto add = [&files](const UHDM::any* o) {
+    if (!o) return;
+    std::string_view f = o->VpiFile();
+    if (!f.empty()) files.emplace(f);
+  };
+  if (d->AllModules()) for (const auto* m : *d->AllModules()) add(m);
+  if (d->TopModules()) for (const auto* m : *d->TopModules()) add(m);
+  if (d->AllPackages()) for (const auto* p : *d->AllPackages()) add(p);
+  if (d->TopPackages()) for (const auto* p : *d->TopPackages()) add(p);
+  if (d->AllInterfaces()) for (const auto* i : *d->AllInterfaces()) add(i);
+  if (d->AllPrograms()) for (const auto* p : *d->AllPrograms()) add(p);
+  if (d->AllClasses()) for (const auto* c : *d->AllClasses()) add(c);
+  Napi::Array arr = Napi::Array::New(env);
+  uint32_t i = 0;
+  for (const auto& f : files) arr[i++] = Napi::String::New(env, f);
+  return arr;
+}
+
 Napi::Value UnloadDesign(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
@@ -921,6 +963,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("getVars", Napi::Function::New(env, GetVars));
   exports.Set("getModuleDef", Napi::Function::New(env, GetModuleDef));
   exports.Set("getModuleDefs", Napi::Function::New(env, GetModuleDefs));
+  exports.Set("getSourceFiles", Napi::Function::New(env, GetSourceFiles));
   exports.Set("getModuleInstances",
               Napi::Function::New(env, GetModuleInstances));
   exports.Set("searchInstances", Napi::Function::New(env, SearchInstances));

@@ -57,8 +57,10 @@ export async function resolveScope(design: DesignItem, instance: NetlistItem): P
         dotF = designPath;
         workDir = path.dirname(designPath);
     } else {
-        // UHDM/Kuzu designs: over-provide every module definition's source file.
-        const files = new Set<string>();
+        // UHDM/Kuzu designs: over-provide every source file the database was compiled from (module,
+        // package, interface, … definitions) when the backend knows them, plus every module
+        // definition's file. Packages matter: without their files read_slang reports "unknown package".
+        const files = new Set<string>(design.getSourceFiles());
         for (const mod of design.getModuleInstances()) {
             if (mod.sourceFile) { files.add(mod.sourceFile); }
         }
