@@ -394,6 +394,53 @@ export function extractSubtree(fullCircuit: any, moduleName: string, instancePat
     return { ...root, subcircuits: kept };
 }
 
+// Walk a whole-design circuit by INSTANCE LABELS instead of module keys: from the root graph, follow
+// the Subcircuit device whose label is the next path segment(s) and continue in its subcircuit. This
+// does not depend on how the frontend named the modules — read_slang gives one module per instance
+// (`mod$path`), read_uhdm one per parameterization (`$paramod\mod\P=V`, shared by all its instances) —
+// and it copes with generate scopes, where the hierarchy tree has segments `g[0]` and `u` but Yosys has
+// one cell named `g[0].u` (the longest label that matches a run of segments wins). `relPath` is the
+// dotted path below the root (no root segment); '' returns the whole circuit. Returns undefined when a
+// segment is not found.
+export function extractSubtreeByPath(fullCircuit: any, relPath: string): any | undefined {
+    if (!fullCircuit) { return undefined; }
+    if (!relPath) { return fullCircuit; }
+    const subs = fullCircuit.subcircuits ?? {};
+    const segments = relPath.split('.');
+    let graph: any = fullCircuit;
+    let key: string | undefined;
+    let i = 0;
+    while (i < segments.length) {
+        let best: { celltype: string; len: number } | undefined;
+        for (const dev of Object.values<any>(graph?.devices ?? {})) {
+            if (dev.type !== 'Subcircuit' || typeof dev.label !== 'string') { continue; }
+            // longest run of segments equal to this device's label
+            for (let len = segments.length - i; len >= 1; len--) {
+                if (segments.slice(i, i + len).join('.') === dev.label) {
+                    if (!best || len > best.len) { best = { celltype: dev.celltype, len }; }
+                    break;
+                }
+            }
+        }
+        if (!best || !subs[best.celltype]) { return undefined; }
+        key = best.celltype;
+        graph = subs[key];
+        i += best.len;
+    }
+    // Repackage: this graph as the root + every transitively referenced descendant subcircuit.
+    const kept: Record<string, any> = {};
+    const seen = new Set<string>([key!]);
+    const queue: any[] = [graph];
+    while (queue.length) {
+        const g = queue.shift();
+        for (const dev of Object.values<any>(g?.devices ?? {})) {
+            const ct: string | undefined = dev.type === 'Subcircuit' ? dev.celltype : undefined;
+            if (ct && !seen.has(ct) && subs[ct]) { seen.add(ct); kept[ct] = subs[ct]; queue.push(subs[ct]); }
+        }
+    }
+    return { ...graph, subcircuits: kept };
+}
+
 // Shallow display shows the scope + its direct children as port-only boxes. When full elaboration was
 // forced (interface-port children can't be blackboxed → the shallow attempt threw → ancestor fallback),
 // the extracted circuit carries the WHOLE subtree, so `new Circuit` eagerly builds every subcircuit

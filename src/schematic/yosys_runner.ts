@@ -97,7 +97,11 @@ function buildScript(ctx: ScopeContext, preset: SchematicPreset, outJson: string
         const hier = bestEffortHierarchy ? '--best-effort-hierarchy' : '--keep-hierarchy';
         read = `read_slang ${hier} --ignore-timing --ignore-initial --ignore-assertions --allow-use-before-declare --allow-hierarchical-const ${iu}-D SYNTHESIS ${search} ${bb} ${gFlags} --top ${ctx.moduleName} ${files}`;
     }
-    const common = `${read}; hierarchy -top ${ctx.moduleName}; `;
+    // read_uhdm imports $display/$finish and assertions as $print/$check cells, which the converter
+    // does not draw (read_slang drops them via --ignore-initial/--ignore-assertions). Delete them
+    // right after import; the selection is a no-op when none exist.
+    const simOnly = ctx.uhdmFile ? 'delete t:$print t:$check t:$assert t:$assume t:$cover t:$live t:$fair; ' : '';
+    const common = `${read}; hierarchy -top ${ctx.moduleName}; ${simOnly}`;
     if (preset === 'gls') {
         // Gate-level view: synth flow. -noabc: the managed runtime's Yosys is built without ABC
         // (nothing in the schematic needs it); techmap'd $_AND_/$_OR_/... cells are gate-level and

@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import path from 'path';
 
-import { convertToDigitalJs, findDanglingNets, extractSubtree, findSubcircuitKey, rootRelativeYosysPath, pickCoveringRoot, pruneToShallowLevel } from '../schematic/converter';
+import { convertToDigitalJs, findDanglingNets, extractSubtree, findSubcircuitKey, rootRelativeYosysPath, pickCoveringRoot, pruneToShallowLevel, extractSubtreeByPath } from '../schematic/converter';
 
 // Fixtures live in src/ (not copied to out/ by tsc), so resolve from the repo root.
 const FIXTURES = path.resolve(__dirname, '../../src/test/fixtures');
@@ -285,5 +285,58 @@ suite('pickCoveringRoot', () => {
     test('undefined when nothing covers the scope (ascended above all roots → elaborate fresh)', () => {
         assert.strictEqual(pickCoveringRoot(['tpu.vpu_inst'], 'tpu'), undefined);
         assert.strictEqual(pickCoveringRoot([], 'tpu'), undefined);
+    });
+});
+
+suite('extractSubtreeByPath (read_uhdm: shared $paramod modules, walk by instance labels)', () => {
+    // top ─ u0:cpu32 ─ alu:alu
+    //     └ u1:cpu64 ─ alu:alu
+    //     └ g_lane[0].u_lane:lane   (one Yosys cell for the generate scope + instance)
+    const ALU = { devices: { a: { type: 'Input', label: 'a' } }, connectors: [] };
+    const CPU32 = { devices: { alu: { type: 'Subcircuit', label: 'alu', celltype: 'alu' } }, connectors: [] };
+    const CPU64 = { devices: { alu: { type: 'Subcircuit', label: 'alu', celltype: 'alu' }, x: { type: 'Input', label: 'x' } }, connectors: [] };
+    const LANE = { devices: { q: { type: 'Output', label: 'q' } }, connectors: [] };
+    const full = {
+        devices: {
+            d0: { type: 'Subcircuit', label: 'u0', celltype: "$paramod\\cpu\\WIDTH=s32'00000000000000000000000000100000" },
+            d1: { type: 'Subcircuit', label: 'u1', celltype: "$paramod\\cpu\\WIDTH=s32'00000000000000000000000001000000" },
+            d2: { type: 'Subcircuit', label: 'g_lane[0].u_lane', celltype: 'lane' },
+            clk: { type: 'Input', label: 'clk' },
+        },
+        connectors: [],
+        subcircuits: {
+            "$paramod\\cpu\\WIDTH=s32'00000000000000000000000000100000": CPU32,
+            "$paramod\\cpu\\WIDTH=s32'00000000000000000000000001000000": CPU64,
+            alu: ALU, lane: LANE,
+        },
+    };
+
+    test("'' returns the whole circuit; a direct child by label with its descendants", () => {
+        assert.strictEqual(extractSubtreeByPath(full, ''), full);
+        const u1 = extractSubtreeByPath(full, 'u1');
+        assert.ok(u1.devices.x, 'u1 must be the 64-bit specialization');
+        assert.deepStrictEqual(Object.keys(u1.subcircuits), ['alu']);
+    });
+
+    test('two instances of the same module resolve to their own specializations', () => {
+        assert.strictEqual(extractSubtreeByPath(full, 'u0').devices.x, undefined);
+        assert.ok(extractSubtreeByPath(full, 'u1').devices.x);
+    });
+
+    test('descends several levels and stops at a leaf with no subcircuits', () => {
+        const alu = extractSubtreeByPath(full, 'u1.alu');
+        assert.ok(alu.devices.a);
+        assert.deepStrictEqual(alu.subcircuits, {});
+    });
+
+    test('a generate scope + instance that Yosys names as ONE cell matches a run of path segments', () => {
+        const lane = extractSubtreeByPath(full, 'g_lane[0].u_lane');
+        assert.ok(lane && lane.devices.q);
+    });
+
+    test('undefined for an unknown segment or a missing module', () => {
+        assert.strictEqual(extractSubtreeByPath(full, 'nope'), undefined);
+        assert.strictEqual(extractSubtreeByPath(full, 'u1.nope'), undefined);
+        assert.strictEqual(extractSubtreeByPath(undefined, 'u1'), undefined);
     });
 });

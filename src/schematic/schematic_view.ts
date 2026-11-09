@@ -10,7 +10,7 @@ import * as os from 'os';
 import { DesignItem, NetlistItem, HierarchyTreeProvider, replaceFilePathIfNeeded, showTextDocumentLocation, showOpenDesignFirstMessage } from '../tree_view';
 import { resolveScope, scopeCacheKey, ScopeContext } from './scope_resolver';
 import { runYosys, SchematicPreset, getResolvedBackendName } from './yosys_runner';
-import { convertToDigitalJs, extractSubtree, rootRelativeYosysPath, pickCoveringRoot, pruneToShallowLevel } from './converter';
+import { convertToDigitalJs, extractSubtree, rootRelativeYosysPath, pickCoveringRoot, pruneToShallowLevel, extractSubtreeByPath } from './converter';
 import { svLog } from '../output';
 import { findParentModuleScope, ancestorFallbackReason, isNonModuleTopError } from './scope_nav';
 import { cleanCelltype } from './celltype';
@@ -88,13 +88,22 @@ export class SchematicViewProvider {
             // (e.g. a generate-name quirk). shallow mode: elaborate this scope + 1 level on demand.
             let digitalJsJson;
             try {
-                digitalJsJson = !shallow
-                    ? await this.renderFromFullCircuit(design, ctx, preset, showDangling, force)
-                    : undefined;
-                if (!digitalJsJson) {
-                    digitalJsJson = await this.elaborateScope(ctx, preset, showDangling, shallow, force);
+                if (ctx.uhdmFile) {
+                    // .uhdm design: read_uhdm imports the whole elaborated database (no per-scope
+                    // re-parse exists), so elaborate once at the design top and extract every scope
+                    // from that circuit. Shallow is a display prune. No ancestor fallback applies.
+                    digitalJsJson = await this.renderFromUhdmDesign(design, instance, ctx, preset, showDangling, force);
+                    if (shallow) { digitalJsJson = pruneToShallowLevel(digitalJsJson); }
+                } else {
+                    digitalJsJson = !shallow
+                        ? await this.renderFromFullCircuit(design, ctx, preset, showDangling, force)
+                        : undefined;
+                    if (!digitalJsJson) {
+                        digitalJsJson = await this.elaborateScope(ctx, preset, showDangling, shallow, force);
+                    }
                 }
             } catch (e: any) {
+                if (ctx.uhdmFile) { throw e; }
                 // Some scopes can't be elaborated as a standalone top: one with a SystemVerilog
                 // interface port (nothing to connect it to), or one whose config comes from a param we
                 // can't reconstruct via Yosys -G (a struct/enum/array like CVA6's CVA6Cfg — in isolation
@@ -111,7 +120,7 @@ export class SchematicViewProvider {
             // hierarchy — new Circuit would build every subcircuit model (cva6: ~175s) though only the
             // top is drawn and shallow step-in re-elaborates each child anyway. Prune to the displayed
             // level. No-op for an already-shallow render.
-            if (shallow && digitalJsJson) { digitalJsJson = pruneToShallowLevel(digitalJsJson); }
+            if (shallow && digitalJsJson && !ctx.uhdmFile) { digitalJsJson = pruneToShallowLevel(digitalJsJson); }
 
             // Size guard: rendering thousands of cells freezes the webview for minutes (JointJS cell-view
             // creation/placement doesn't scale — e.g. CVA6's csr_regfile ~6900 cells took ~7 min). Warn
@@ -157,7 +166,7 @@ export class SchematicViewProvider {
             this.debouncePushValues();
             // Param-override caveat only applies to shallow's per-scope elaboration; full mode
             // elaborates from the real top so every scope's params are in-context accurate.
-            if (shallow) { this.maybeWarnSkippedParams(ctx); }
+            if (shallow && !ctx.uhdmFile) { this.maybeWarnSkippedParams(ctx); }
         } catch (e: any) {
             this.postMessage({ type: 'renderAbort' }); // no loadSchematic is coming → drop the overlay
             this.showRenderError(e);
@@ -205,6 +214,38 @@ export class SchematicViewProvider {
             this.cache.set(key, json);
         }
         return json;
+    }
+
+    // .uhdm designs: one read_uhdm import of the whole database, rooted at the design's top instance,
+    // cached per design/preset; every scope is extracted from it by walking instance labels (module
+    // names are per-parameterization `$paramod` names there, not per-instance like read_slang's).
+    private async renderFromUhdmDesign(design: DesignItem, instance: NetlistItem, ctx: ScopeContext, preset: SchematicPreset, showDangling: boolean, force: boolean): Promise<any> {
+        let root = instance;
+        for (let p = findParentModuleScope(root); p; p = findParentModuleScope(p)) { root = p; }
+        const rootCtx = root === instance ? ctx : await resolveScope(design, root);
+        const key = `${design.resourceUri.fsPath}|${preset}${showDangling ? '+dangling' : ''}|${rootCtx.instancePath}`;
+        let entry = !force ? this.fullCircuitCache.get(key) : undefined;
+        if (!entry) {
+            const circuit = await vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: `Schematic: importing ${path.basename(rootCtx.uhdmFile ?? '')} (read_uhdm, ${preset.toUpperCase()})…`,
+                cancellable: false,
+            }, async () => {
+                const result = await runYosys(rootCtx, preset, { showDangling });
+                return convertToDigitalJs(result.yosysJson, { showDangling });
+            });
+            entry = { rootModule: rootCtx.moduleName, rootInstancePath: rootCtx.instancePath, circuit };
+            this.fullCircuitCache.set(key, entry);
+        }
+        const relPath = ctx.instancePath === rootCtx.instancePath ? ''
+            : ctx.instancePath.startsWith(rootCtx.instancePath + '.') ? ctx.instancePath.slice(rootCtx.instancePath.length + 1) : undefined;
+        const sub = relPath === undefined ? undefined : extractSubtreeByPath(entry.circuit, relPath);
+        if (!sub) {
+            throw new Error(`Schematic: scope '${ctx.instancePath}' was not found in the read_uhdm import of ` +
+                `'${rootCtx.moduleName}' (the importer may name generate or array instances differently). ` +
+                'See the "sv-pathfinder" output for the Yosys log.');
+        }
+        return sub;
     }
 
     // Full mode: render the shown scope by EXTRACTING it from a cached elaboration that covers it
