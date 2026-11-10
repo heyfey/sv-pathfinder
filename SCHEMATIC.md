@@ -4,51 +4,51 @@ The schematic renders the RTL (or gate-level) structure of any scope — ports, 
 
 ![](readme_assets/schematic.png)
 
-## Setup (managed runtime)
+## Setup
 
-The schematic runs on a **sv-pathfinder-managed runtime**: one Yosys with the `slang` SystemVerilog
-frontend built in (`read_slang`) and the [uhdm2rtlil](https://github.com/alainmarcel/uhdm2rtlil)
-plugin (`read_uhdm`). You do not install Yosys yourself:
+Nothing to install. The schematic uses a small Yosys-based toolchain that sv-pathfinder downloads
+for you:
 
 1. Right-click a scope in the Hierarchy view → **Show Schematic**.
-2. On first use sv-pathfinder asks once to download the runtime (from this project's
-   [GitHub releases](https://github.com/heyfey/sv-pathfinder/releases); SHA-256 verified, self-tested
-   before it is installed into the extension's global storage). Later schematics reuse it.
-3. **Linux x64** only for now (built on AlmaLinux 8, so it runs on EL8/EL9 and newer distributions).
-   macOS and Windows `read_slang` packages are planned.
+2. The first time, sv-pathfinder asks to download the schematic runtime (about 20 MB, from this
+   project's [GitHub releases](https://github.com/heyfey/sv-pathfinder/releases)). Click **Install**.
+3. That is it. Later schematics reuse the installed runtime.
 
-Re-download or repair with the command **sv-pathfinder: Install Schematic Runtime**.
+Supported platform: **Linux x64** (any distribution from RHEL/AlmaLinux 8 onwards). macOS and
+Windows support is planned.
 
-**Override** (air-gapped sites, developers): point `sv-pathfinder.schematicRuntimePath` — or the
-environment variable `SV_PATHFINDER_SCHEMATIC_RUNTIME` — at a directory that contains `bin/yosys`
-(and `share/yosys/plugins/uhdm2rtlil.so` for `.uhdm` designs). Download the same release archive by
-hand and extract it there; the setting wins over the variable. The runtime is built from pinned
-sources by `toolchain/build-schematic-runtime.sh` (see `toolchain/versions.json`).
+To download it again, or to repair a broken install, run the command
+**sv-pathfinder: Install Schematic Runtime**.
 
-> **macOS (override only):** downloaded binaries may be blocked by Gatekeeper on first run. Clear
-> the quarantine flag on the runtime folder once, then reload the window:
+### No internet access on the machine?
+
+Download `sv-pathfinder-schematic-runtime-linux-x64-<version>.tar.gz` from the releases page on
+another machine, extract it anywhere on the target machine, and point this setting at the extracted
+folder (the one that contains `bin/yosys`):
+
+```jsonc
+// settings.json
+"sv-pathfinder.schematicRuntimePath": "/path/to/sv-pathfinder-schematic-runtime-linux-x64-<version>"
+```
+
+The environment variable `SV_PATHFINDER_SCHEMATIC_RUNTIME` does the same when the setting is empty.
+
+> **macOS note:** if you use a hand-installed runtime on macOS, Gatekeeper may block it on first run.
+> Clear the quarantine flag on the runtime folder once, then reload the window:
 > ```bash
 > xattr -dr com.apple.quarantine "/path/to/runtime"
 > ```
 
-## Frontends
+## Which designs can be drawn
 
-- **`.f` designs → `read_slang`.** The filelist is re-parsed with the instance's resolved parameters
-  (`-G`), `-D SYNTHESIS`, and the search directories described below.
-- **`.uhdm` designs → `read_uhdm` first, `read_slang` as fallback** (`schematicUhdmFrontend`, default
-  `auto`). `read_uhdm` (Linux x64) imports the already elaborated database as it is: defines, includes
-  and parameters were resolved by Surelog, so nothing has to be re-supplied, and every
-  parameterization is a separate module. The importer ([uhdm2rtlil](https://github.com/alainmarcel/uhdm2rtlil)
-  v0.70.2) is **experimental**: on a corpus of 24 real databases it imports 18; known failures are
-  interface ports inside generate loops, some bit selects on hierarchical/package names (openENOC),
-  one testbench clock case (VeeR EL2 TB), one Yosys width assert (hdmi testbench), a logic-loop
-  error on XiangShan, and VeeR EL2 needing more than 14 GB. When it fails, `auto` warns once and re-parses the source files the
-  database records (modules, packages, interfaces) with `read_slang`, with the include directories
-  the database records and the selected instance's parameter values. Defines are not recorded in a
-  UHDM database, so `ifdef`-dependent designs may need the `.f` flow instead. The database must
-  come from the Surelog release the extension's UHDM reader is built for (see GETTING_STARTED.md).
-- A plain `yosys` on PATH or an installed OSS CAD Suite is **not** detected; use the override above
-  if you want a specific Yosys build.
+- **`.f` filelist designs** — always. The schematic re-reads the sources listed in the `.f`.
+- **`.uhdm` database designs** — on Linux x64. The schematic reads the database directly, so the
+  design appears exactly as Surelog elaborated it, with no defines or include paths to re-enter.
+  This reader is new and does not handle every design yet. When it cannot read a database,
+  sv-pathfinder tells you once and falls back to re-reading the design's source files instead; if
+  the design depends on `+define+` options, that fallback cannot know them, so open the design from
+  its `.f` filelist for the schematic. The setting `sv-pathfinder.schematicUhdmFrontend` lets you
+  force one of the two behaviors.
 
 ## Elaboration modes (`schematicElaborationMode`)
 
@@ -78,9 +78,9 @@ and each source file's directory are searched automatically, so a `.f` that omit
 
 | Setting | Description |
 |---|---|
-| `sv-pathfinder.schematicRuntimePath` | Override: a runtime dir (the `bin/yosys` parent). Empty = the managed runtime, downloaded on first use. `SV_PATHFINDER_SCHEMATIC_RUNTIME` is honoured when empty. |
+| `sv-pathfinder.schematicRuntimePath` | Folder of a hand-installed schematic runtime (the one containing `bin/yosys`). Leave empty to use the automatically downloaded one. |
 | `sv-pathfinder.schematicElaborationMode` | `shallow` (default) or `full` — see above. |
-| `sv-pathfinder.schematicUhdmFrontend` | `.uhdm` designs: `auto` (default: `read_uhdm`, fall back to `read_slang`), `read_uhdm`, or `read_slang`. |
+| `sv-pathfinder.schematicUhdmFrontend` | How `.uhdm` designs are drawn: `auto` (default: read the database, fall back to the source files), `read_uhdm` (database only), or `read_slang` (source files only). |
 | `sv-pathfinder.schematicIncludeDirs` | Extra `` `include`` search dirs for Yosys elaboration. |
 | `sv-pathfinder.schematicAccentColor` | Accent color for child-instance fills / hover highlights. Any CSS color; empty = theme-aware default. |
 | `sv-pathfinder.schematicShowDanglingNets` | Surface declared-but-unconnected nets. Default off. |

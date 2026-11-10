@@ -14,7 +14,7 @@
 |---|---|---|
 | The extension | VS Code **1.93.0+** | Install from the [Marketplace](https://marketplace.visualstudio.com/items?itemName=heyfey.sv-pathfinder) |
 | **Design navigation** (required) | **One design input** — a **`.f`** filelist (backend: **slang-server** *(default)* or **Surelog**) *or* a **`.uhdm`** database (native reader, **Linux x64**; no backend needed) | [Open a design](#open-a-design) |
-| **Schematic viewer** | Nothing to install: the **managed runtime** (Yosys + `read_slang` + `read_uhdm`) is downloaded once on first use (**Linux x64**) | [Schematic viewer](#schematic-viewer) |
+| **Schematic viewer** | Nothing to install: the schematic runtime is downloaded once on first use (**Linux x64**) | [Schematic viewer](#schematic-viewer) |
 | **Waveform** value annotation & "Show in Waveform" | The [Vaporview](https://marketplace.visualstudio.com/items?itemName=lramseyer.vaporview) extension | [Waveform integration](#waveform-integration) |
 
 > **Platform:** primarily developed and tested on **Linux x64** (Ubuntu 22.04, AlmaLinux 8). Only the
@@ -70,7 +70,7 @@ waveform viewer. With a waveform open, sv-pathfinder then:
 | `sv-pathfinder.showModulesView` | Show the Modules view (reload window to apply). Default `true`. |
 | `sv-pathfinder.valueAnnotationFormat` | Inline waveform-value format: hex / dec / bin. |
 | `sv-pathfinder.sourcePathFrom` / `sourcePathTo` | Remap source paths across machines (both must be set). |
-| `sv-pathfinder.schematicRuntimePath` | Override for the schematic runtime dir (the `bin/yosys` parent); empty = managed runtime. |
+| `sv-pathfinder.schematicRuntimePath` | Folder of a hand-installed schematic runtime; empty = downloaded automatically. |
 | `sv-pathfinder.schematic*` | Schematic appearance & elaboration — see [SCHEMATIC.md](SCHEMATIC.md). |
 
 ## Building from source
