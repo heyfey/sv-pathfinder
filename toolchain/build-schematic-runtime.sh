@@ -7,7 +7,8 @@
 # YOSYS_WITHOUT_ABC=ON. Only bin/yosys is packaged (no yosys-abc); the schematic uses `synth -noabc`.
 #
 # Reference platform: AlmaLinux 8 + gcc-toolset-14 (scl enable gcc-toolset-14 bash), cmake >= 3.28 (pip),
-# python3 >= 3.8 with orderedmultidict, Java >= 11 (Surelog's ANTLR step), bison, flex, zlib-devel.
+# python3 >= 3.8 with orderedmultidict, Java >= 11 (Surelog's ANTLR step), bison >= 3.6 (built from
+# source on EL8, whose package is 3.0.4), flex, zlib-devel.
 # CI runs this inside an almalinux:8 container (.github/workflows/schematic-runtime.yml).
 #
 # Stages (each is skipped when its output already exists; delete the directory to redo it):
@@ -44,11 +45,14 @@ if [ "${gcc_major:-0}" -lt 11 ]; then
   echo "error: need GCC >= 11 (Yosys is C++20); on EL8 run: scl enable gcc-toolset-14 bash" >&2; exit 1
 fi
 command -v java >/dev/null || { echo "error: java not found (Surelog's ANTLR step needs Java >= 11)" >&2; exit 1; }
-# The Yosys v0.70 fork needs CMake >= 3.28; EL8's package is 3.26. `python3 -m pip install 'cmake>=3.28'` gives one.
-cmake_ver="$(cmake --version 2>/dev/null | head -1 | awk '{print $3}')"
-if ! printf '3.28\n%s\n' "${cmake_ver:-0}" | sort -V -C; then
-  echo "error: need CMake >= 3.28 (found ${cmake_ver:-none}); on EL8 run: python3 -m pip install 'cmake>=3.28'" >&2; exit 1
-fi
+# EL8's packages are too old for the Yosys v0.70 fork on two counts; see the workflow for the recipes.
+need_version() { # name found minimum hint
+  if ! printf '%s\n%s\n' "$3" "${2:-0}" | sort -V -C; then
+    echo "error: need $1 >= $3 (found ${2:-none}); $4" >&2; exit 1
+  fi
+}
+need_version CMake "$(cmake --version 2>/dev/null | head -1 | awk '{print $3}')" 3.28 "on EL8 run: python3 -m pip install 'cmake>=3.28'"
+need_version Bison "$(bison --version 2>/dev/null | head -1 | awk '{print $NF}')" 3.6 "on EL8 build GNU Bison 3.8.2 from source (ftp.gnu.org/gnu/bison)"
 mkdir -p "$WORK"
 
 # Fetch one exact commit (not a branch tip) with a shallow history.
