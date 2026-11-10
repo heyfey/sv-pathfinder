@@ -1,6 +1,6 @@
 {
-  "$comment": "Pinned sources and release assets of the managed schematic runtime (Yosys + read_slang + read_uhdm). Built by toolchain/build-schematic-runtime.sh; consumed by the extension's runtime manager.",
-  "runtimeVersion": "0.1.0",
+  "$comment": "Pinned sources and release assets of the managed schematic runtime. linux-x64 is built from source (Yosys + read_slang + read_uhdm) by toolchain/build-schematic-runtime.sh; darwin-*/win32-x64 are slang-only repacks of OSS CAD Suite by toolchain/repack-oss-cad-suite.sh. Consumed by the extension's runtime manager.",
+  "runtimeVersion": "0.2.0",
   "manifestSchema": 1,
   "sources": {
     "uhdm2rtlil": {
@@ -22,17 +22,70 @@
       "repo": "https://github.com/chipsalliance/UHDM.git",
       "sha": "01422ac97bbc259dc549b66f478ba29464cc0bce",
       "note": "v1.87-48; data model = v1.87 plus one appended property (struct_typespec.sign)"
+    },
+    "ossCadSuite": {
+      "repo": "https://github.com/YosysHQ/oss-cad-suite-build",
+      "release": "2026-11-09",
+      "note": "Repacked for the platforms we do not build ourselves (macOS, Windows). linux-x64 is listed only so the repack script can be tested on Linux; users get the from-source Linux runtime above.",
+      "assets": {
+        "darwin-arm64": {
+          "name": "oss-cad-suite-darwin-arm64-20261109.tgz",
+          "sha256": "024cd74ba5d8bc1891c7b5ec1f1d0fc307429f0ac7fb1bd1f1c2e1d1083d92c4"
+        },
+        "darwin-x64": {
+          "name": "oss-cad-suite-darwin-x64-20261109.tgz",
+          "sha256": "ec71f713b35534f0e76ae06952ae1b724acfdf388f8a613b44e152b8ca213e8e"
+        },
+        "win32-x64": {
+          "name": "oss-cad-suite-windows-x64-20261109.tgz",
+          "sha256": "e7fcbfbea8bb1aafe350ab454dc98330dcad03c1f788f8d2d77c778f3a6a9c42"
+        },
+        "linux-x64": {
+          "name": "oss-cad-suite-linux-x64-20261109.tgz",
+          "sha256": "256b113c88b8da8b363e739dd97babe89eefbfdbb84373ccae0666ae19ac304d"
+        }
+      }
     }
   },
   "assets": {
     "linux-x64": {
-      "url": "https://github.com/heyfey/sv-pathfinder/releases/download/schematic-runtime-v0.1.0/sv-pathfinder-schematic-runtime-linux-x64-0.1.0.tar.gz",
-      "sha256": "79d62f741034bc10ace81d2d7c2c51761e7473cd7eafa28c2cec0d2fe2effdf4",
+      "url": "https://github.com/heyfey/sv-pathfinder/releases/download/schematic-runtime-v0.2.0/sv-pathfinder-schematic-runtime-linux-x64-0.2.0.tar.gz",
+      "sha256": "",
       "features": {
         "read_slang": true,
         "read_uhdm": true
       },
       "glibcFloor": "2.28"
+    },
+    "darwin-arm64": {
+      "url": "https://github.com/heyfey/sv-pathfinder/releases/download/schematic-runtime-v0.2.0/sv-pathfinder-schematic-runtime-darwin-arm64-0.2.0.tar.gz",
+      "sha256": "",
+      "features": {
+        "read_slang": true,
+        "read_uhdm": false
+      },
+      "source": "oss-cad-suite",
+      "note": "slang-only: Yosys + the slang plugin repacked from the pinned OSS CAD Suite release by toolchain/repack-oss-cad-suite.sh; no read_uhdm"
+    },
+    "darwin-x64": {
+      "url": "https://github.com/heyfey/sv-pathfinder/releases/download/schematic-runtime-v0.2.0/sv-pathfinder-schematic-runtime-darwin-x64-0.2.0.tar.gz",
+      "sha256": "",
+      "features": {
+        "read_slang": true,
+        "read_uhdm": false
+      },
+      "source": "oss-cad-suite",
+      "note": "slang-only: Yosys + the slang plugin repacked from the pinned OSS CAD Suite release by toolchain/repack-oss-cad-suite.sh; no read_uhdm"
+    },
+    "win32-x64": {
+      "url": "https://github.com/heyfey/sv-pathfinder/releases/download/schematic-runtime-v0.2.0/sv-pathfinder-schematic-runtime-win32-x64-0.2.0.tar.gz",
+      "sha256": "",
+      "features": {
+        "read_slang": true,
+        "read_uhdm": false
+      },
+      "source": "oss-cad-suite",
+      "note": "slang-only: Yosys + the slang plugin repacked from the pinned OSS CAD Suite release by toolchain/repack-oss-cad-suite.sh; no read_uhdm"
     }
   }
 }

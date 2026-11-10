@@ -1,19 +1,21 @@
 name: Schematic runtime
 
-# Builds the managed schematic runtime (Yosys + read_slang + uhdm2rtlil/read_uhdm) for Linux x64 from
-# the sources pinned in toolchain/versions.json, inside an AlmaLinux 8 container so the binaries keep
-# the EL8 glibc 2.28 floor. The extension downloads the release asset named in versions.json on the
-# first schematic use.
+# Builds the managed schematic runtime the extension downloads on the first schematic use, one archive
+# per platform, from the pins in toolchain/versions.json:
+#   linux-x64                    Yosys + read_slang + uhdm2rtlil/read_uhdm, built from source inside an
+#                                AlmaLinux 8 container (EL8 glibc 2.28 floor) by build-schematic-runtime.sh
+#   darwin-arm64 / darwin-x64 /  slang-only: Yosys + the slang plugin repacked from the pinned OSS CAD
+#   win32-x64                    Suite release on the native runner by repack-oss-cad-suite.sh
 #
 # Manual runs only (Actions → Schematic runtime → Run workflow):
-#   publish = false (default)  build + smoke-test on the chosen branch, keep the archive as a workflow
-#                              artifact for 7 days. Use this to try a pin change before merging it.
-#   publish = true             allowed on main only. Builds, then creates the tag
+#   publish = false (default)  build + smoke-test on the chosen branch, keep the archives as workflow
+#                              artifacts for 7 days. Use this to try a pin change before merging it.
+#   publish = true             allowed on main only. Builds everything, then creates the tag
 #                              schematic-runtime-v<runtimeVersion> on the main commit that was built
-#                              and a GitHub Release with the archive, its .sha256 and the generated
-#                              release notes (platform, size, SHA-256, the commit of every component).
+#                              and a GitHub Release with every archive, its .sha256 and generated
+#                              release notes (platforms, sizes, SHA-256s, the commit of every component).
 #                              Fails if that tag already exists: bump runtimeVersion first.
-# After a publish: copy the SHA-256 from the release into assets.linux-x64.sha256 in
+# After a publish: copy each SHA-256 from the release into assets.<platform>.sha256 in
 # toolchain/versions.json and merge that commit. Until then the extension refuses the download.
 
 on:
@@ -25,11 +27,36 @@ on:
         default: false
 
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the publish preconditions (main, tag not taken, every asset URL matches)
+        if: inputs.publish
+        run: |
+          set -e
+          test "${GITHUB_REF}" = "refs/heads/main" || { echo "publish=true is allowed on main only (got ${GITHUB_REF})"; exit 1; }
+          v="$(python3 -c "import json; print(json.load(open('toolchain/versions.json'))['runtimeVersion'])")"
+          tag="schematic-runtime-v${v}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null; then
+            echo "tag ${tag} already exists; bump runtimeVersion in toolchain/versions.json first"; exit 1
+          fi
+          python3 - "$tag" "$v" <<'PY'
+          import json, sys
+          tag, v = sys.argv[1:]
+          assets = json.load(open('toolchain/versions.json'))['assets']
+          bad = [k for k, a in assets.items()
+                 if not a['url'].endswith(f"/releases/download/{tag}/sv-pathfinder-schematic-runtime-{k}-{v}.tar.gz")]
+          if bad: raise SystemExit(f"asset URLs do not match tag {tag} / version {v}: {bad}")
+          print(f"ok: {len(assets)} assets for {tag}")
+          PY
+
   linux-x64:
+    needs: preflight
     runs-on: ubuntu-latest
     container: almalinux:8
     steps:
-      - name: Install the toolchain (gcc-toolset-14, CMake >= 3.28 from pip, python3.11, Java 11 for Surelog's ANTLR step)
+      - name: Install the toolchain (gcc-toolset-14, CMake 3.x from pip, python3.11, Java 11 for Surelog's ANTLR step)
         run: |
           dnf -y install git gcc-toolset-14 make tar gzip zstd binutils bison flex zlib-devel \
             python3.11 python3.11-pip java-11-openjdk-headless
@@ -53,23 +80,6 @@ jobs:
           /usr/local/bin/bison --version | head -1
 
       - uses: actions/checkout@v4
-
-      - name: Check the publish preconditions (main, tag not taken, asset URL matches)
-        if: inputs.publish
-        run: |
-          set -e
-          test "${GITHUB_REF}" = "refs/heads/main" || { echo "publish=true is allowed on main only (got ${GITHUB_REF})"; exit 1; }
-          v="$(python3 -c "import json; print(json.load(open('toolchain/versions.json'))['runtimeVersion'])")"
-          tag="schematic-runtime-v${v}"
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null; then
-            echo "tag ${tag} already exists; bump runtimeVersion in toolchain/versions.json first"; exit 1
-          fi
-          url="$(python3 -c "import json; print(json.load(open('toolchain/versions.json'))['assets']['linux-x64']['url'])")"
-          case "$url" in
-            */releases/download/${tag}/sv-pathfinder-schematic-runtime-linux-x64-${v}.tar.gz) ;;
-            *) echo "assets.linux-x64.url does not match tag ${tag} / version ${v}: $url"; exit 1 ;;
-          esac
 
       # restore/save as two steps so a build that fails in a later stage still keeps what it built
       # (the Yosys stage alone takes most of the run time).
@@ -112,12 +122,6 @@ jobs:
           path: toolchain/work/dist/*
           retention-days: 7
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: schematic-runtime-release-notes
-          path: toolchain/work/release-notes.md
-          retention-days: 7
-
   # The same archive must run on a current distribution too.
   verify-ubuntu:
     needs: linux-x64
@@ -135,11 +139,56 @@ jobs:
           "$pkg/bin/yosys" -q -p 'help read_slang' | head -1
           "$pkg/bin/yosys" -q -m uhdm2rtlil -p 'read_uhdm examples/test/surelog.uhdm; hierarchy -top top; proc; write_json /tmp/u.json' && grep -q '"top"' /tmp/u.json
 
-  # Tag + release, from main only, after both checks passed. `gh release create --target` creates the
-  # tag on the exact commit this run checked out, so the tag is on main by construction.
+  # Slang-only repacks of the pinned OSS CAD Suite release, each on its native runner so the smoke test
+  # runs the real binaries. The archives carry `preload: ["slang"]` and `read_uhdm: false`.
+  repack:
+    needs: preflight
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - key: darwin-arm64
+            os: macos-14
+          - key: darwin-x64
+            os: macos-15-intel
+          - key: win32-x64
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Repack OSS CAD Suite for ${{ matrix.key }}
+        run: toolchain/repack-oss-cad-suite.sh ${{ matrix.key }}
+
+      - name: Smoke test the archive on a fresh extraction
+        run: |
+          set -e
+          d="$(mktemp -d)"; tar -C "$d" -xzf toolchain/work-osscad/${{ matrix.key }}/dist/*.tar.gz
+          pkg="$(ls -d "$d"/*/)"
+          exe=yosys; [ "${{ matrix.key }}" = win32-x64 ] && exe=yosys.exe
+          cd "$d"
+          printf 'module t(input a, b, output y); assign y = a & b; endmodule\n' > t.sv
+          "$pkg/bin/$exe" -V
+          "$pkg/bin/$exe" -q -m slang -p 'read_slang t.sv --top t; hierarchy -top t; proc; write_json t.json'
+          grep -q '"t"' t.json
+          cat "$pkg/runtime-manifest.json"
+          find "$pkg" -maxdepth 2 | sort | head -60
+          du -sh "$pkg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: schematic-runtime-${{ matrix.key }}
+          path: toolchain/work-osscad/${{ matrix.key }}/dist/*
+          retention-days: 7
+
+  # Tag + release, from main only, after every platform passed. `gh release create --target` creates
+  # the tag on the exact commit this run checked out, so the tag is on main by construction.
   publish:
     if: inputs.publish
-    needs: [linux-x64, verify-ubuntu]
+    needs: [linux-x64, verify-ubuntu, repack]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -149,21 +198,21 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: schematic-runtime-linux-x64
+          pattern: schematic-runtime-*
           path: dist
-      - uses: actions/download-artifact@v4
-        with:
-          name: schematic-runtime-release-notes
-          path: notes
+          merge-multiple: true
       - name: Create the tag and the release
         run: |
           set -e
+          ls -la dist
+          (cd dist && sha256sum -c *.sha256)
           v="$(python3 -c "import json; print(json.load(open('toolchain/versions.json'))['runtimeVersion'])")"
           tag="schematic-runtime-v${v}"
+          python3 toolchain/release_notes.py notes.md dist/*.tar.gz
           gh release create "$tag" dist/* \
             --target "$GITHUB_SHA" \
             --title "Schematic runtime v${v}" \
-            --notes-file notes/release-notes.md \
+            --notes-file notes.md \
             --latest=false
-          echo "Released ${tag} at ${GITHUB_SHA}. Now put the SHA-256 below into toolchain/versions.json:"
+          echo "Released ${tag} at ${GITHUB_SHA}. Now put these SHA-256s into toolchain/versions.json:"
           cat dist/*.sha256

@@ -41,10 +41,15 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - Managed schematic runtime: on the first schematic request sv-pathfinder offers to download one
   Yosys (with `read_slang` built in and the uhdm2rtlil `read_uhdm` plugin) from its GitHub
   releases, verifies its SHA-256, self-tests it, and installs it into the extension's global
-  storage. Linux x64 (AlmaLinux 8 baseline). Command `sv-pathfinder: Install Schematic Runtime`
-  re-downloads it. Built from pinned sources by `toolchain/build-schematic-runtime.sh`
+  storage. Command `sv-pathfinder: Install Schematic Runtime` re-downloads it. Linux x64
+  (AlmaLinux 8 baseline) is built from pinned sources by `toolchain/build-schematic-runtime.sh`
   (uhdm2rtlil v0.70.2, its Yosys v0.70 fork, Surelog v1.87+130 / UHDM v1.87+48 — databases
-  from Surelog v1.87 load unchanged, verified both ways).
+  from Surelog v1.87 load unchanged, verified both ways). macOS (arm64, x64) and Windows x64 get
+  a slang-only runtime (`read_slang`, no `read_uhdm`) repacked from a pinned
+  [OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build) release by
+  `toolchain/repack-oss-cad-suite.sh`; a `.uhdm` design is drawn from its source files there.
+  The install self-test now elaborates a real module through `read_slang` instead of asking for
+  help text (Yosys exits 0 for an unknown command).
 - Setting `sv-pathfinder.schematicRuntimePath` (and env `SV_PATHFINDER_SCHEMATIC_RUNTIME`) to
   point the schematic at a runtime directory of your own.
 - Schematics for directly opened `.uhdm` designs through `read_uhdm` (experimental, Linux x64

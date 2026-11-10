@@ -52,9 +52,12 @@ The compiled tree-sitter SystemVerilog grammar from
 ## Downloaded at run time — the schematic runtime (not inside the VSIX)
 
 On the first schematic request the extension offers to download `sv-pathfinder-schematic-runtime-
-linux-x64-<version>.tar.gz` from this project's GitHub releases. It is built from pinned sources by
-`toolchain/build-schematic-runtime.sh` (pins in `toolchain/versions.json`) and ships the license
-texts of everything it contains in its `LICENSES/` directory:
+<platform>-<version>.tar.gz` from this project's GitHub releases (pins in `toolchain/versions.json`).
+Every archive ships the license texts of what it contains in its `LICENSES/` directory.
+
+### Linux x64 — built from source
+
+`toolchain/build-schematic-runtime.sh` builds it inside an AlmaLinux 8 container:
 
 - [Yosys](https://github.com/YosysHQ/yosys) (ISC; the `alainmarcel/yosys` fork pinned by uhdm2rtlil),
   built without readline and Tcl. ABC is compiled (the v0.70 fork's slang integration requires it)
@@ -65,6 +68,25 @@ texts of everything it contains in its `LICENSES/` directory:
 - [uhdm2rtlil](https://github.com/alainmarcel/uhdm2rtlil) (Apache-2.0) — the `read_uhdm` plugin,
   statically linking [Surelog](https://github.com/chipsalliance/Surelog) (Apache-2.0),
   [UHDM](https://github.com/chipsalliance/UHDM) (Apache-2.0), ANTLR4 (BSD-3) and Cap'n Proto (MIT).
+
+### macOS (arm64, x64) and Windows x64 — repacked from OSS CAD Suite
+
+`toolchain/repack-oss-cad-suite.sh` takes the pinned [OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build)
+release (built and distributed by YosysHQ; tag and SHA-256 per platform in `toolchain/versions.json`)
+and keeps only what `read_slang` needs:
+
+- [Yosys](https://github.com/YosysHQ/yosys) (ISC) as the suite builds it, with its launcher script
+  (macOS) and the shared libraries it links: GNU Readline (GPL-3.0), libffi (MIT), zlib (zlib),
+  Tcl (Tcl/BSD-style, Windows), ncurses (MIT-style, macOS), libstdc++/libgcc and the MinGW runtime
+  (GPL-3.0 with the GCC Runtime Library Exception; Windows).
+- The [yosys-slang](https://github.com/povik/yosys-slang) plugin (ISC) with
+  [slang](https://github.com/MikePopoloski/slang) (MIT), loaded as `yosys -m slang`.
+- `share/yosys` (Yosys's techmap and simulation libraries, ISC).
+
+The suite's `LICENSE.yosys` and `LICENSE.yosys-slang-plugin` texts travel in `LICENSES/`, with a
+`NOTICE.txt` that lists the bundled libraries and points at the oss-cad-suite-build repository,
+where the build recipes and the source of every component (including the GPL ones) live. No
+`read_uhdm` on these platforms.
 
 ## External tools (not bundled — acknowledgement only)
 

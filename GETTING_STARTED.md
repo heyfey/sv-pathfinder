@@ -14,7 +14,7 @@
 |---|---|---|
 | The extension | VS Code **1.93.0+** | Install from the [Marketplace](https://marketplace.visualstudio.com/items?itemName=heyfey.sv-pathfinder) |
 | **Design navigation** (required) | **One design input** — a **`.f`** filelist (backend: **slang-server** *(default)* or **Surelog**) *or* a **`.uhdm`** database (native reader, **Linux x64**; no backend needed) | [Open a design](#open-a-design) |
-| **Schematic viewer** | Nothing to install: the schematic runtime is downloaded once on first use (**Linux x64**) | [Schematic viewer](#schematic-viewer) |
+| **Schematic viewer** | Nothing to install: the schematic runtime is downloaded once on first use (Linux x64, macOS, Windows x64) | [Schematic viewer](#schematic-viewer) |
 | **Waveform** value annotation & "Show in Waveform" | The [Vaporview](https://marketplace.visualstudio.com/items?itemName=lramseyer.vaporview) extension | [Waveform integration](#waveform-integration) |
 
 > **Platform:** primarily developed and tested on **Linux x64** (Ubuntu 22.04, AlmaLinux 8). Only the

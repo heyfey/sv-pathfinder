@@ -14,8 +14,8 @@ for you:
    project's [GitHub releases](https://github.com/heyfey/sv-pathfinder/releases)). Click **Install**.
 3. That is it. Later schematics reuse the installed runtime.
 
-Supported platform: **Linux x64** (any distribution from RHEL/AlmaLinux 8 onwards). macOS and
-Windows support is planned.
+Supported platforms: **Linux x64** (any distribution from RHEL/AlmaLinux 8 onwards), **macOS**
+(Apple silicon and Intel) and **Windows x64**.
 
 To download it again, or to repair a broken install, run the command
 **sv-pathfinder: Install Schematic Runtime**.
@@ -42,13 +42,14 @@ The environment variable `SV_PATHFINDER_SCHEMATIC_RUNTIME` does the same when th
 ## Which designs can be drawn
 
 - **`.f` filelist designs** — always. The schematic re-reads the sources listed in the `.f`.
-- **`.uhdm` database designs** — on Linux x64. The schematic reads the database directly, so the
+- **`.uhdm` database designs** — on Linux x64 the schematic reads the database directly, so the
   design appears exactly as Surelog elaborated it, with no defines or include paths to re-enter.
   This reader is new and does not handle every design yet. When it cannot read a database,
-  sv-pathfinder tells you once and falls back to re-reading the design's source files instead; if
-  the design depends on `+define+` options, that fallback cannot know them, so open the design from
-  its `.f` filelist for the schematic. The setting `sv-pathfinder.schematicUhdmFrontend` lets you
-  force one of the two behaviors.
+  sv-pathfinder tells you once and falls back to re-reading the design's source files instead. On
+  macOS and Windows the schematic always re-reads the source files. If the design depends on
+  `+define+` options, that re-read cannot know them, so open the design from its `.f` filelist for
+  the schematic. The setting `sv-pathfinder.schematicUhdmFrontend` lets you force one of the two
+  behaviors.
 
 ## Elaboration modes (`schematicElaborationMode`)
 

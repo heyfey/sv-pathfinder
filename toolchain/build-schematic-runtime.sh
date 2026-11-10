@@ -199,31 +199,6 @@ tar -C "$WORK/package" -czf "$WORK/dist/$PKG_NAME.tar.gz" "$PKG_NAME"
 ( cd "$WORK/dist" && sha256sum "$PKG_NAME.tar.gz" > "$PKG_NAME.tar.gz.sha256" && cat "$PKG_NAME.tar.gz.sha256" )
 ls -la "$WORK/dist/$PKG_NAME.tar.gz"
 
-# Release notes (outside dist/, which holds only the downloadable assets): what the archive contains
-# and the exact commit of every component, taken from the package manifest.
-python3 - "$PKG/runtime-manifest.json" "$WORK/release-notes.md" "$WORK/dist/$PKG_NAME.tar.gz" <<'PY'
-import json, os, sys
-m = json.load(open(sys.argv[1])); tgz = sys.argv[3]
-sha = open(tgz + ".sha256").read().split()[0]
-unpacked = sum(os.path.getsize(os.path.join(d, f)) for d, _, fs in os.walk(os.path.dirname(sys.argv[1])) for f in fs)
-pins = {"uhdm2rtlil": "https://github.com/alainmarcel/uhdm2rtlil", "yosys": "https://github.com/alainmarcel/yosys",
-        "yosys-slang": "https://github.com/povik/sv-elab", "slang": "https://github.com/MikePopoloski/slang",
-        "surelog": "https://github.com/chipsalliance/Surelog", "uhdm": "https://github.com/chipsalliance/UHDM"}
-rows = "\n".join(f"| {k} | [`{v[:12]}`]({pins[k]}/commit/{v}) |" if v != "unknown" else f"| {k} | unknown |"
-                  for k, v in m["sources"].items())
-open(sys.argv[2], "w").write(f"""Schematic runtime v{m['version']} for sv-pathfinder: Yosys with the `read_slang` and `read_uhdm` frontends.
-
-- Platform: Linux x64, built on {m['builtOn']}, runs on glibc {m['glibcFloor']} or newer (RHEL/AlmaLinux 8 and later, any current distribution).
-- Archive: `{os.path.basename(tgz)}`, {os.path.getsize(tgz) / 2**20:.1f} MB compressed, {unpacked / 2**20:.0f} MB unpacked.
-- SHA-256: `{sha}`
-
-The extension downloads this archive on the first schematic request. To install by hand, extract it and set `sv-pathfinder.schematicRuntimePath` to the extracted folder.
-
-| Component | Commit |
-|---|---|
-{rows}
-
-The same pins are in `toolchain/versions.json` at this tag and in `runtime-manifest.json` inside the archive.
-""")
-PY
+# Release notes for this one archive (the workflow regenerates them over every platform's archive).
+python3 "$ROOT/toolchain/release_notes.py" "$WORK/release-notes.md" "$WORK/dist/$PKG_NAME.tar.gz"
 echo "done: $WORK/dist/$PKG_NAME.tar.gz (release notes: $WORK/release-notes.md)"
