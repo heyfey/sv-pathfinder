@@ -7,9 +7,9 @@ import * as path from 'path';
 import { svLog } from '../output';
 import { NoYosysBackendError } from './backend_policy';
 import {
-    RuntimeAsset, RuntimeFeatures, RuntimeManifest, RuntimeVersions, RUNTIME_ENV_VAR, RUNTIME_SETTING, UHDM_PLUGIN,
-    assetFor, installDeclinedMessage, installDirFor, installPromptMessage,
-    overrideInvalidMessage, platformKey, resolveOverride, unsupportedPlatformMessage, validateManifest, yosysCandidates,
+    RuntimeAsset, RuntimeFeatures, RuntimeManifest, RuntimeVersions, RUNTIME_ENV_VAR, RUNTIME_SETTING, SLANG_PLUGIN, UHDM_PLUGIN,
+    assetFor, inferPreload, installDeclinedMessage, installDirFor, installPromptMessage, overrideInvalidMessage, platformKey,
+    resolveOverride, supportedPlatformsText, unsupportedPlatformMessage, validateManifest, yosysCandidates,
 } from './runtime_policy';
 import { installFromSource, removeOtherVersions } from './runtime_install';
 
@@ -22,6 +22,7 @@ export interface ResolvedRuntime {
     source: 'setting' | 'env' | 'managed';
     version?: string;            // from runtime-manifest.json when present
     features: RuntimeFeatures;
+    preload: string[];           // plugins every run loads with -m (the OSS CAD Suite repacks: ["slang"])
     name: string;                // for diagnostics / the webview breadcrumb
 }
 
@@ -59,10 +60,13 @@ async function describe(dir: string, source: ResolvedRuntime['source']): Promise
     for (const c of yosysCandidates(dir)) { if (await exists(c)) { yosys = c; break; } }
     if (!yosys) { return undefined; }
     const manifest = await readManifest(dir);
-    const pluginPresent = await exists(path.join(dir, 'share', 'yosys', 'plugins', `${UHDM_PLUGIN}.so`));
-    const features: RuntimeFeatures = manifest?.features ?? { read_slang: true, read_uhdm: pluginPresent };
+    const plugins = path.join(dir, 'share', 'yosys', 'plugins');
+    const uhdmPresent = await exists(path.join(plugins, `${UHDM_PLUGIN}.so`));
+    const slangPresent = await exists(path.join(plugins, `${SLANG_PLUGIN}.so`));
+    const features: RuntimeFeatures = manifest?.features ?? { read_slang: true, read_uhdm: uhdmPresent };
+    const preload = inferPreload(manifest, slangPresent);
     const version = manifest?.version;
-    return { dir, yosys, source, version, features, name: `schematic runtime${version ? ' v' + version : ''} (${source}: ${dir})` };
+    return { dir, yosys, source, version, features, preload, name: `schematic runtime${version ? ' v' + version : ''} (${source}: ${dir})` };
 }
 
 // Resolve the runtime: setting, then environment variable, then the managed install. When nothing is
@@ -89,7 +93,7 @@ export async function ensureRuntime(opts: { interactive: boolean }): Promise<Res
     }
     const key = platformKey();
     const asset = assetFor(VERSIONS, key);
-    if (!asset) { throw new NoYosysBackendError(unsupportedPlatformMessage(key)); }
+    if (!asset) { throw new NoYosysBackendError(unsupportedPlatformMessage(key, supportedPlatformsText(VERSIONS))); }
     if (!opts.interactive) { throw new NoYosysBackendError(installDeclinedMessage()); }
     if (installInFlight) { return installInFlight; }
     installInFlight = promptAndInstall(asset, installDir).finally(() => { installInFlight = undefined; });
@@ -99,7 +103,7 @@ export async function ensureRuntime(opts: { interactive: boolean }): Promise<Res
 async function promptAndInstall(asset: RuntimeAsset, installDir: string): Promise<ResolvedRuntime> {
     const install = 'Install';
     const releases = 'Open Releases Page';
-    const pick = await vscode.window.showInformationMessage(installPromptMessage(VERSIONS.runtimeVersion), install, releases);
+    const pick = await vscode.window.showInformationMessage(installPromptMessage(VERSIONS.runtimeVersion, undefined, asset.features), install, releases);
     if (pick === releases) {
         vscode.env.openExternal(vscode.Uri.parse(asset.url.replace(/\/download\/.*$/, '')));
         throw new NoYosysBackendError(installDeclinedMessage());
@@ -138,7 +142,7 @@ export async function reinstallRuntimeCommand(): Promise<void> {
     if (!storageRoot) { return; }
     const key = platformKey();
     const asset = assetFor(VERSIONS, key);
-    if (!asset) { vscode.window.showErrorMessage(unsupportedPlatformMessage(key)); return; }
+    if (!asset) { vscode.window.showErrorMessage(unsupportedPlatformMessage(key, supportedPlatformsText(VERSIONS))); return; }
     resetRuntimeCache();
     try {
         const rt = await installRuntime(asset, installDirFor(storageRoot, VERSIONS.runtimeVersion));

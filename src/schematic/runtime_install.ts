@@ -1,5 +1,5 @@
 // vscode-free install pipeline for the managed schematic runtime: download → SHA-256 → extract (safe
-// entries only) → validate manifest → self-test → atomic move into place. runtime_manager.ts wraps it
+// entries only) → validate manifest → self-test (a real read_slang run) → atomic move into place. runtime_manager.ts wraps it
 // with the VS Code prompt and progress UI; runtime_install.test.ts exercises it against a fake package
 // served over local HTTP.
 import * as cp from 'child_process';
@@ -10,7 +10,7 @@ import * as path from 'path';
 import { pipeline } from 'stream/promises';
 import { Readable } from 'stream';
 import * as tar from 'tar';
-import { RuntimeFeatures, RuntimeManifest, UHDM_PLUGIN, isSafeArchiveEntry, validateManifest } from './runtime_policy';
+import { RuntimeManifest, isSafeArchiveEntry, validateManifest, yosysArgs, yosysCandidates, yosysPath } from './runtime_policy';
 
 export interface InstallSource {
     url: string;
@@ -24,7 +24,7 @@ export interface InstallCallbacks {
     progress?: (message: string) => void;
     log?: (line: string) => void;
     // Overridable for tests (the real one spawns bin/yosys).
-    selfTest?: (dir: string, features: RuntimeFeatures) => Promise<void>;
+    selfTest?: (dir: string, manifest: RuntimeManifest) => Promise<void>;
 }
 
 // Stream the asset to disk while hashing it. Follows redirects (GitHub release assets redirect to a
@@ -67,19 +67,37 @@ function run(cmd: string, args: string[], cwd: string): Promise<{ code: number; 
     });
 }
 
-// The package must actually work on this machine before it is called installed.
-export async function selfTestRuntime(dir: string, features: RuntimeFeatures): Promise<void> {
-    const yosys = path.join(dir, 'bin', 'yosys');
+// The package must actually work on this machine before it is called installed. `help <cmd>` is not
+// a test (Yosys exits 0 for an unknown command), so read_slang elaborates a one-gate module and the
+// result must come back through write_json; read_uhdm is checked by loading its plugin and asking
+// for its help text, which only exists when the plugin registered the command.
+export async function selfTestRuntime(dir: string, manifest: RuntimeManifest): Promise<void> {
+    const yosys = yosysCandidates(dir)[0];
     await fsp.chmod(yosys, 0o755).catch(() => { });
-    const checks: [string, string[]][] = [['read_slang', ['-q', '-p', 'help read_slang']]];
-    if (features.read_uhdm) { checks.push(['read_uhdm', ['-q', '-m', UHDM_PLUGIN, '-p', 'help read_uhdm']]); }
-    for (const [what, args] of checks) {
-        const r = await run(yosys, args, dir);
-        if (r.code !== 0) {
-            throw new Error(`self-test "${what}" failed (exit ${r.code}): ${r.out.trim().split('\n').slice(-3).join(' | ')}`);
+    const preload = manifest.preload ?? [];
+    const probe = path.join(dir, 'selftest');
+    await fsp.mkdir(probe, { recursive: true });
+    try {
+        const sv = path.join(probe, 't.sv'), json = path.join(probe, 't.json');
+        await fsp.writeFile(sv, 'module t(input a, b, output y); assign y = a & b; endmodule\n');
+        const script = `read_slang ${yosysPath(sv)} --top t; hierarchy -top t; proc; write_json ${yosysPath(json)}`;
+        let r = await run(yosys, yosysArgs(preload, false, script), dir);
+        const modules = r.code === 0 ? await fsp.readFile(json, 'utf8').then(t => Object.keys(JSON.parse(t).modules ?? {})).catch(() => []) : [];
+        if (r.code !== 0 || !modules.includes('t')) {
+            throw new Error(`self-test "read_slang" failed (exit ${r.code}): ${lastLines(r.out)}`);
         }
+        if (manifest.features.read_uhdm) {
+            r = await run(yosys, yosysArgs(preload, true, 'help read_uhdm'), dir);
+            if (r.code !== 0 || !/read_uhdm/.test(r.out) || /No such command/i.test(r.out)) {
+                throw new Error(`self-test "read_uhdm" failed (exit ${r.code}): ${lastLines(r.out)}`);
+            }
+        }
+    } finally {
+        await fsp.rm(probe, { recursive: true, force: true }).catch(() => { });
     }
 }
+
+function lastLines(out: string): string { return out.trim().split('\n').slice(-3).join(' | '); }
 
 export function formatBytesShort(n: number | undefined): string {
     if (n === undefined || !isFinite(n)) { return '?'; }
@@ -109,7 +127,7 @@ export async function installFromSource(source: InstallSource, installDir: strin
         const manifestJson = JSON.parse(await fsp.readFile(path.join(stage, 'runtime-manifest.json'), 'utf8'));
         const manifest = validateManifest(manifestJson, expected);
         if (typeof manifest === 'string') { throw new Error(manifest); }
-        await (cb.selfTest ?? selfTestRuntime)(stage, manifest.features);
+        await (cb.selfTest ?? selfTestRuntime)(stage, manifest);
         await fsp.rm(installDir, { recursive: true, force: true });
         await fsp.rename(stage, installDir);
         await fsp.rm(tmp, { recursive: true, force: true });

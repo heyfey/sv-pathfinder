@@ -8,19 +8,34 @@ import * as crypto from 'crypto';
 import * as tar from 'tar';
 import { installFromSource, selfTestRuntime } from '../schematic/runtime_install';
 
-// A fake package: bin/yosys is a shell script that answers `help read_slang` / `help read_uhdm`
-// with exit 0 (or 1 when FAKE_FAIL is set), plus a manifest. Served over a local HTTP server, so the
-// whole pipeline (download → sha256 → extract → manifest → self-test → atomic move) runs for real.
-async function makePackage(dir: string, opts: { version?: string; failSelfTest?: boolean; os?: string } = {}): Promise<string> {
+// A fake yosys: a shell script that records its arguments in bin/args.log, writes a one-module JSON
+// wherever the script says `write_json <path>` (so the read_slang self-test finds module t), and prints
+// a help text for `help read_uhdm`. With `broken`, read_slang fails like a missing frontend would.
+function fakeYosys(broken = false, noUhdmPlugin = false): string {
+    const script = '#!/bin/sh\n' +
+        'echo "$*" >> "$(dirname "$0")/args.log"\n' +
+        'script=""; while [ $# -gt 0 ]; do [ "$1" = -m ] && [ "$2" = uhdm2rtlil ] && [ -n "$NO_UHDM" ] && { echo "ERROR: Can\'t load module"; exit 1; }; [ "$1" = -p ] && script="$2"; shift; done\n' +
+        'case "$script" in *help\\ read_uhdm*) echo "read_uhdm [options] file.uhdm"; exit 0;; esac\n' +
+        (broken ? 'echo "ERROR: fake frontend missing"; exit 1\n' :
+            'out="$(printf %s "$script" | sed -n \'s/.*write_json \\([^;]*\\).*/\\1/p\')"\n' +
+            '[ -n "$out" ] && printf \'{"modules":{"t":{}}}\' > "$out"\n' +
+            'exit 0\n');
+    return script.replace('[ -n "$NO_UHDM" ]', noUhdmPlugin ? 'true' : 'false');
+}
+
+// A fake package: bin/yosys is the script above, plus a manifest. Served over a local HTTP server,
+// so the whole pipeline (download → sha256 → extract → manifest → self-test → atomic move) runs for real.
+async function makePackage(dir: string, opts: { version?: string; failSelfTest?: boolean; os?: string; preload?: string[] } = {}): Promise<string> {
     const name = 'sv-pathfinder-schematic-runtime-linux-x64-0.1.0';
     const pkg = path.join(dir, name);
     await fsp.mkdir(path.join(pkg, 'bin'), { recursive: true });
     await fsp.mkdir(path.join(pkg, 'share', 'yosys', 'plugins'), { recursive: true });
-    await fsp.writeFile(path.join(pkg, 'bin', 'yosys'), `#!/bin/sh\necho "fake yosys $*"\nexit ${opts.failSelfTest ? 1 : 0}\n`, { mode: 0o755 });
+    await fsp.writeFile(path.join(pkg, 'bin', 'yosys'), fakeYosys(opts.failSelfTest), { mode: 0o755 });
     await fsp.writeFile(path.join(pkg, 'share', 'yosys', 'plugins', 'uhdm2rtlil.so'), 'not really');
     await fsp.writeFile(path.join(pkg, 'runtime-manifest.json'), JSON.stringify({
         schema: 1, version: opts.version ?? '0.1.0', os: opts.os ?? 'linux', arch: 'x64',
         features: { read_slang: true, read_uhdm: true },
+        ...(opts.preload ? { preload: opts.preload } : {}),
     }));
     const archive = path.join(dir, `${name}.tar.gz`);
     await tar.c({ gzip: true, file: archive, cwd: dir }, [name]);
@@ -63,6 +78,12 @@ suite('runtime_install', function () {
             assert.ok(fs.existsSync(path.join(installDir, 'bin', 'yosys')));
             assert.ok(fs.existsSync(path.join(installDir, 'share', 'yosys', 'plugins', 'uhdm2rtlil.so')));
             assert.ok(progress.some(p => p.startsWith('downloading')) && progress.includes('extracting…') && progress.includes('checking…'));
+            // the self-test ran read_slang on a real file and asked the plugin for read_uhdm, nothing else was left behind
+            const calls = (await fsp.readFile(path.join(installDir, 'bin', 'args.log'), 'utf8')).trim().split('\n');
+            assert.strictEqual(calls.length, 2, calls.join(' // '));
+            assert.match(calls[0], /^-p read_slang .*t\.sv --top t; hierarchy -top t; proc; write_json .*t\.json$/);
+            assert.match(calls[1], /^-m uhdm2rtlil -p help read_uhdm$/);
+            assert.ok(!fs.existsSync(path.join(installDir, 'selftest')), 'self-test scratch dir is removed');
             // no temp directories left behind
             const left = (await fsp.readdir(path.join(tmp, 'store'))).filter(n => n.startsWith('tmp-'));
             assert.deepStrictEqual(left, []);
@@ -112,12 +133,33 @@ suite('runtime_install', function () {
         } finally { srv.close(); }
     });
 
-    test('selfTestRuntime: a yosys that fails read_uhdm is rejected only when read_uhdm is expected', async () => {
+    test('a manifest with preload makes every run load those plugins first (OSS CAD Suite repacks)', async () => {
         if (process.platform === 'win32') { return; }
+        const archive = await makePackage(path.join(tmp, 'src'), { preload: ['slang'] });
+        const srv = await serve(archive);
+        try {
+            const installDir = path.join(tmp, 'store', '0.1.0');
+            const m = await installFromSource({ url: srv.url, sha256: '' }, installDir, expected);
+            assert.deepStrictEqual(m.preload, ['slang']);
+            const calls = (await fsp.readFile(path.join(installDir, 'bin', 'args.log'), 'utf8')).trim().split('\n');
+            assert.match(calls[0], /^-m slang -p read_slang /);
+            assert.match(calls[1], /^-m slang -m uhdm2rtlil -p help read_uhdm$/);
+        } finally { srv.close(); }
+    });
+
+    test('selfTestRuntime: read_slang must produce the module, read_uhdm only when expected', async () => {
+        if (process.platform === 'win32') { return; }
+        const base = { schema: 1, version: '0.1.0', os: 'linux', arch: 'x64' };
+        // a yosys whose uhdm2rtlil plugin is missing: `-m uhdm2rtlil` fails to load
         const dir = path.join(tmp, 'rt');
         await fsp.mkdir(path.join(dir, 'bin'), { recursive: true });
-        await fsp.writeFile(path.join(dir, 'bin', 'yosys'), '#!/bin/sh\ncase "$*" in *read_uhdm*) exit 3;; esac\nexit 0\n', { mode: 0o755 });
-        await selfTestRuntime(dir, { read_slang: true, read_uhdm: false });
-        await assert.rejects(selfTestRuntime(dir, { read_slang: true, read_uhdm: true }), /self-test "read_uhdm" failed \(exit 3\)/);
+        await fsp.writeFile(path.join(dir, 'bin', 'yosys'), fakeYosys(false, true), { mode: 0o755 });
+        await selfTestRuntime(dir, { ...base, features: { read_slang: true, read_uhdm: false } });
+        await assert.rejects(selfTestRuntime(dir, { ...base, features: { read_slang: true, read_uhdm: true } }), /self-test "read_uhdm" failed \(exit 1\)/);
+        // a yosys that exits 0 but never writes the JSON (read_slang is not there; `help` is polite about it)
+        const silent = path.join(tmp, 'silent');
+        await fsp.mkdir(path.join(silent, 'bin'), { recursive: true });
+        await fsp.writeFile(path.join(silent, 'bin', 'yosys'), '#!/bin/sh\necho "No such command: read_slang"\nexit 0\n', { mode: 0o755 });
+        await assert.rejects(selfTestRuntime(silent, { ...base, features: { read_slang: true, read_uhdm: false } }), /self-test "read_slang" failed \(exit 0\)/);
     });
 });

@@ -2,6 +2,7 @@ import path from 'path';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import { randomUUID } from 'crypto';
+import { yosysPath } from './schematic/runtime_policy';
 
 // Flags whose following token is a path that must be made absolute.
 const PATH_FLAGS = new Set(['-y', '-v', '--libdir', '-l']);
@@ -26,7 +27,8 @@ export async function absolutizeFlist(flistPath: string): Promise<string> {
 }
 
 function quoteArg(p: string): string {
-    return /\s/.test(p) ? `"${p}"` : p;
+    const n = yosysPath(p);
+    return /\s/.test(n) ? `"${n}"` : n;
 }
 
 // Build read_slang/read_verilog search-path flags from a set of directories, so a PARTIAL filelist

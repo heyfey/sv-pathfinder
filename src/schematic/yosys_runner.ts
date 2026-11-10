@@ -12,7 +12,7 @@ import { NoYosysBackendError, uhdmFrontendUnavailableMessage, yosysExitMessage }
 import { isUvmError, isKeptBoundaryError } from './scope_nav';
 import { svLog } from '../output';
 import { ensureRuntime, resetRuntimeCache, resolvedRuntimeName, ResolvedRuntime } from './runtime_manager';
-import { UHDM_PLUGIN } from './runtime_policy';
+import { yosysArgs, yosysPath } from './runtime_policy';
 
 // Schematic diagnostics (the actual Yosys command we run, and any workarounds applied) go to the
 // shared "sv-pathfinder" output channel, tagged [schematic].
@@ -30,15 +30,18 @@ export interface YosysResult {
 interface Backend {
     name: string;
     command: string;
-    readUhdm: boolean; // the uhdm2rtlil plugin is available (Linux x64 managed runtime)
+    readUhdm: boolean;  // the uhdm2rtlil plugin is available (Linux x64 managed runtime)
+    preload: string[];  // plugins every run loads (the OSS CAD Suite repacks carry read_slang as a plugin)
 }
 
 function toBackend(rt: ResolvedRuntime): Backend {
-    return { name: rt.name, command: rt.yosys, readUhdm: rt.features.read_uhdm };
+    return { name: rt.name, command: rt.yosys, readUhdm: rt.features.read_uhdm, preload: rt.preload };
 }
 
+// A path inside the Yosys script: forward slashes on Windows, quoted when it has a space.
 function quote(p: string): string {
-    return p.includes(' ') ? `"${p}"` : p;
+    const n = yosysPath(p);
+    return n.includes(' ') ? `"${n}"` : n;
 }
 
 export function resetBackendCache(): void {
@@ -158,7 +161,7 @@ class YosysRunError extends Error {
 // Spawn `yosys [-m uhdm2rtlil] -p <script>`; resolve its combined output, or reject (YosysRunError on
 // non-zero exit, plain hinted Error on spawn failure / timeout). Logs the exact command for transparency.
 function spawnYosys(backend: Backend, script: string, workDir: string, plugin: boolean): Promise<string> {
-    const args = plugin ? ['-m', UHDM_PLUGIN, '-p', script] : ['-p', script];
+    const args = yosysArgs(backend.preload, plugin, script);
     logSchematic(`$ ${backend.command} ${args.slice(0, -1).join(' ')} '${script}'`);
     return new Promise<string>((resolve, reject) => {
         const proc = cp.spawn(backend.command, args, { cwd: workDir });
