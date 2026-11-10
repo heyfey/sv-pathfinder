@@ -43,7 +43,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   releases, verifies its SHA-256, self-tests it, and installs it into the extension's global
   storage. Linux x64 (AlmaLinux 8 baseline). Command `sv-pathfinder: Install Schematic Runtime`
   re-downloads it. Built from pinned sources by `toolchain/build-schematic-runtime.sh`
-  (uhdm2rtlil v0.68, Yosys v0.68 fork, Surelog/UHDM v1.87).
+  (uhdm2rtlil v0.70.2, its Yosys v0.70 fork, Surelog v1.87+130 / UHDM v1.87+48 — databases
+  from Surelog v1.87 load unchanged, verified both ways).
 - Setting `sv-pathfinder.schematicRuntimePath` (and env `SV_PATHFINDER_SCHEMATIC_RUNTIME`) to
   point the schematic at a runtime directory of your own.
 - Schematics for directly opened `.uhdm` designs through `read_uhdm` (experimental, Linux x64

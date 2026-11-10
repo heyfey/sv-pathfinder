@@ -57,7 +57,8 @@ linux-x64-<version>.tar.gz` from this project's GitHub releases. It is built fro
 texts of everything it contains in its `LICENSES/` directory:
 
 - [Yosys](https://github.com/YosysHQ/yosys) (ISC; the `alainmarcel/yosys` fork pinned by uhdm2rtlil),
-  built without readline, Tcl and ABC.
+  built without readline and Tcl. ABC is compiled (the v0.70 fork's slang integration requires it)
+  but only `bin/yosys` is shipped, not `yosys-abc`.
 - [slang](https://github.com/MikePopoloski/slang) (MIT) and its `sv-elab` Yosys frontend, built into
   that Yosys as `read_slang`; Yosys's bundled libs fmt (MIT), cxxopts (MIT), tomlplusplus (MIT),
   boost regex (BSL-1.0).

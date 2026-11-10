@@ -2,13 +2,18 @@
 # Build the sv-pathfinder schematic runtime for Linux x64: one Yosys (static libyosys, read_slang
 # built in) plus the uhdm2rtlil plugin (read_uhdm), from the sources pinned in versions.json.
 #
+# Yosys is built without readline/Tcl (we only ever run `yosys -p`), but WITH ABC: the v0.70 fork's
+# slang integration has a build dependency on the yosys-abc target and cannot be configured with
+# YOSYS_WITHOUT_ABC=ON. Only bin/yosys is packaged (no yosys-abc); the schematic uses `synth -noabc`.
+#
 # Reference platform: AlmaLinux 8 + gcc-toolset-14 (scl enable gcc-toolset-14 bash), cmake >= 3.20,
 # python3 >= 3.8 with orderedmultidict, Java >= 11 (Surelog's ANTLR step), bison, flex, zlib-devel.
 # CI runs this inside an almalinux:8 container (.github/workflows/schematic-runtime.yml).
 #
 # Stages (each is skipped when its output already exists; delete the directory to redo it):
 #   1 yosys     clone uhdm2rtlil (pinned tag) and the pinned Yosys fork; build Yosys and install it
-#               to <uhdm2rtlil>/out/current (where uhdm2rtlil's plugin build expects it)
+#               to <uhdm2rtlil>/out/current (where uhdm2rtlil's plugin build expects it). Build
+#               directories are reused only when their recorded source commits match versions.json
 #   2 plugin    init uhdm2rtlil's Surelog submodule, build uhdm2rtlil.so against that Yosys through
 #               toolchain/cmake/CMakeLists.txt (see there for why a wrapper)
 #   3 package   assemble $WORK/package/<name>/ (bin, share/yosys, plugin, LICENSES, manifest), strip
@@ -49,11 +54,16 @@ fetch_sha() { # dir repo sha
   git -C "$dir" fetch -q --depth 1 origin "$sha"; git -C "$dir" checkout -q FETCH_HEAD
 }
 
+# Every derived directory records the source commit(s) it was built from; it is reused only when
+# they still match versions.json (fetch_sha re-clones a source tree whose HEAD moved).
+built_from() { [ -f "$1/.built-from" ] && [ "$(cat "$1/.built-from")" = "$2" ]; }
+
 # ---- 1 yosys -----------------------------------------------------------------------------------
 log "stage 1: sources (uhdm2rtlil @ $U2R_SHA, Yosys fork @ $YOSYS_SHA)"
 fetch_sha "$U2R" "$U2R_REPO" "$U2R_SHA"
-if [ ! -x "$WORK/yosys/build/yosys" ]; then
-  fetch_sha "$WORK/yosys" "$YOSYS_REPO" "$YOSYS_SHA"
+fetch_sha "$WORK/yosys" "$YOSYS_REPO" "$YOSYS_SHA"
+if ! built_from "$WORK/yosys/build" "$YOSYS_SHA"; then
+  rm -rf "$WORK/yosys/build" "$PREFIX"
   git -C "$WORK/yosys" submodule update -q --init --recursive --depth 1
   cmake -S "$WORK/yosys" -B "$WORK/yosys/build" \
     -DCMAKE_BUILD_TYPE=Release \
@@ -62,21 +72,26 @@ if [ ! -x "$WORK/yosys/build/yosys" ]; then
     -DYOSYS_WITHOUT_READLINE=ON \
     -DYOSYS_WITHOUT_EDITLINE=ON \
     -DYOSYS_WITHOUT_TCL=ON \
-    -DYOSYS_WITHOUT_ABC=ON \
+    -DYOSYS_WITHOUT_ABC=OFF \
     -DYOSYS_WITHOUT_SLANG=OFF
   cmake --build "$WORK/yosys/build" --parallel "$JOBS"
+  echo "$YOSYS_SHA" > "$WORK/yosys/build/.built-from"
 else
-  log "stage 1: Yosys already built in $WORK/yosys/build"
+  log "stage 1: Yosys already built from $YOSYS_SHA"
 fi
-if [ ! -x "$PREFIX/bin/yosys" ]; then
+if ! built_from "$PREFIX" "$YOSYS_SHA"; then
+  rm -rf "$PREFIX"
   cmake --install "$WORK/yosys/build" --prefix "$PREFIX"
+  echo "$YOSYS_SHA" > "$PREFIX/.built-from"
 fi
 "$PREFIX/bin/yosys" -V
 
 # ---- 2 plugin ----------------------------------------------------------------------------------
 PLUGIN_BUILD="$WORK/plugin-build"
+PLUGIN_PINS="$U2R_SHA $YOSYS_SHA $SURELOG_SHA $UHDM_SHA"
 PLUGIN="$(find "$PLUGIN_BUILD" -name 'uhdm2rtlil.so' 2>/dev/null | head -1 || true)"
-if [ -z "$PLUGIN" ]; then
+if [ -z "$PLUGIN" ] || ! built_from "$PLUGIN_BUILD" "$PLUGIN_PINS"; then
+  rm -rf "$PLUGIN_BUILD"
   log "stage 2: uhdm2rtlil plugin (Surelog $SURELOG_SHA, UHDM $UHDM_SHA)"
   # Only Surelog (and its UHDM, antlr, capnproto) is needed; third_party/yosys is replaced by $PREFIX.
   git -C "$U2R" submodule update -q --init --recursive --depth 1 third_party/Surelog
@@ -93,8 +108,9 @@ if [ -z "$PLUGIN" ]; then
   cmake --build "$PLUGIN_BUILD" --parallel "$JOBS" --target uhdm2rtlil
   PLUGIN="$(find "$PLUGIN_BUILD" -name 'uhdm2rtlil.so' | head -1)"
   [ -n "$PLUGIN" ] || { echo "error: uhdm2rtlil.so not produced" >&2; exit 1; }
+  echo "$PLUGIN_PINS" > "$PLUGIN_BUILD/.built-from"
 else
-  log "stage 2: plugin already built: $PLUGIN"
+  log "stage 2: plugin already built from the pinned sources: $PLUGIN"
 fi
 
 # ---- 3 package ---------------------------------------------------------------------------------

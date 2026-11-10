@@ -39,9 +39,10 @@ sources by `toolchain/build-schematic-runtime.sh` (see `toolchain/versions.json`
   `auto`). `read_uhdm` (Linux x64) imports the already elaborated database as it is: defines, includes
   and parameters were resolved by Surelog, so nothing has to be re-supplied, and every
   parameterization is a separate module. The importer ([uhdm2rtlil](https://github.com/alainmarcel/uhdm2rtlil)
-  v0.68) is **experimental**: it fails on some real designs (known: interface ports inside generate
-  loops, parameter conditions inside async resets, some hierarchical references in generate scopes,
-  and a crash on one design). When it fails, `auto` warns once and re-parses the source files the
+  v0.70.2) is **experimental**: on a corpus of 24 real databases it imports 18; known failures are
+  interface ports inside generate loops, some bit selects on hierarchical/package names (openENOC),
+  one testbench clock case (VeeR EL2 TB), one Yosys width assert (hdmi testbench), a logic-loop
+  error on XiangShan, and VeeR EL2 needing more than 14 GB. When it fails, `auto` warns once and re-parses the source files the
   database records (modules, packages, interfaces) with `read_slang`, with the include directories
   the database records and the selected instance's parameter values. Defines are not recorded in a
   UHDM database, so `ifdef`-dependent designs may need the `.f` flow instead. The database must
