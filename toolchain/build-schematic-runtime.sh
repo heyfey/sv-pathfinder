@@ -6,7 +6,7 @@
 # slang integration has a build dependency on the yosys-abc target and cannot be configured with
 # YOSYS_WITHOUT_ABC=ON. Only bin/yosys is packaged (no yosys-abc); the schematic uses `synth -noabc`.
 #
-# Reference platform: AlmaLinux 8 + gcc-toolset-14 (scl enable gcc-toolset-14 bash), cmake >= 3.20,
+# Reference platform: AlmaLinux 8 + gcc-toolset-14 (scl enable gcc-toolset-14 bash), cmake >= 3.28 (pip),
 # python3 >= 3.8 with orderedmultidict, Java >= 11 (Surelog's ANTLR step), bison, flex, zlib-devel.
 # CI runs this inside an almalinux:8 container (.github/workflows/schematic-runtime.yml).
 #
@@ -44,6 +44,11 @@ if [ "${gcc_major:-0}" -lt 11 ]; then
   echo "error: need GCC >= 11 (Yosys is C++20); on EL8 run: scl enable gcc-toolset-14 bash" >&2; exit 1
 fi
 command -v java >/dev/null || { echo "error: java not found (Surelog's ANTLR step needs Java >= 11)" >&2; exit 1; }
+# The Yosys v0.70 fork needs CMake >= 3.28; EL8's package is 3.26. `python3 -m pip install 'cmake>=3.28'` gives one.
+cmake_ver="$(cmake --version 2>/dev/null | head -1 | awk '{print $3}')"
+if ! printf '3.28\n%s\n' "${cmake_ver:-0}" | sort -V -C; then
+  echo "error: need CMake >= 3.28 (found ${cmake_ver:-none}); on EL8 run: python3 -m pip install 'cmake>=3.28'" >&2; exit 1
+fi
 mkdir -p "$WORK"
 
 # Fetch one exact commit (not a branch tip) with a shallow history.
