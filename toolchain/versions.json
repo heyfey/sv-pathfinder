@@ -27,7 +27,7 @@
   "assets": {
     "linux-x64": {
       "url": "https://github.com/heyfey/sv-pathfinder/releases/download/schematic-runtime-v0.1.0/sv-pathfinder-schematic-runtime-linux-x64-0.1.0.tar.gz",
-      "sha256": "",
+      "sha256": "79d62f741034bc10ace81d2d7c2c51761e7473cd7eafa28c2cec0d2fe2effdf4",
       "features": {
         "read_slang": true,
         "read_uhdm": true
