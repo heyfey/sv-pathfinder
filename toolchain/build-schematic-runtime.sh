@@ -138,13 +138,17 @@ lic "$S/LICENSE"                                   surelog.LICENSE
 lic "$S/third_party/UHDM/LICENSE"                  uhdm.LICENSE
 lic "$S/third_party/UHDM/third_party/capnproto/LICENSE" capnproto.LICENSE
 lic "$S/third_party/antlr4/LICENSE.txt"            antlr4.LICENSE
-python3 - "$PKG/runtime-manifest.json" "$RUNTIME_VERSION" "$U2R_SHA" "$YOSYS_SHA" "$SURELOG_SHA" "$UHDM_SHA" <<'PY'
+# The slang frontend and the slang library are submodules of the pinned Yosys; record their exact
+# commits too, so a release says what it contains without a lookup in the Yosys fork.
+YOSYS_SLANG_SHA="$(git -C "$Y" rev-parse HEAD:frontends/slang/lib 2>/dev/null || echo unknown)"
+SLANG_SHA="$(git -C "$Y" rev-parse HEAD:libs/slang 2>/dev/null || echo unknown)"
+python3 - "$PKG/runtime-manifest.json" "$RUNTIME_VERSION" "$U2R_SHA" "$YOSYS_SHA" "$SURELOG_SHA" "$UHDM_SHA" "$YOSYS_SLANG_SHA" "$SLANG_SHA" <<'PY'
 import json, sys, subprocess, datetime
-out, ver, u2r, yosys, surelog, uhdm = sys.argv[1:]
+out, ver, u2r, yosys, surelog, uhdm, yosys_slang, slang = sys.argv[1:]
 json.dump({
   "schema": 1, "version": ver, "os": "linux", "arch": "x64", "glibcFloor": "2.28",
   "features": {"read_slang": True, "read_uhdm": True},
-  "sources": {"uhdm2rtlil": u2r, "yosys": yosys, "surelog": surelog, "uhdm": uhdm},
+  "sources": {"uhdm2rtlil": u2r, "yosys": yosys, "yosys-slang": yosys_slang, "slang": slang, "surelog": surelog, "uhdm": uhdm},
   "built": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
   "builtOn": subprocess.run(["bash", "-c", ". /etc/os-release && echo $PRETTY_NAME"], capture_output=True, text=True).stdout.strip(),
 }, open(out, "w"), indent=2)
@@ -184,4 +188,32 @@ mkdir -p "$WORK/dist"
 tar -C "$WORK/package" -czf "$WORK/dist/$PKG_NAME.tar.gz" "$PKG_NAME"
 ( cd "$WORK/dist" && sha256sum "$PKG_NAME.tar.gz" > "$PKG_NAME.tar.gz.sha256" && cat "$PKG_NAME.tar.gz.sha256" )
 ls -la "$WORK/dist/$PKG_NAME.tar.gz"
-echo "done: $WORK/dist/$PKG_NAME.tar.gz"
+
+# Release notes (outside dist/, which holds only the downloadable assets): what the archive contains
+# and the exact commit of every component, taken from the package manifest.
+python3 - "$PKG/runtime-manifest.json" "$WORK/release-notes.md" "$WORK/dist/$PKG_NAME.tar.gz" <<'PY'
+import json, os, sys
+m = json.load(open(sys.argv[1])); tgz = sys.argv[3]
+sha = open(tgz + ".sha256").read().split()[0]
+unpacked = sum(os.path.getsize(os.path.join(d, f)) for d, _, fs in os.walk(os.path.dirname(sys.argv[1])) for f in fs)
+pins = {"uhdm2rtlil": "https://github.com/alainmarcel/uhdm2rtlil", "yosys": "https://github.com/alainmarcel/yosys",
+        "yosys-slang": "https://github.com/povik/sv-elab", "slang": "https://github.com/MikePopoloski/slang",
+        "surelog": "https://github.com/chipsalliance/Surelog", "uhdm": "https://github.com/chipsalliance/UHDM"}
+rows = "\n".join(f"| {k} | [`{v[:12]}`]({pins[k]}/commit/{v}) |" if v != "unknown" else f"| {k} | unknown |"
+                  for k, v in m["sources"].items())
+open(sys.argv[2], "w").write(f"""Schematic runtime v{m['version']} for sv-pathfinder: Yosys with the `read_slang` and `read_uhdm` frontends.
+
+- Platform: Linux x64, built on {m['builtOn']}, runs on glibc {m['glibcFloor']} or newer (RHEL/AlmaLinux 8 and later, any current distribution).
+- Archive: `{os.path.basename(tgz)}`, {os.path.getsize(tgz) / 2**20:.1f} MB compressed, {unpacked / 2**20:.0f} MB unpacked.
+- SHA-256: `{sha}`
+
+The extension downloads this archive on the first schematic request. To install by hand, extract it and set `sv-pathfinder.schematicRuntimePath` to the extracted folder.
+
+| Component | Commit |
+|---|---|
+{rows}
+
+The same pins are in `toolchain/versions.json` at this tag and in `runtime-manifest.json` inside the archive.
+""")
+PY
+echo "done: $WORK/dist/$PKG_NAME.tar.gz (release notes: $WORK/release-notes.md)"

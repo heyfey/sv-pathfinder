@@ -2,23 +2,32 @@ name: Schematic runtime
 
 # Builds the managed schematic runtime (Yosys + read_slang + uhdm2rtlil/read_uhdm) for Linux x64 from
 # the sources pinned in toolchain/versions.json, inside an AlmaLinux 8 container so the binaries keep
-# the EL8 glibc 2.28 floor, and publishes it as a GitHub Release asset. The extension downloads the
-# asset named in toolchain/versions.json on first schematic use.
+# the EL8 glibc 2.28 floor. The extension downloads the release asset named in versions.json on the
+# first schematic use.
 #
-# Trigger: push a tag `schematic-runtime-v<version>` matching versions.json, or run manually (the
-# manual run only uploads the artifact, it does not publish a release).
+# Manual runs only (Actions → Schematic runtime → Run workflow):
+#   publish = false (default)  build + smoke-test on the chosen branch, keep the archive as a workflow
+#                              artifact for 7 days. Use this to try a pin change before merging it.
+#   publish = true             allowed on main only. Builds, then creates the tag
+#                              schematic-runtime-v<runtimeVersion> on the main commit that was built
+#                              and a GitHub Release with the archive, its .sha256 and the generated
+#                              release notes (platform, size, SHA-256, the commit of every component).
+#                              Fails if that tag already exists: bump runtimeVersion first.
+# After a publish: copy the SHA-256 from the release into assets.linux-x64.sha256 in
+# toolchain/versions.json and merge that commit. Until then the extension refuses the download.
 
 on:
-  push:
-    tags: ['schematic-runtime-v*']
   workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Create the tag and the GitHub Release (main only)'
+        type: boolean
+        default: false
 
 jobs:
   linux-x64:
     runs-on: ubuntu-latest
     container: almalinux:8
-    permissions:
-      contents: write
     steps:
       - name: Install the toolchain (gcc-toolset-14, cmake, python3.11, Java 11 for Surelog's ANTLR step)
         run: |
@@ -30,11 +39,22 @@ jobs:
 
       - uses: actions/checkout@v4
 
-      - name: Check the tag matches toolchain/versions.json
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Check the publish preconditions (main, tag not taken, asset URL matches)
+        if: inputs.publish
         run: |
+          set -e
+          test "${GITHUB_REF}" = "refs/heads/main" || { echo "publish=true is allowed on main only (got ${GITHUB_REF})"; exit 1; }
           v="$(python3 -c "import json; print(json.load(open('toolchain/versions.json'))['runtimeVersion'])")"
-          test "${GITHUB_REF_NAME}" = "schematic-runtime-v${v}" || { echo "tag ${GITHUB_REF_NAME} != schematic-runtime-v${v}"; exit 1; }
+          tag="schematic-runtime-v${v}"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null; then
+            echo "tag ${tag} already exists; bump runtimeVersion in toolchain/versions.json first"; exit 1
+          fi
+          url="$(python3 -c "import json; print(json.load(open('toolchain/versions.json'))['assets']['linux-x64']['url'])")"
+          case "$url" in
+            */releases/download/${tag}/sv-pathfinder-schematic-runtime-linux-x64-${v}.tar.gz) ;;
+            *) echo "assets.linux-x64.url does not match tag ${tag} / version ${v}: $url"; exit 1 ;;
+          esac
 
       - name: Cache the Yosys + Surelog builds
         uses: actions/cache@v4
@@ -62,16 +82,13 @@ jobs:
         with:
           name: schematic-runtime-linux-x64
           path: toolchain/work/dist/*
+          retention-days: 7
 
-      - name: Publish the release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+      - uses: actions/upload-artifact@v4
         with:
-          files: toolchain/work/dist/*
-          body: |
-            Managed schematic runtime for sv-pathfinder (Linux x64, AlmaLinux 8 / glibc 2.28 baseline).
-            Pins: see `toolchain/versions.json` at this tag. Installed automatically by the extension on
-            the first schematic request; or extract by hand and set `sv-pathfinder.schematicRuntimePath`.
+          name: schematic-runtime-release-notes
+          path: toolchain/work/release-notes.md
+          retention-days: 7
 
   # The same archive must run on a current distribution too.
   verify-ubuntu:
@@ -85,7 +102,40 @@ jobs:
           path: dist
       - run: |
           set -e
-          sha256sum -c dist/*.sha256 --ignore-missing || (cd dist && sha256sum -c *.sha256)
+          (cd dist && sha256sum -c *.sha256)
           d="$(mktemp -d)"; tar -C "$d" -xzf dist/*.tar.gz; pkg="$(ls -d "$d"/*/)"
           "$pkg/bin/yosys" -q -p 'help read_slang' | head -1
           "$pkg/bin/yosys" -q -m uhdm2rtlil -p 'read_uhdm examples/test/surelog.uhdm; hierarchy -top top; proc; write_json /tmp/u.json' && grep -q '"top"' /tmp/u.json
+
+  # Tag + release, from main only, after both checks passed. `gh release create --target` creates the
+  # tag on the exact commit this run checked out, so the tag is on main by construction.
+  publish:
+    if: inputs.publish
+    needs: [linux-x64, verify-ubuntu]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: schematic-runtime-linux-x64
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: schematic-runtime-release-notes
+          path: notes
+      - name: Create the tag and the release
+        run: |
+          set -e
+          v="$(python3 -c "import json; print(json.load(open('toolchain/versions.json'))['runtimeVersion'])")"
+          tag="schematic-runtime-v${v}"
+          gh release create "$tag" dist/* \
+            --target "$GITHUB_SHA" \
+            --title "Schematic runtime v${v}" \
+            --notes-file notes/release-notes.md \
+            --latest=false
+          echo "Released ${tag} at ${GITHUB_SHA}. Now put the SHA-256 below into toolchain/versions.json:"
+          cat dist/*.sha256
