@@ -6,7 +6,7 @@
 # slang integration has a build dependency on the yosys-abc target and cannot be configured with
 # YOSYS_WITHOUT_ABC=ON. Only bin/yosys is packaged (no yosys-abc); the schematic uses `synth -noabc`.
 #
-# Reference platform: AlmaLinux 8 + gcc-toolset-14 (scl enable gcc-toolset-14 bash), cmake >= 3.28 (pip),
+# Reference platform: AlmaLinux 8 + gcc-toolset-14 (scl enable gcc-toolset-14 bash), cmake 3.28-3.31 (pip, not 4.x),
 # python3 >= 3.8 with orderedmultidict, Java >= 11 (Surelog's ANTLR step), bison >= 3.6 (built from
 # source on EL8, whose package is 3.0.4), flex, zlib-devel.
 # CI runs this inside an almalinux:8 container (.github/workflows/schematic-runtime.yml).
@@ -51,7 +51,8 @@ need_version() { # name found minimum hint
     echo "error: need $1 >= $3 (found ${2:-none}); $4" >&2; exit 1
   fi
 }
-need_version CMake "$(cmake --version 2>/dev/null | head -1 | awk '{print $3}')" 3.28 "on EL8 run: python3 -m pip install 'cmake>=3.28'"
+need_version CMake "$(cmake --version 2>/dev/null | head -1 | awk '{print $3}')" 3.28 "on EL8 run: python3 -m pip install 'cmake>=3.28,<4'"
+case "$(cmake --version | head -1 | awk '{print $3}')" in 4.*) echo "error: CMake 4 refuses the cmake_minimum_required(3.4) in Surelog's vendored capnproto; use CMake 3.28-3.31" >&2; exit 1;; esac
 need_version Bison "$(bison --version 2>/dev/null | head -1 | awk '{print $NF}')" 3.6 "on EL8 build GNU Bison 3.8.2 from source (ftp.gnu.org/gnu/bison)"
 mkdir -p "$WORK"
 

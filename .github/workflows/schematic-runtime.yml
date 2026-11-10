@@ -35,8 +35,9 @@ jobs:
             python3.11 python3.11-pip java-11-openjdk-headless
           alternatives --set python3 /usr/bin/python3.11
           # EL8's cmake is 3.26; the Yosys v0.70 fork needs 3.28. The pip wheel is a static binary
-          # that runs on glibc 2.17+, so it is fine inside the EL8 container.
-          python3 -m pip install --quiet orderedmultidict 'cmake>=3.28'   # orderedmultidict: UHDM's code generator
+          # that runs on glibc 2.17+, so it is fine inside the EL8 container. CMake 4 refuses the
+          # cmake_minimum_required(3.4) in Surelog's vendored capnproto, so stay on 3.x.
+          python3 -m pip install --quiet orderedmultidict 'cmake>=3.28,<4'   # orderedmultidict: UHDM's code generator
           echo /usr/local/bin >> "$GITHUB_PATH"
           echo /opt/rh/gcc-toolset-14/root/usr/bin >> "$GITHUB_PATH"
           /usr/local/bin/cmake --version | head -1
@@ -70,8 +71,11 @@ jobs:
             *) echo "assets.linux-x64.url does not match tag ${tag} / version ${v}: $url"; exit 1 ;;
           esac
 
-      - name: Cache the Yosys + Surelog builds
-        uses: actions/cache@v4
+      # restore/save as two steps so a build that fails in a later stage still keeps what it built
+      # (the Yosys stage alone takes most of the run time).
+      - name: Restore the Yosys + Surelog builds
+        id: cache
+        uses: actions/cache/restore@v4
         with:
           path: |
             toolchain/work/yosys/build
@@ -81,6 +85,16 @@ jobs:
 
       - name: Build, package, smoke-test
         run: toolchain/build-schematic-runtime.sh
+
+      - name: Save the Yosys + Surelog builds
+        if: always() && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            toolchain/work/yosys/build
+            toolchain/work/uhdm2rtlil/out/current
+            toolchain/work/plugin-build
+          key: schematic-runtime-el8-${{ hashFiles('toolchain/versions.json', 'toolchain/build-schematic-runtime.sh') }}
 
       - name: Smoke test the archive on a fresh extraction
         run: |
