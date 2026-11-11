@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { openDesignDialogOptions } from './design_dialog';
 import path from 'path';
 import * as fs from 'fs/promises';
 import * as os from 'os';
@@ -1372,16 +1373,7 @@ export class OpenedDesignsTreeProvider implements vscode.TreeDataProvider<vscode
     public readonly onDidChangeActiveWaveformForActiveDesign: vscode.Event<vscode.TreeItem | undefined | null | void> = this._onDidChangeActiveWaveformForActiveDesign.event;
 
     public async openDesign(): Promise<boolean> {
-        const options: vscode.OpenDialogOptions = {
-            canSelectFiles: true,
-            canSelectFolders: true,
-            canSelectMany: false,
-            filters: {
-                'Designs': ['uhdm', 'f', 'daidir'],
-            }
-        };
-
-        const uris = await vscode.window.showOpenDialog(options);
+        const uris = await vscode.window.showOpenDialog(openDesignDialogOptions());
         if (!uris || uris.length === 0) { return false; }
         const selectedFile = uris[0]; // Get the first (and only) selected file
         this.addDesign(selectedFile.fsPath);
