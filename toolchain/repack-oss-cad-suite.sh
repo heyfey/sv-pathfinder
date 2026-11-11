@@ -85,8 +85,10 @@ deps_of() {
 # contain plain files only (the extension's extractor rejects links).
 copied=""
 copy_closure() { # file destdir
-  local f="$1" dest="$2" d src
+  local f="$1" dest="$2" d src self
+  self="$(basename "$f")"
   for d in $(deps_of "$f"); do
+    [ "$d" = "$self" ] && continue   # otool -L lists a library's own install name first
     case " $copied " in *" $d "*) continue;; esac
     copied="$copied $d"
     src="$(find_lib "$d")" || { echo "error: $(basename "$f") needs $d, not found in the suite" >&2; exit 1; }
