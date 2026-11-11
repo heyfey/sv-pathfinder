@@ -50,7 +50,7 @@
   "assets": {
     "linux-x64": {
       "url": "https://github.com/heyfey/sv-pathfinder/releases/download/schematic-runtime-v0.2.0/sv-pathfinder-schematic-runtime-linux-x64-0.2.0.tar.gz",
-      "sha256": "",
+      "sha256": "4ae2bcabafc4cb2dd6741f379cecccf364c461a53f182ac79884bdfc8a57ada1",
       "features": {
         "read_slang": true,
         "read_uhdm": true
@@ -59,7 +59,7 @@
     },
     "darwin-arm64": {
       "url": "https://github.com/heyfey/sv-pathfinder/releases/download/schematic-runtime-v0.2.0/sv-pathfinder-schematic-runtime-darwin-arm64-0.2.0.tar.gz",
-      "sha256": "",
+      "sha256": "51e0bbe3913946cdc956016495d75a595e6b5c6e9027f0dff8fd4949cd01ce41",
       "features": {
         "read_slang": true,
         "read_uhdm": false
@@ -69,7 +69,7 @@
     },
     "darwin-x64": {
       "url": "https://github.com/heyfey/sv-pathfinder/releases/download/schematic-runtime-v0.2.0/sv-pathfinder-schematic-runtime-darwin-x64-0.2.0.tar.gz",
-      "sha256": "",
+      "sha256": "c3c0f849e16bc9543a9710ed6e8f167da040364da0f0d7bf44ee40816da9cb91",
       "features": {
         "read_slang": true,
         "read_uhdm": false
@@ -79,7 +79,7 @@
     },
     "win32-x64": {
       "url": "https://github.com/heyfey/sv-pathfinder/releases/download/schematic-runtime-v0.2.0/sv-pathfinder-schematic-runtime-win32-x64-0.2.0.tar.gz",
-      "sha256": "",
+      "sha256": "43c3e3f745dada118f6ec67a9dfa99ae8c49243a105f78ef71004aede4fdcc0e",
       "features": {
         "read_slang": true,
         "read_uhdm": false
