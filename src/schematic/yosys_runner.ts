@@ -7,7 +7,7 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { ScopeContext } from './scope_resolver';
-import { absolutizeFlist, searchDirFlags, blackboxFlags, flistWithoutUvm } from '../flist';
+import { absolutizeFlist, searchDirFlags, blackboxFlags, flistWithoutUvm, flistPathText } from '../flist';
 import { NoYosysBackendError, uhdmFrontendUnavailableMessage, yosysExitMessage } from './backend_policy';
 import { isUvmError, isKeptBoundaryError } from './scope_nav';
 import { svLog } from '../output';
@@ -233,7 +233,7 @@ export async function runYosys(ctx: ScopeContext, preset: SchematicPreset, opts?
     // "Bad command", which a 100+ file design exceeds (HummingbirdV2 E203: 16 KB of paths).
     if (!useUhdm && !effectiveCtx.dotF && effectiveCtx.fileSet.length > 0) {
         const generated = path.join(tmpDir, 'sources.f');
-        await fs.writeFile(generated, effectiveCtx.fileSet.join('\n') + '\n');
+        await fs.writeFile(generated, effectiveCtx.fileSet.map(f => flistPathText(f)).join('\n') + '\n');
         effectiveCtx = { ...effectiveCtx, dotF: generated };
     }
 

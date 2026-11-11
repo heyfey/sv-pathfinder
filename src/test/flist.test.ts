@@ -4,7 +4,7 @@ import * as fsp from 'fs/promises';
 import * as os from 'os';
 import path from 'path';
 
-import { absolutizeFlist, searchDirFlags, blackboxFlags, flistWithoutUvm, isUvmSource } from '../flist';
+import { absolutizeFlist, searchDirFlags, blackboxFlags, flistWithoutUvm, isUvmSource, flistPathText } from '../flist';
 
 suite('searchDirFlags', () => {
     test('read_slang form: each dir → -I and -y, plus .sv/.v libext', () => {
@@ -100,6 +100,12 @@ suite('absolutizeFlist', () => {
 
     teardown(async () => {
         await fsp.rm(work, { recursive: true, force: true });
+    });
+
+    test('flistPathText: forward slashes on Windows only (slang reads a backslash as an escape)', () => {
+        assert.strictEqual(flistPathText('C:\\Users\\me\\d\\a.sv', 'win32'), 'C:/Users/me/d/a.sv');
+        assert.strictEqual(flistPathText('/home/me/a.sv', 'linux'), '/home/me/a.sv');
+        assert.strictEqual(flistPathText('/home/me/a.sv', 'darwin'), '/home/me/a.sv');
     });
 
     test('absolutizes bare relative source paths against the .f directory', async () => {

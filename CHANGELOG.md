@@ -21,6 +21,14 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   message instead of aborting the extension host. The reader also exports `uhdmVersion`.
 - `loadDesign`, `getModuleDefs` and `searchInstances` left their promise pending forever
   on failure; they now reject.
+- Windows: "Open Design" showed a folder-only dialog (a files-and-folders dialog is folder-only
+  on Windows and native Linux), so no `.f` or `.uhdm` could be picked. It is a file dialog now.
+- Windows: paths written into the rewritten filelist used backslashes, which slang reads as
+  escape characters (`c:Userstsung...`). Generated filelists and Yosys scripts use forward
+  slashes on Windows.
+- The slang-server extension is activated before its commands are used; it activates itself only
+  when the workspace contains a `.sv`/`.v` file, so a design opened from another folder failed with
+  "command 'slang.setBuildFile' not found". A missing extension is now reported by name.
 
 ### Added
 

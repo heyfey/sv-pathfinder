@@ -26,6 +26,13 @@ export async function absolutizeFlist(flistPath: string): Promise<string> {
     return rewrite(path.resolve(flistPath), new Map(), new Set());
 }
 
+// A path written INTO a filelist or a Yosys/slang script: forward slashes on Windows. slang's
+// command-file parser (and read_slang -F) reads a backslash as an escape character, so
+// `C:\Users\x\d.f` would arrive as `C:Usersxd.f`. Both tools accept forward slashes on Windows.
+export function flistPathText(p: string, platform: string = process.platform): string {
+    return platform === 'win32' ? p.replace(/\\/g, '/') : p;
+}
+
 function quoteArg(p: string): string {
     const n = yosysPath(p);
     return /\s/.test(n) ? `"${n}"` : n;
@@ -134,7 +141,7 @@ async function rewrite(flistPath: string, cache: Map<string, string>, inProgress
     inProgress.add(flistPath);
 
     const base = path.dirname(flistPath);
-    const abs = (p: string) => (path.isAbsolute(p) ? p : path.resolve(base, p));
+    const abs = (p: string) => flistPathText(path.isAbsolute(p) ? p : path.resolve(base, p));
 
     const raw = await fs.readFile(flistPath, 'utf8');
     const out: string[] = [];
