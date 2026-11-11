@@ -549,6 +549,7 @@ export class SchematicViewProvider {
             if (pos) {
                 // Yosys src paths are relative to the yosys cwd (C2 runs in ctx.workDir)
                 const filePath = path.isAbsolute(pos.name) ? pos.name : path.resolve(shown.ctx.workDir, pos.name);
+                svLog('schematic', `go to source: "${pos.name}" (${msg.sourcePositions.length} position(s)) in cwd "${shown.ctx.workDir}" -> ${filePath}`);
                 await showTextDocumentLocation(replaceFilePathIfNeeded(filePath), pos.from.line, pos.from.column, shown.design.isExample);
                 return;
             }
