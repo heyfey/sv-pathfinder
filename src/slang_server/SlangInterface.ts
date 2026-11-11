@@ -87,33 +87,15 @@ export interface QualifiedInstance {
 /// client -> server
 ////////////////////////////////////////////////////////////
 
-export const SLANG_EXTENSION_ID = 'hudson-river-trading.vscode-slang'
-
-/// The slang-server extension activates itself only when the workspace contains a .sv/.v file
-/// (its activation event is `workspaceContains`). A design opened from a folder without sources, or
-/// before that search finished, would hit "command 'slang.setBuildFile' not found". Activate it
-/// explicitly before the first command; a missing extension gets a message that names it.
-export async function ensureSlangServer(): Promise<void> {
-  const ext = vscode.extensions.getExtension(SLANG_EXTENSION_ID)
-  if (!ext) {
-    throw new Error(
-      'The slang-server extension (Hudson-River-Trading.vscode-slang) is not installed. ' +
-      'Install it from the Marketplace, or set sv-pathfinder.compiler to "Surelog".')
-  }
-  if (!ext.isActive) { await ext.activate() }
-}
-
 /// Can be used by right clicking on a module or with button
 /// Slang should automatically choose the module with no references
 export async function setTopLevel(uri: string) {
-  await ensureSlangServer()
   return await vscode.commands.executeCommand('slang.setTopLevel', uri)
 }
 
 /// May need to ask to select top level from the available modules
 /// Or we can force the user to select the top level first, then specify the build file
 export async function setBuildFile(uri: string) {
-  await ensureSlangServer()
   return await vscode.commands.executeCommand('slang.setBuildFile', uri)
 }
 

@@ -26,9 +26,10 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - Windows: paths written into the rewritten filelist used backslashes, which slang reads as
   escape characters (`c:Userstsung...`). Generated filelists and Yosys scripts use forward
   slashes on Windows.
-- The slang-server extension is activated before its commands are used; it activates itself only
-  when the workspace contains a `.sv`/`.v` file, so a design opened from another folder failed with
-  "command 'slang.setBuildFile' not found". A missing extension is now reported by name.
+- The slang-server extension is activated before its commands are used (every platform): it
+  activates itself only when the workspace contains a `.sv`/`.v` file, so a design opened from a
+  folder without sources failed with "command 'slang.setBuildFile' not found". A missing extension
+  is now reported by name.
 
 ### Added
 

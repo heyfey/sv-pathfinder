@@ -5,6 +5,7 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as cp from 'child_process';
 import * as slang from './slang_server/SlangInterface'
+import { ensureSlangServer, SLANG_EXTENSION_ID } from './slang_activation';
 import { absolutizeFlist } from './flist';
 import { isNoOpNavigation, findColumnForPath } from './nav_history';
 import { resolveRenamedBool, resolveRenamedString } from './settings_util';
@@ -960,6 +961,7 @@ class SlangDesignItem extends DesignItem {
         // slang-server resolves relative .f paths against its own CWD (which we
         // don't control), so rewrite the build file with absolute paths first.
         const buildFile = await absolutizeFlist(this.resourceUri.fsPath);
+        await ensureSlangServer();   // its commands exist only once the extension is active
         await slang.setBuildFile(buildFile);
         this.unit = await slang.getUnit();
         // console.log("Loaded SlangDesignItem: " + this.resourceUri.fsPath);
@@ -1183,7 +1185,8 @@ class SlangDesignItem extends DesignItem {
     public async unload(): Promise<void> {
         this.unloadTreeData();
         this.unit = undefined;
-        await slang.setBuildFile('');
+        // Nothing to clear when the extension never ran (load() failed before activating it).
+        if (vscode.extensions.getExtension(SLANG_EXTENSION_ID)?.isActive) { await slang.setBuildFile(''); }
     }
 }
 
