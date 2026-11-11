@@ -4,7 +4,7 @@
   "displayName": "sv-pathfinder",
   "description": "SystemVerilog design navigation and RTL-tracing for VS Code. Seamlessly integrates with waveform viewer for post-simulation debug.",
   "icon": "media/icon.png",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "repository": "https://github.com/heyfey/sv-pathfinder",
   "license": "SEE LICENSE IN LICENSE",
   "engines": {
@@ -74,7 +74,11 @@
         },
         "sv-pathfinder.schematicUhdmFrontend": {
           "type": "string",
-          "enum": ["auto", "read_uhdm", "read_slang"],
+          "enum": [
+            "auto",
+            "read_uhdm",
+            "read_slang"
+          ],
           "default": "auto",
           "markdownEnumDescriptions": [
             "Try `read_uhdm` (experimental importer); if it fails, re-parse the design's source files with `read_slang`.",

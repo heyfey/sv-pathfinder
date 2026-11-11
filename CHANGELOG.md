@@ -4,7 +4,7 @@ All notable changes to the "sv-pathfinder" extension will be documented in this 
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
-## [Unreleased]
+## [0.3.1] - 2026-11-11
 
 ### Changed
 
