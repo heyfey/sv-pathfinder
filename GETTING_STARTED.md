@@ -26,12 +26,17 @@ Open the **sv-pathfinder** view in the activity bar, click **Open Design**, and 
   [slang-server extension](https://marketplace.visualstudio.com/items?itemName=Hudson-River-Trading.vscode-slang),
   so install that first. To use Surelog instead, set `sv-pathfinder.compiler` to `Surelog` and
   install Surelog (or set `sv-pathfinder.surelogPath`).
-- **A `.uhdm` database**, a design pre-elaborated by Surelog. Nothing else is needed. Generate one
-  with Surelog **v1.87** (the reader rejects other versions; see [BUILD_SURELOG.md](BUILD_SURELOG.md)):
-
-  ```bash
-  surelog dut.v tb.sv -elabuhdm -parse -sverilog -d uhdm   # writes ./slpp_all/surelog.uhdm
-  ```
+- **A `.uhdm` database**, a pre-elaborated design. Nothing else is needed. The reader accepts
+  databases written with UHDM v1.87. Two tools write them:
+  - [Surelog](https://github.com/chipsalliance/Surelog) **v1.87** (see [BUILD_SURELOG.md](BUILD_SURELOG.md)):
+    ```bash
+    surelog dut.v tb.sv -elabuhdm -parse -sverilog -d uhdm   # writes ./slpp_all/surelog.uhdm
+    ```
+  - [slang-uhdm](https://github.com/heyfey/slang-uhdm), which writes the same database from slang
+    (pick a release that writes UHDM v1.87):
+    ```bash
+    slang-uhdm -f design.f -o design.uhdm   # the slang command line, plus -o
+    ```
 
 ## Schematic viewer
 
