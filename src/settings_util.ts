@@ -24,3 +24,16 @@ export function resolveRenamedString(
 ): string {
     return resolveRenamed(newExplicit, oldExplicit, def);
 }
+
+// Rewrite the first occurrence of `from` in a source path with `to` (the sourcePathFrom/To settings).
+// On Windows the match ignores case and treats `\` and `/` as the same separator, because the same
+// file arrives as `c:\x\y.sv` from one tool and `C:/x/y.sv` from another; the replaced text keeps
+// the rest of the path as it was.
+export function remapSourcePath(filePath: string, from: string, to: string, platform: string = process.platform): string {
+    if (!from || !to || from === to) { return filePath; }
+    if (platform !== 'win32') { return filePath.replace(from, to); }
+    const norm = (p: string) => p.replace(/\\/g, '/').toLowerCase();
+    const i = norm(filePath).indexOf(norm(from));
+    if (i < 0) { return filePath; }
+    return filePath.slice(0, i) + to + filePath.slice(i + from.length);
+}

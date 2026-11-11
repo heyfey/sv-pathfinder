@@ -8,7 +8,7 @@ import * as slang from './slang_server/SlangInterface'
 import { ensureSlangServer, SLANG_EXTENSION_ID } from './slang_activation';
 import { absolutizeFlist } from './flist';
 import { isNoOpNavigation, findColumnForPath } from './nav_history';
-import { resolveRenamedBool, resolveRenamedString } from './settings_util';
+import { resolveRenamedBool, resolveRenamedString, remapSourcePath } from './settings_util';
 import { svOutputChannel, svLog } from './output';
 import { InstanceSearchResult, InstanceSearchHits, InstanceQuickPickItem, toInstanceQuickPickItems, filterAndCapInstances } from './design_search';
 import { showNoActiveDesignMessage } from './ui_util';
@@ -1622,10 +1622,7 @@ export function replaceFilePathIfNeeded(filePath: string, isExample: boolean = f
     };
     const from = resolveRenamedString(userSet('sourcePathFrom'), userSet('remotePathPrefix'), '');
     const to = resolveRenamedString(userSet('sourcePathTo'), userSet('localPathPrefix'), '');
-    if (!from || !to || from === to) {
-        return filePath; // No replacement needed
-    }
-    return filePath.replace(from, to);
+    return remapSourcePath(filePath, from, to);
 }
 
 // Find the view column of an already-open tab for `uri`, scanning all tab groups (covers background

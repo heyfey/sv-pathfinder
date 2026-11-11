@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 
-import { resolveRenamedBool, resolveRenamedString } from '../settings_util';
+import { resolveRenamedBool, resolveRenamedString, remapSourcePath } from '../settings_util';
 
 suite('resolveRenamedBool (renamed setting back-compat)', () => {
     test('explicit new key wins over old key and default', () => {
@@ -36,5 +36,20 @@ suite('resolveRenamedString (renamed path-prefix back-compat)', () => {
 
     test('uses the default when neither key is set', () => {
         assert.strictEqual(resolveRenamedString(undefined, undefined, ''), '');
+    });
+});
+
+suite('remapSourcePath (sourcePathFrom/To)', () => {
+    test('plain first-occurrence replacement on POSIX', () => {
+        assert.strictEqual(remapSourcePath('/srv/db/rtl/a.sv', '/srv/db', '/home/me/db', 'linux'), '/home/me/db/rtl/a.sv');
+        assert.strictEqual(remapSourcePath('/other/a.sv', '/srv/db', '/home/me/db', 'linux'), '/other/a.sv');
+        assert.strictEqual(remapSourcePath('/srv/db/a.sv', '', '/x', 'linux'), '/srv/db/a.sv', 'empty from = no-op');
+        assert.strictEqual(remapSourcePath('/srv/db/a.sv', '/srv/db', '/srv/db', 'linux'), '/srv/db/a.sv', 'from === to = no-op');
+    });
+
+    test('Windows: ignores case and separator style in the match, keeps the tail as is', () => {
+        assert.strictEqual(remapSourcePath('c:\\Users\\me\\db\\rtl\\a.sv', 'C:/Users/me/db', 'D:\\db', 'win32'), 'D:\\db\\rtl\\a.sv');
+        assert.strictEqual(remapSourcePath('/srv/db/rtl/a.sv', '/srv/db', 'C:\\db', 'win32'), 'C:\\db/rtl/a.sv', 'a Linux prefix from a database generated elsewhere');
+        assert.strictEqual(remapSourcePath('c:\\elsewhere\\a.sv', 'C:/Users/me/db', 'D:\\db', 'win32'), 'c:\\elsewhere\\a.sv');
     });
 });

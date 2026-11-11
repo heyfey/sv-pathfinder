@@ -34,12 +34,12 @@
       "properties": {
         "sv-pathfinder.sourcePathFrom": {
           "type": "string",
-          "scope": "window",
+          "scope": "machine-overridable",
           "markdownDescription": "Source-path prefix to rewrite when jumping to source. Useful when the design database was generated on another machine, so the paths it records don't exist locally: paths starting with this prefix have it swapped for `#sv-pathfinder.sourcePathTo#`. Takes effect only when `#sv-pathfinder.sourcePathTo#` is also set."
         },
         "sv-pathfinder.sourcePathTo": {
           "type": "string",
-          "scope": "window",
+          "scope": "machine-overridable",
           "markdownDescription": "Local replacement for `#sv-pathfinder.sourcePathFrom#` — the prefix that makes the remapped path resolve on your machine. Takes effect only when `#sv-pathfinder.sourcePathFrom#` is also set."
         },
         "sv-pathfinder.compiler": {
@@ -57,6 +57,7 @@
         },
         "sv-pathfinder.surelogPath": {
           "type": "string",
+          "scope": "machine-overridable",
           "default": "",
           "markdownDescription": "Path to the Surelog executable. If empty, 'surelog' will be resolved from your system PATH. This setting is only relevant when `#sv-pathfinder.compiler#` is set to 'Surelog'."
         },
