@@ -141,7 +141,14 @@ EOF
 # date pins it.
 YOSYS_V="$("$PKG/bin/$EXE" -V 2>/dev/null | head -1 || true)"
 YOSYS_SHA="$(printf '%s' "$YOSYS_V" | sed -n 's/.*git sha1 \([0-9a-f]*\).*/\1/p')"
-BUILT_ON="$(case "$OS" in darwin) sw_vers -productName 2>/dev/null | tr -d '\n'; printf ' '; sw_vers -productVersion 2>/dev/null;; win32) printf 'Windows %s' "$(uname -r 2>/dev/null)";; *) . /etc/os-release 2>/dev/null && echo "$PRETTY_NAME";; esac)"
+# (an if chain, not a case: bash 3.2 on macOS cannot parse case patterns inside a $( ) substitution)
+if [ "$OS" = darwin ]; then
+  BUILT_ON="$(sw_vers -productName 2>/dev/null) $(sw_vers -productVersion 2>/dev/null)"
+elif [ "$OS" = win32 ]; then
+  BUILT_ON="Windows $(uname -r 2>/dev/null)"
+else
+  BUILT_ON="$(. /etc/os-release 2>/dev/null && echo "${PRETTY_NAME:-Linux}")"
+fi
 "$PY" - "$PKG/runtime-manifest.json" "$RUNTIME_VERSION" "$OS" "$ARCH" "$RELEASE" "${YOSYS_SHA:-unknown}" "$YOSYS_V" "$BUILT_ON" <<'PY'
 import json, sys, datetime
 out, ver, os_, arch, release, ysha, yv, built_on = sys.argv[1:]
