@@ -38,6 +38,19 @@ function quoteArg(p: string): string {
     return /\s/.test(n) ? `"${n}"` : n;
 }
 
+// Split configured search directories into the ones present on this machine and the rest. Yosys
+// rejects a -I/-y directory that does not exist ("ERROR: Bad command"), and a path setting that
+// Settings Sync carried over from another machine is the usual way to get one.
+export function keepExistingDirs(dirs: string[], exists: (dir: string) => boolean): { kept: string[]; dropped: string[] } {
+    const kept: string[] = [], dropped: string[] = [];
+    for (const d of dirs) {
+        const t = (d || '').trim();
+        if (!t) { continue; }
+        (exists(t) ? kept : dropped).push(t);
+    }
+    return { kept, dropped };
+}
+
 // Build read_slang/read_verilog search-path flags from a set of directories, so a PARTIAL filelist
 // still elaborates. Each dir becomes an include path (-I) and, for read_slang (withLibdir), a
 // library search dir (-y, with .sv/.v libext) so slang auto-resolves instantiated modules the .f

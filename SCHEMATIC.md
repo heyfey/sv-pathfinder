@@ -79,10 +79,10 @@ and each source file's directory are searched automatically, so a `.f` that omit
 
 | Setting | Description |
 |---|---|
-| `sv-pathfinder.schematicRuntimePath` | Folder of a hand-installed schematic runtime (the one containing `bin/yosys`). Leave empty to use the automatically downloaded one. |
+| `sv-pathfinder.schematicRuntimePath` | Folder of a hand-installed schematic runtime (the one containing `bin/yosys`). Leave empty to use the automatically downloaded one. Per machine (not synced). |
 | `sv-pathfinder.schematicElaborationMode` | `shallow` (default) or `full` — see above. |
 | `sv-pathfinder.schematicUhdmFrontend` | How `.uhdm` designs are drawn: `auto` (default: read the database, fall back to the source files), `read_uhdm` (database only), or `read_slang` (source files only). |
-| `sv-pathfinder.schematicIncludeDirs` | Extra `` `include`` search dirs for Yosys elaboration. |
+| `sv-pathfinder.schematicIncludeDirs` | Extra `` `include`` search dirs for Yosys elaboration. Per machine (not synced); a directory that does not exist on this machine is skipped. |
 | `sv-pathfinder.schematicAccentColor` | Accent color for child-instance fills / hover highlights. Any CSS color; empty = theme-aware default. |
 | `sv-pathfinder.schematicShowDanglingNets` | Surface declared-but-unconnected nets. Default off. |
 | `sv-pathfinder.schematicSpacing` | Layout density: `compact` / `comfortable` (default) / `spacious`. |

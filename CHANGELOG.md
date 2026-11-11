@@ -26,6 +26,10 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - Windows: paths written into the rewritten filelist used backslashes, which slang reads as
   escape characters (`c:Userstsung...`). Generated filelists and Yosys scripts use forward
   slashes on Windows.
+- `sv-pathfinder.schematicIncludeDirs` and `sv-pathfinder.schematicRuntimePath` are machine-scoped
+  settings now (Settings Sync no longer copies one machine's paths to another), and a configured
+  include directory that does not exist on this machine is skipped with a log line instead of
+  failing the whole Yosys run ("Bad command").
 - The slang-server extension is activated before its commands are used (every platform): it
   activates itself only when the workspace contains a `.sv`/`.v` file, so a design opened from a
   folder without sources failed with "command 'slang.setBuildFile' not found". A missing extension

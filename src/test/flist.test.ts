@@ -4,7 +4,7 @@ import * as fsp from 'fs/promises';
 import * as os from 'os';
 import path from 'path';
 
-import { absolutizeFlist, searchDirFlags, blackboxFlags, flistWithoutUvm, isUvmSource, flistPathText } from '../flist';
+import { absolutizeFlist, searchDirFlags, blackboxFlags, flistWithoutUvm, isUvmSource, flistPathText, keepExistingDirs } from '../flist';
 
 suite('searchDirFlags', () => {
     test('read_slang form: each dir → -I and -y, plus .sv/.v libext', () => {
@@ -100,6 +100,12 @@ suite('absolutizeFlist', () => {
 
     teardown(async () => {
         await fsp.rm(work, { recursive: true, force: true });
+    });
+
+    test('keepExistingDirs: drops configured dirs missing on this machine, keeps order, ignores blanks', () => {
+        const r = keepExistingDirs(['/a', ' ', '/gone', '/b', ''], d => d === '/a' || d === '/b');
+        assert.deepStrictEqual(r, { kept: ['/a', '/b'], dropped: ['/gone'] });
+        assert.deepStrictEqual(keepExistingDirs([], () => true), { kept: [], dropped: [] });
     });
 
     test('flistPathText: forward slashes on Windows only (slang reads a backslash as an escape)', () => {

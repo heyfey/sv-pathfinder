@@ -4,10 +4,11 @@
 import * as vscode from 'vscode';
 import * as cp from 'child_process';
 import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { ScopeContext } from './scope_resolver';
-import { absolutizeFlist, searchDirFlags, blackboxFlags, flistWithoutUvm, flistPathText } from '../flist';
+import { absolutizeFlist, searchDirFlags, blackboxFlags, flistWithoutUvm, flistPathText, keepExistingDirs } from '../flist';
 import { NoYosysBackendError, uhdmFrontendUnavailableMessage, yosysExitMessage } from './backend_policy';
 import { isUvmError, isKeptBoundaryError } from './scope_nav';
 import { svLog } from '../output';
@@ -222,8 +223,11 @@ export async function runYosys(ctx: ScopeContext, preset: SchematicPreset, opts?
 
     // Extra include directories the filelist doesn't provide (e.g. vendored prim/dv headers), for
     // curated filelists like ibex's where the assertion/coverage headers live outside the source tree.
-    const extraIncludeDirs = vscode.workspace.getConfiguration('sv-pathfinder')
-        .get<string[]>('schematicIncludeDirs', []);
+    const configuredDirs = vscode.workspace.getConfiguration('sv-pathfinder').get<string[]>('schematicIncludeDirs', []);
+    const { kept: extraIncludeDirs, dropped } = keepExistingDirs(configuredDirs, d => fsSync.existsSync(d));
+    for (const d of dropped) {
+        logSchematic(`schematicIncludeDirs: "${d}" does not exist on this machine, skipped (Yosys would refuse the whole run).`);
+    }
 
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sv-pathfinder-schematic-'));
     const outJson = path.join(tmpDir, 'schematic.json');
