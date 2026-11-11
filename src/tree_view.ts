@@ -958,8 +958,10 @@ class SlangDesignItem extends DesignItem {
     // This is called in setActiveDesign, that means we recompile every time user switch designs.
     // This should be reviewed, search for "slangfixme" for related code.
     public async load(): Promise<boolean> {
-        // slang-server resolves relative .f paths against its own CWD (which we
-        // don't control), so rewrite the build file with absolute paths first.
+        // slang-server loads the build file with slang's `-f` semantics from the workspace folder, so
+        // relative .f paths resolve against the workspace root, not the .f's own directory (unless the
+        // user sets `buildRelativePaths` in slang-server's config, which we do not read). Rewrite the
+        // build file with absolute paths first; those resolve the same way under either setting.
         const buildFile = await absolutizeFlist(this.resourceUri.fsPath);
         await ensureSlangServer();   // its commands exist only once the extension is active
         await slang.setBuildFile(buildFile);
