@@ -52,10 +52,12 @@ With the [Vaporview](https://marketplace.visualstudio.com/items?itemName=lramsey
 
 ## Documentation
 
-- **[Getting Started](GETTING_STARTED.md)** — prerequisites, backends (`.f` / `.uhdm`), opening a
-  design, and all settings.
-- **[SCHEMATIC.md](SCHEMATIC.md)** — schematic setup (OSS CAD Suite), backend tiers, elaboration
-  modes, curated/partial filelists, and all `schematic*` settings.
+- **[Getting Started](GETTING_STARTED.md)** — prerequisites, opening a design, settings.
+- **[SCHEMATIC.md](SCHEMATIC.md)** — the schematic runtime, elaboration modes, partial filelists,
+  `schematic*` settings.
+- **[DEVELOPING.md](DEVELOPING.md)** — building from source.
+
+Platforms: Linux x64, macOS and Windows x64 (`.uhdm` databases: Linux x64 only).
 
 ## Acknowledgements
 
