@@ -17,7 +17,7 @@ function fakeYosys(broken = false, noUhdmPlugin = false): string {
         'script=""; while [ $# -gt 0 ]; do [ "$1" = -m ] && [ "$2" = uhdm2rtlil ] && [ -n "$NO_UHDM" ] && { echo "ERROR: Can\'t load module"; exit 1; }; [ "$1" = -p ] && script="$2"; shift; done\n' +
         'case "$script" in *help\\ read_uhdm*) echo "read_uhdm [options] file.uhdm"; exit 0;; esac\n' +
         (broken ? 'echo "ERROR: fake frontend missing"; exit 1\n' :
-            'out="$(printf %s "$script" | sed -n \'s/.*write_json \\([^;]*\\).*/\\1/p\')"\n' +
+            'out="$(printf %s "$script" | sed -n \'s/.*write_json \\([^;]*\\).*/\\1/p\' | sed \'s/^"//; s/"$//\')"\n' +
             '[ -n "$out" ] && printf \'{"modules":{"t":{}}}\' > "$out"\n' +
             'exit 0\n');
     return script.replace('[ -n "$NO_UHDM" ]', noUhdmPlugin ? 'true' : 'false');
@@ -81,12 +81,25 @@ suite('runtime_install', function () {
             // the self-test ran read_slang on a real file and asked the plugin for read_uhdm, nothing else was left behind
             const calls = (await fsp.readFile(path.join(installDir, 'bin', 'args.log'), 'utf8')).trim().split('\n');
             assert.strictEqual(calls.length, 2, calls.join(' // '));
-            assert.match(calls[0], /^-p read_slang .*t\.sv --top t; hierarchy -top t; proc; write_json .*t\.json$/);
+            assert.strictEqual(calls[0], '-p read_slang t.sv --top t; hierarchy -top t; proc; write_json t.json', 'bare names: the probe dir is the cwd');
             assert.match(calls[1], /^-m uhdm2rtlil -p help read_uhdm$/);
             assert.ok(!fs.existsSync(path.join(installDir, 'selftest')), 'self-test scratch dir is removed');
             // no temp directories left behind
             const left = (await fsp.readdir(path.join(tmp, 'store'))).filter(n => n.startsWith('tmp-'));
             assert.deepStrictEqual(left, []);
+        } finally { srv.close(); }
+    });
+
+    test('installs into a directory whose path has a space (macOS: "Application Support")', async () => {
+        if (process.platform === 'win32') { return; }
+        const archive = await makePackage(path.join(tmp, 'src'));
+        const srv = await serve(archive);
+        try {
+            const installDir = path.join(tmp, 'Application Support', 'store', '0.1.0');
+            await installFromSource({ url: srv.url, sha256: '' }, installDir, expected);
+            const calls = (await fsp.readFile(path.join(installDir, 'bin', 'args.log'), 'utf8')).trim().split('\n');
+            assert.ok(!calls[0].includes('Application Support'), 'no absolute path reaches read_slang (it keeps quotes verbatim): ' + calls[0]);
+            assert.match(calls[0], /^-p read_slang t\.sv --top t; /);
         } finally { srv.close(); }
     });
 

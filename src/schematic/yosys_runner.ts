@@ -13,7 +13,7 @@ import { NoYosysBackendError, uhdmFrontendUnavailableMessage, yosysExitMessage }
 import { isUvmError, isKeptBoundaryError } from './scope_nav';
 import { svLog } from '../output';
 import { ensureRuntime, resetRuntimeCache, resolvedRuntimeName, ResolvedRuntime } from './runtime_manager';
-import { yosysArgs, yosysPath } from './runtime_policy';
+import { yosysArg, yosysArgs } from './runtime_policy';
 
 // Schematic diagnostics (the actual Yosys command we run, and any workarounds applied) go to the
 // shared "sv-pathfinder" output channel, tagged [schematic].
@@ -39,10 +39,9 @@ function toBackend(rt: ResolvedRuntime): Backend {
     return { name: rt.name, command: rt.yosys, readUhdm: rt.features.read_uhdm, preload: rt.preload };
 }
 
-// A path inside the Yosys script: forward slashes on Windows, quoted when it has a space.
+// A path inside the Yosys script: forward slashes on Windows, quoted when it has whitespace.
 function quote(p: string): string {
-    const n = yosysPath(p);
-    return n.includes(' ') ? `"${n}"` : n;
+    return yosysArg(p);
 }
 
 export function resetBackendCache(): void {

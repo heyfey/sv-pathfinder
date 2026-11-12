@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
     RuntimeVersions, assetFor, inferPreload, installDeclinedMessage, installPromptMessage, isSafeArchiveEntry, platformKey,
-    resolveOverride, supportedPlatformsText, unsupportedPlatformMessage, validateManifest, yosysArgs, yosysCandidates, yosysPath,
+    resolveOverride, supportedPlatformsText, unsupportedPlatformMessage, validateManifest, yosysArg, yosysArgs, yosysCandidates, yosysPath,
     RUNTIME_ENV_VAR,
 } from '../schematic/runtime_policy';
 
@@ -55,6 +55,12 @@ suite('runtime_policy', () => {
         assert.deepStrictEqual(yosysArgs([], true, 's'), ['-m', 'uhdm2rtlil', '-p', 's']);
         assert.deepStrictEqual(yosysArgs(['slang'], false, 's'), ['-m', 'slang', '-p', 's']);
         assert.deepStrictEqual(yosysArgs(['slang'], true, 's'), ['-m', 'slang', '-m', 'uhdm2rtlil', '-p', 's']);
+    });
+
+    test('yosysArg: quotes a path with whitespace (Yosys core commands unquote; read_slang does not, so never use it for read_slang arguments)', () => {
+        assert.strictEqual(yosysArg('/Users/me/Library/Application Support/x.sv', 'darwin'), '"/Users/me/Library/Application Support/x.sv"');
+        assert.strictEqual(yosysArg('/home/me/x.sv', 'linux'), '/home/me/x.sv');
+        assert.strictEqual(yosysArg('C:\\Users\\me name\\x.sv', 'win32'), '"C:/Users/me name/x.sv"');
     });
 
     test('yosysPath: forward slashes on Windows only', () => {

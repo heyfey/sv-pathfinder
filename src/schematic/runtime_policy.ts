@@ -85,6 +85,15 @@ export function yosysPath(p: string, platform: string = process.platform): strin
     return platform === 'win32' ? p.replace(/\\/g, '/') : p;
 }
 
+// The same path as one script argument of a Yosys CORE command (write_json, read_uhdm): quoted when
+// it contains whitespace, because Yosys splits a script command on spaces and its core commands
+// unquote. read_slang does NOT unquote its arguments, so a path with a space cannot be passed to it
+// at all; give it bare names relative to the working directory instead.
+export function yosysArg(p: string, platform: string = process.platform): string {
+    const n = yosysPath(p, platform);
+    return /\s/.test(n) ? `"${n}"` : n;
+}
+
 // Where an override points, if any. The setting wins over the environment variable; blank values are
 // ignored so an empty setting does not shadow the variable.
 export type OverrideSource = 'setting' | 'env';

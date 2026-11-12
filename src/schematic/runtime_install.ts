@@ -10,7 +10,7 @@ import * as path from 'path';
 import { pipeline } from 'stream/promises';
 import { Readable } from 'stream';
 import * as tar from 'tar';
-import { RuntimeManifest, isSafeArchiveEntry, validateManifest, yosysArgs, yosysCandidates, yosysPath } from './runtime_policy';
+import { RuntimeManifest, isSafeArchiveEntry, validateManifest, yosysArgs, yosysCandidates } from './runtime_policy';
 
 export interface InstallSource {
     url: string;
@@ -71,6 +71,11 @@ function run(cmd: string, args: string[], cwd: string): Promise<{ code: number; 
 // a test (Yosys exits 0 for an unknown command), so read_slang elaborates a one-gate module and the
 // result must come back through write_json; read_uhdm is checked by loading its plugin and asking
 // for its help text, which only exists when the plugin registered the command.
+//
+// The probe runs with the probe directory as working directory and bare file names in the script:
+// read_slang takes its arguments verbatim (a quoted or backslash-escaped path is not unquoted), so a
+// space in the install path, as in macOS's "~/Library/Application Support", would break an absolute
+// path here.
 export async function selfTestRuntime(dir: string, manifest: RuntimeManifest): Promise<void> {
     const yosys = yosysCandidates(dir)[0];
     await fsp.chmod(yosys, 0o755).catch(() => { });
@@ -78,16 +83,15 @@ export async function selfTestRuntime(dir: string, manifest: RuntimeManifest): P
     const probe = path.join(dir, 'selftest');
     await fsp.mkdir(probe, { recursive: true });
     try {
-        const sv = path.join(probe, 't.sv'), json = path.join(probe, 't.json');
-        await fsp.writeFile(sv, 'module t(input a, b, output y); assign y = a & b; endmodule\n');
-        const script = `read_slang ${yosysPath(sv)} --top t; hierarchy -top t; proc; write_json ${yosysPath(json)}`;
-        let r = await run(yosys, yosysArgs(preload, false, script), dir);
-        const modules = r.code === 0 ? await fsp.readFile(json, 'utf8').then(t => Object.keys(JSON.parse(t).modules ?? {})).catch(() => []) : [];
+        await fsp.writeFile(path.join(probe, 't.sv'), 'module t(input a, b, output y); assign y = a & b; endmodule\n');
+        const script = 'read_slang t.sv --top t; hierarchy -top t; proc; write_json t.json';
+        let r = await run(yosys, yosysArgs(preload, false, script), probe);
+        const modules = r.code === 0 ? await fsp.readFile(path.join(probe, 't.json'), 'utf8').then(t => Object.keys(JSON.parse(t).modules ?? {})).catch(() => []) : [];
         if (r.code !== 0 || !modules.includes('t')) {
             throw new Error(`self-test "read_slang" failed (exit ${r.code}): ${lastLines(r.out)}`);
         }
         if (manifest.features.read_uhdm) {
-            r = await run(yosys, yosysArgs(preload, true, 'help read_uhdm'), dir);
+            r = await run(yosys, yosysArgs(preload, true, 'help read_uhdm'), probe);
             if (r.code !== 0 || !/read_uhdm/.test(r.out) || /No such command/i.test(r.out)) {
                 throw new Error(`self-test "read_uhdm" failed (exit ${r.code}): ${lastLines(r.out)}`);
             }

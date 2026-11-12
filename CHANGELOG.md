@@ -21,6 +21,9 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   message instead of aborting the extension host. The reader also exports `uhdmVersion`.
 - `loadDesign`, `getModuleDefs` and `searchInstances` left their promise pending forever
   on failure; they now reject.
+- macOS: installing the schematic runtime failed its self-test, because the extension's storage
+  path (`~/Library/Application Support/...`) has a space. The self-test now runs with bare file
+  names in its own directory.
 - Windows: "Open Design" showed a folder-only dialog (a files-and-folders dialog is folder-only
   on Windows and native Linux), so no `.f` or `.uhdm` could be picked. It is a file dialog now.
 - Windows: paths written into the rewritten filelist used backslashes, which slang reads as
