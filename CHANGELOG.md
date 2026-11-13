@@ -4,6 +4,13 @@ All notable changes to the "sv-pathfinder" extension will be documented in this 
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.3.2] - 2026-11-13
+
+### Changed
+
+- Marketplace description names the schematic viewer; "Schematic" and "Netlist" added to the
+  keywords. No code changes.
+
 ## [0.3.1] - 2026-11-11
 
 ### Changed
